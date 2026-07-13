@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/file.schema.json",
+  "title": "APEX File Entry",
+  "$ref": "#/$defs/fileEntry",
+  "$defs": {
+    "nullableTimestamp": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    },
+    "fileEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "object_id",
+        "evidence_id",
+        "parent_file_id",
+        "name",
+        "full_path",
+        "file_type",
+        "mime_type",
+        "size_bytes",
+        "allocated",
+        "deleted",
+        "hidden",
+        "times",
+        "hash_sha256",
+        "metadata"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "object_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "evidence_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "parent_file_id": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "full_path": { "type": "string", "minLength": 1 },
+        "file_type": {
+          "enum": ["REGULAR", "DIRECTORY", "SYMLINK", "STREAM", "SPECIAL"]
+        },
+        "mime_type": { "type": ["string", "null"] },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "allocated": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "hidden": { "type": "boolean" },
+        "times": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["created", "modified", "accessed", "changed", "raw"],
+          "properties": {
+            "created": { "$ref": "#/$defs/nullableTimestamp" },
+            "modified": { "$ref": "#/$defs/nullableTimestamp" },
+            "accessed": { "$ref": "#/$defs/nullableTimestamp" },
+            "changed": { "$ref": "#/$defs/nullableTimestamp" },
+            "raw": { "$ref": "common.schema.json#/$defs/metadata" }
+          }
+        },
+        "hash_sha256": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/metadata" }
+      }
+    }
+  }
+}

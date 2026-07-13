@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-enrichment.schema.json",
+  "title": "APEX Provider-neutral AI Enrichment Boundary",
+  "oneOf": [
+    { "$ref": "#/$defs/analysisBundle" },
+    { "$ref": "#/$defs/enrichmentResult" }
+  ],
+  "$defs": {
+    "analysisBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "case_id", "purpose", "citations", "context", "created_at"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "purpose": {
+          "enum": ["SUMMARIZE", "CORRELATE", "CLASSIFY", "EXPLAIN"]
+        },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/citation" }
+        },
+        "context": { "$ref": "common.schema.json#/$defs/metadata" },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "statement", "confidence", "citations", "limitations"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "title": { "type": "string", "minLength": 1 },
+        "statement": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/citation" }
+        },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "enrichmentResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "bundle_id",
+        "status",
+        "summary",
+        "findings",
+        "limitations",
+        "adapter_ref",
+        "created_at",
+        "completed_at",
+        "errors"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "bundle_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "status": { "enum": ["PENDING", "SUCCEEDED", "FAILED"] },
+        "summary": { "type": ["string", "null"] },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/finding" }
+        },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "adapter_ref": { "type": ["string", "null"] },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "completed_at": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/error" }
+        }
+      }
+    }
+  }
+}

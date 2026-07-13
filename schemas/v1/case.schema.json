@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/case.schema.json",
+  "title": "APEX Case",
+  "$ref": "#/$defs/case",
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "status",
+        "default_timezone",
+        "created_at",
+        "created_by",
+        "closed_at",
+        "engine_version",
+        "metadata"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "enum": ["OPEN", "CLOSED", "ARCHIVED"]
+        },
+        "default_timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "created_by": {
+          "type": ["string", "null"]
+        },
+        "closed_at": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "engine_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/job.schema.json",
+  "title": "APEX Job",
+  "$ref": "#/$defs/job",
+  "$defs": {
+    "nullableTimestamp": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current", "total", "unit", "percent"],
+      "properties": {
+        "current": { "type": "integer", "minimum": 0 },
+        "total": { "type": ["integer", "null"], "minimum": 0 },
+        "unit": { "enum": ["BYTES", "FILES", "TASKS", "UNKNOWN"] },
+        "percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 }
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "evidence_id",
+        "job_type",
+        "status",
+        "progress",
+        "queued_at",
+        "started_at",
+        "finished_at",
+        "cancel_requested_at",
+        "warnings",
+        "errors"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "evidence_id": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        },
+        "job_type": {
+          "enum": ["HASH", "FS_INGEST", "ARTIFACT", "TIMELINE", "INDEX", "SEARCH"]
+        },
+        "status": {
+          "enum": ["QUEUED", "RUNNING", "SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"]
+        },
+        "progress": { "$ref": "#/$defs/progress" },
+        "queued_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "started_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "finished_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "cancel_requested_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/warning" }
+        },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/error" }
+        }
+      }
+    }
+  }
+}
