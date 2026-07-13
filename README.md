@@ -2,15 +2,15 @@
 
 APEX는 디지털 증거 분석의 접근성과 자동화를 목표로 개발하는 **AI 기반 디지털 포렌식 분석 플랫폼**입니다.
 
-기존 디지털 포렌식 도구는 높은 전문 지식과 복잡한 분석 과정을 요구하며, 분석 결과를 정리하고 보고서를 작성하는 과정에도 많은 시간이 필요합니다.
+기존 디지털 포렌식 도구는 강력한 분석 기능을 제공하지만 높은 비용, 복잡한 사용 환경, 전문 지식 요구 등의 한계가 존재합니다.
 
 APEX는 이러한 문제를 해결하기 위해:
 
-- X-Ways Forensics의 빠른 분석 구조
-- Autopsy의 사용자 친화적인 분석 Workflow
-- MCP 기반 AI Agent 연동 구조
+- **X-Ways Forensics의 빠른 분석 구조**
+- **Autopsy의 사용자 친화적인 분석 Workflow**
+- **MCP 기반 AI Agent 연동 구조**
 
-를 참고하여 누구나 접근 가능한 차세대 DFIR 분석 환경을 제공하는 것을 목표로 합니다.
+를 참고하여 누구나 접근 가능한 차세대 DFIR(Digital Forensics & Incident Response) 환경을 제공하는 것을 목표로 합니다.
 
 ---
 
@@ -18,11 +18,13 @@ APEX는 이러한 문제를 해결하기 위해:
 
 ## 1. 한국어 기반 디지털 포렌식 환경
 
-기존 포렌식 도구는 대부분 영문 UI와 전문 용어 중심으로 구성되어 있어 입문자와 비전공자가 사용하기 어렵습니다.
+기존 포렌식 도구는 대부분 영어 UI와 전문 용어 중심으로 구성되어 있어 입문자와 비전공자가 접근하기 어렵습니다.
 
-APEX는 다음 영역에서 한국어 기반 환경을 제공합니다.
+APEX는 한국어 기반 분석 환경을 제공합니다.
 
-- 한국어 UI
+지원 목표:
+
+- 한국어 사용자 인터페이스
 - Artifact 분석 결과 한국어 설명
 - 한국어 자연어 기반 AI 질의
 - 한국어 포렌식 보고서 생성
@@ -32,73 +34,89 @@ APEX는 다음 영역에서 한국어 기반 환경을 제공합니다.
 
 ---
 
-# 2. 기본 내장 MCP 기반 AI Forensic Assistant
+# 2. MCP 기반 AI Forensic Assistant
 
 APEX는 단순히 외부 AI 서비스를 연결하는 방식이 아닌, 포렌식 분석 환경 내부에 MCP 기반 AI 연동 구조를 포함합니다.
 
-AI는 포렌식 엔진을 직접 대체하지 않고, 분석자가 수행한 작업과 구조화된 분석 결과를 기반으로 보조 역할을 수행합니다.
+AI는 포렌식 엔진을 직접 대체하지 않습니다.
 
-## 분석 Context 기반 AI 구조
+사용자가 GUI에서 수행한 분석 과정과 구조화된 분석 결과를 기반으로 AI가 분석을 보조하는 형태로 설계됩니다.
+
+---
+
+## AI 분석 Workflow
 
 ```text
 사용자
- |
- v
-Autopsy Style GUI
- |
- |  분석 작업 수행
- |
- v
+
+  |
+  v
+
+Forensic GUI
+(Autopsy Style Interface)
+
+  |
+  | 분석 작업 수행
+  v
+
 Forensic Core Engine
- |
- +----------------------+
- |                      |
- v                      v
-Analysis Result     Context Manager
-Database                  |
-                          v
-                    MCP Server
-                          |
-                          v
-                       AI Agent
+
+  |
+  | 분석 결과 저장
+  v
+
+Analysis Result Database
+
+  |
+  | Context 관리
+  v
+
+MCP Adapter
+
+  |
+  v
+
+AI Agent
 ```
 
 ---
 
-## 동작 방식
+## Context 기반 AI 분석
 
-1. 사용자가 GUI에서 Evidence 추가 및 Artifact 분석 수행
+AI는 다음 정보를 기반으로 분석을 수행합니다.
 
-2. Forensic Engine이 분석 결과 저장
+- 현재 Case 정보
+- 등록된 Evidence 정보
+- 사용자가 선택한 Artifact
+- 기존 분석 결과
+- Timeline 정보
+- 검색 결과
 
-3. 분석 Case, 선택 Artifact, Timeline, 결과 정보를 Context로 관리
 
-4. MCP가 해당 Context를 AI Agent에게 제공
-
-5. AI는 기존 분석 결과를 기반으로 설명 및 추가 분석 수행
-
-
-예:
+예시:
 
 사용자가 GUI에서:
 
+```text
+Data Artifact
+
+ └ Registry
+
+      └ Run Key Analysis
 ```
-Registry
- └ Run Key 분석
-```
 
-을 수행하면,
+를 수행합니다.
 
 
-분석 결과:
+Forensic Engine 결과:
 
 ```json
 {
-  "artifact": "registry",
-  "type": "run_key",
+  "artifact_type": "registry",
   "finding": {
+    "path": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
     "value": "update.exe",
-    "risk": "high"
+    "risk_level": "high"
   }
 }
 ```
@@ -110,27 +128,20 @@ Registry
 
 > "이 결과가 위험한 이유를 설명해줘"
 
+라고 요청하면 AI는 기존 분석 Context를 기반으로:
 
-라고 요청하면 AI는 현재 분석 Context를 기반으로:
+- 관련 증거 설명
+- 위험도 판단
+- 추가 분석 제안
+- 보고서 작성
 
-```
-Registry Run Key에서 자동 실행 등록 흔적이 확인되었습니다.
-
-해당 항목은 Persistence 기법으로 악용될 가능성이 있습니다.
-
-관련 증거:
-- Registry Path
-- 실행 파일 정보
-- 생성 시간
-```
-
-형태로 설명합니다.
+을 수행합니다.
 
 ---
 
 # 3. 빠른 분석 엔진 최적화
 
-APEX는 대용량 디지털 증거 분석 환경을 고려하여 빠르고 효율적인 분석 엔진 개발을 목표로 합니다.
+APEX는 대용량 디지털 증거 처리를 고려한 효율적인 포렌식 엔진 개발을 목표로 합니다.
 
 주요 최적화 방향:
 
@@ -153,24 +164,38 @@ APEX는 대용량 디지털 증거 분석 환경을 고려하여 빠르고 효�
 
 ## Case Management
 
-- 사건 생성
-- 기존 사건 불러오기
+사건 단위 분석 환경 관리
+
+기능:
+
+- 신규 Case 생성
+- 기존 Case 불러오기
 - 사건 정보 관리
-- Evidence 및 분석 결과 관리
+- Evidence 관리
+- 분석 결과 저장
 - Timeline 및 Report 관리
 
 
 ---
 
-## Data Source Management
+# Evidence Management
+
+디지털 증거 데이터를 등록하고 관리합니다.
 
 지원 예정:
+
+- Disk Image
+- Logical File
+- Memory Dump
+
+
+지원 형식:
 
 - E01
 - RAW/DD
 - IMG
-- VHD/VHDX
-- Logical File
+- VHD
+- VHDX
 
 
 기능:
@@ -179,63 +204,89 @@ APEX는 대용량 디지털 증거 분석 환경을 고려하여 빠르고 효�
 - Metadata 확인
 - Hash 계산
 - 무결성 검증
+- 분석 상태 관리
 
 
 ---
 
-## File System Analysis
+# File System Analysis
+
+Evidence 내부 파일 시스템을 분석합니다.
 
 기능:
 
-- 파일 탐색
-- Directory Tree 표시
+- Directory Tree 탐색
+- 파일 목록 조회
 - 파일 Metadata 분석
 - 삭제 파일 탐색
-- 파일 검색
 - 파일 유형 분류
+- 파일 검색
+- 상세 정보 확인
 
 
 ---
 
-## Artifact Analysis
+# Artifact Analysis
 
-지원 예정 Artifact:
-
-### Windows
-
-- Registry
-- Event Log
-- Prefetch
+운영체제 및 사용자 활동 흔적을 분석합니다.
 
 
-### User Activity
+## Windows Artifact
+
+지원 예정:
+
+### Registry
+
+- Run Key
+- UserAssist
+- Recent Files
+- USB History
+
+
+### Event Log
+
+- Security Event
+- System Event
+- Application Event
+- Sysmon Event
+
+
+### Prefetch
+
+- 실행 프로그램 확인
+- 실행 횟수 분석
+- 마지막 실행 시간 확인
+
+
+---
+
+## User Activity Artifact
+
+지원 예정:
 
 - Browser History
 - Download History
 - Recent Activity
 
 
-### Multimedia
+---
+
+## Multimedia Artifact
+
+지원 예정:
 
 - Image Metadata
 - Video Metadata
 - EXIF 분석
 
 
-### Communication
-
-- Email
-- Messenger Artifact
-- 통신 흔적 분석
-
-
 ---
 
-## Timeline Analysis
+# Timeline Analysis
 
-여러 Artifact의 시간 정보를 통합하여 사건 흐름을 분석합니다.
+여러 Artifact의 시간 정보를 통합하여 사건 흐름을 제공합니다.
 
-지원:
+분석 대상:
 
 - 파일 생성/수정/접근 시간
 - Registry 변경 시간
@@ -254,12 +305,15 @@ APEX는 대용량 디지털 증거 분석 환경을 고려하여 빠르고 효�
 
 ---
 
-## Search & Discovery
+# Search & Discovery
+
+Evidence와 분석 결과를 빠르게 탐색합니다.
 
 기능:
 
 - Keyword Search
 - Regex Search
+- File Search
 - Metadata Search
 - Artifact Search
 - Index 기반 검색
@@ -268,24 +322,47 @@ APEX는 대용량 디지털 증거 분석 환경을 고려하여 빠르고 효�
 
 ---
 
-## AI Analysis
+# Images / Videos Analysis
 
-AI Assistant 기능:
+이미지 및 영상 Artifact 분석 기능입니다.
 
-- 자연어 기반 분석 요청
-- 현재 Case Context 이해
-- Artifact 결과 설명
-- 의심 행위 분석
-- 증거 간 연관 분석
-- Timeline 요약
-- 추가 분석 제안
+기능:
+
+- 이미지 Metadata 분석
+- EXIF 정보 확인
+- GPS 정보 확인
+- 영상 Metadata 분석
+- Thumbnail 추출
+- AI 기반 정보 분석
 
 
 ---
 
-## Generate Report
+# Communications Analysis
 
-AI 기반 자동 보고서 생성 기능.
+사용자 통신 흔적 분석 기능입니다.
+
+지원 예정:
+
+- Browser Activity
+- Email Artifact
+- Messenger Artifact
+
+
+분석:
+
+- 방문 기록
+- 검색 기록
+- 다운로드 기록
+- 파일 전송 기록
+- 통신 관계 분석
+
+
+---
+
+# AI Report Generation
+
+AI 기반 자동 포렌식 보고서 생성 기능입니다.
 
 생성 내용:
 
@@ -307,54 +384,108 @@ AI 기반 자동 보고서 생성 기능.
 
 ---
 
-# 시스템 구조
+# System Architecture
 
 ```text
-                         사용자
+                         User
 
-                           |
-                           v
+                          |
+                          v
 
-                  Korean Forensic GUI
+                 Korean Forensic GUI
 
-                           |
-             +-------------+-------------+
-             |                           |
-             v                           v
+                          |
+                          v
 
-      Forensic Core Engine          AI Assistant
+              Forensic Core Engine
 
-             |                           |
-             |                           v
+        +-----------------+----------------+
+        |                                  |
+        v                                  v
 
-             |                    MCP Server
-             |
-     ---------------------
-     |          |        |
-     v          v        v
+ Analysis Result DB                 Context Manager
 
- Evidence   Artifact  Timeline
- Manager    Analyzer   Engine
+                                             |
+                                             v
 
+                                       MCP Adapter
 
-             |
-             v
+                                             |
+                                             v
 
-      Analysis Database
-      Index / Cache
+                                          AI Agent
 ```
+
 
 ---
 
-# 프로젝트 참고
+# Technology Structure
 
-## X-Ways 스타일 포렌식 엔진
+## Forensic Engine
+
+담당:
+
+- Evidence 처리
+- File System 분석
+- Artifact 분석
+- Timeline 생성
+- Search Engine
+- Index / Cache
+- 분석 Interface 제공
+
+
+---
+
+## MCP / AI Layer
+
+담당:
+
+- MCP Server
+- Tool 정의
+- LLM API 연동
+- Prompt Engineering
+- AI 분석 Workflow
+
+
+---
+
+## Frontend
+
+담당:
+
+- 한국어 GUI
+- Case Explorer
+- Evidence View
+- Artifact View
+- Timeline UI
+- AI Assistant UI
+- Report Preview
+
+
+---
+
+## Backend
+
+담당:
+
+- 데이터 관리
+- Case 저장
+- API 관리
+- 분석 결과 저장
+- Report 관리
+
+
+---
+
+# Reference Projects
+
+## X-Ways Style Forensic Engine
 
 참고 영역:
 
 - 빠른 Evidence 탐색
 - 분석 Workflow
-- 대용량 데이터 처리 구조
+- 성능 최적화 구조
 
 
 ## Autopsy
@@ -362,46 +493,54 @@ AI 기반 자동 보고서 생성 기능.
 참고 영역:
 
 - Case 기반 Workflow
-- Artifact 구조
-- 사용자 친화적인 분석 화면
+- Artifact 분석 구조
+- 사용자 친화적인 UI
 
 
 ## X-Ways Forensics MCP
 
 참고 영역:
 
-- 포렌식 기능과 AI Agent 연결 구조
-- MCP 기반 Tool 호출 방식
-- 분석 Context 활용 방식
+- MCP 기반 포렌식 기능 연결 방식
+- 분석 Context 활용 구조
+
+
+참고:
+
+- https://github.com/tagalston101/x-way-forensics-tool
+- https://github.com/sleuthkit/autopsy
+- https://github.com/joyooosama/x-ways-forensics-mcp
 
 
 ---
 
-# 개발 진행 상태
+# Development Status
 
-## 완료
+## Completed
 
-- [x] 전체 시스템 구조 설계
-- [x] 포렌식 엔진 아키텍처 설계
+- [x] 전체 시스템 Architecture 설계
+- [x] Forensic Engine 구조 설계
 - [x] Database Schema 설계
 - [x] API Interface 설계
-- [x] JSON Schema v1 설계
+- [x] JSON Schema v1 설계 및 검증
 - [x] MCP 연동 구조 설계
 
 
-## 개발 예정
+## Planned
 
-- [ ] 포렌식 Core Engine 구현
+- [ ] Forensic Core Engine 구현
 - [ ] Evidence Manager 구현
 - [ ] File System Analyzer 구현
 - [ ] Artifact Analyzer 구현
 - [ ] Timeline Engine 구현
 - [ ] Search Engine 구현
+- [ ] Index / Cache 구현
 - [ ] 한국어 GUI 구현
-- [ ] MCP Server 연동
+- [ ] MCP Adapter 구현
+- [ ] LLM API 연동
 - [ ] AI 분석 기능 구현
 - [ ] AI Report 생성 기능 구현
-- [ ] 성능 최적화 및 테스트
+- [ ] 성능 테스트 및 최적화
 
 
 ---
