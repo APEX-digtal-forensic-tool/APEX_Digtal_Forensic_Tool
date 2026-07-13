@@ -11,6 +11,20 @@
       "type": "string",
       "format": "date-time"
     },
+    "locale": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(?:-[A-Z]{2})?$",
+      "default": "ko-KR"
+    },
+    "timezone": {
+      "type": "string",
+      "pattern": "^(?:UTC|[A-Za-z_+-]+(?:/[A-Za-z0-9_+.-]+)+)$",
+      "default": "Asia/Seoul"
+    },
+    "resourceKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+$"
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
@@ -26,15 +40,17 @@
     "error": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message", "retryable", "details"],
+      "required": ["code", "message_key", "developer_message", "retryable", "details"],
       "properties": {
         "code": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
         },
-        "message": {
-          "type": "string",
-          "minLength": 1
+        "message_key": {
+          "$ref": "#/$defs/resourceKey"
+        },
+        "developer_message": {
+          "type": ["string", "null"]
         },
         "target": {
           "type": ["string", "null"]
@@ -50,15 +66,17 @@
     "warning": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message"],
+      "required": ["code", "message_key", "developer_message", "details"],
       "properties": {
         "code": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
         },
-        "message": {
-          "type": "string",
-          "minLength": 1
+        "message_key": {
+          "$ref": "#/$defs/resourceKey"
+        },
+        "developer_message": {
+          "type": ["string", "null"]
         },
         "source_id": {
           "oneOf": [
@@ -85,32 +103,6 @@
         "returned": {
           "type": "integer",
           "minimum": 0
-        }
-      }
-    },
-    "citation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["evidence_id", "source_kind", "source_id"],
-      "properties": {
-        "evidence_id": {
-          "$ref": "#/$defs/uuid"
-        },
-        "source_kind": {
-          "enum": ["FILE", "ARTIFACT", "TIMELINE", "SEARCH_HIT"]
-        },
-        "source_id": {
-          "$ref": "#/$defs/uuid"
-        },
-        "source_path": {
-          "type": ["string", "null"]
-        },
-        "source_offset": {
-          "type": ["integer", "null"],
-          "minimum": 0
-        },
-        "excerpt": {
-          "type": ["string", "null"]
         }
       }
     },

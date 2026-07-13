@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/citation.schema.json",
+  "title": "APEX Evidence Citation",
+  "$ref": "#/$defs/citation",
+  "$defs": {
+    "nullableUuid": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/uuid" },
+        { "type": "null" }
+      ]
+    },
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "case_id",
+        "evidence_id",
+        "source_kind",
+        "source_id",
+        "file_id",
+        "artifact_id",
+        "timeline_event_id",
+        "search_result_id",
+        "source_path",
+        "source_offset",
+        "source_reference",
+        "excerpt",
+        "content_sha256",
+        "created_at"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "label": {
+          "type": "string",
+          "pattern": "^CIT-[0-9]{3,}$"
+        },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "evidence_id": { "$ref": "#/$defs/nullableUuid" },
+        "source_kind": {
+          "enum": [
+            "EVIDENCE",
+            "FILE",
+            "ARTIFACT",
+            "TIMELINE_EVENT",
+            "SEARCH_RESULT",
+            "ANALYST_ANNOTATION",
+            "AI_ENRICHMENT"
+          ]
+        },
+        "source_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "file_id": { "$ref": "#/$defs/nullableUuid" },
+        "artifact_id": { "$ref": "#/$defs/nullableUuid" },
+        "timeline_event_id": { "$ref": "#/$defs/nullableUuid" },
+        "search_result_id": { "$ref": "#/$defs/nullableUuid" },
+        "source_path": { "type": ["string", "null"] },
+        "source_offset": { "type": ["integer", "null"], "minimum": 0 },
+        "source_reference": { "type": ["string", "null"] },
+        "excerpt": { "type": ["string", "null"] },
+        "content_sha256": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    }
+  }
+}

@@ -3,46 +3,98 @@
   "$id": "https://schemas.apex-forensics.dev/v1/ai-enrichment.schema.json",
   "title": "APEX Provider-neutral AI Enrichment Boundary",
   "oneOf": [
-    { "$ref": "#/$defs/analysisBundle" },
+    { "$ref": "#/$defs/enrichmentRequest" },
     { "$ref": "#/$defs/enrichmentResult" }
   ],
   "$defs": {
-    "analysisBundle": {
+    "enrichmentRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "case_id", "purpose", "citations", "context", "created_at"],
+      "required": ["id", "analysis_context", "purpose", "output_locale", "requested_at"],
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "analysis_context": {
+          "$ref": "analysis-context.schema.json#/$defs/analysisContext"
+        },
         "purpose": {
-          "enum": ["SUMMARIZE", "CORRELATE", "CLASSIFY", "EXPLAIN"]
+          "enum": [
+            "SUMMARIZE",
+            "EXPLAIN_ARTIFACT",
+            "CORRELATE",
+            "ASSESS_RISK",
+            "SUMMARIZE_TIMELINE",
+            "RECOMMEND_NEXT_ANALYSIS",
+            "DRAFT_REPORT"
+          ]
+        },
+        "output_locale": { "$ref": "common.schema.json#/$defs/locale" },
+        "requested_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    },
+    "observedFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "source_confidence", "citations"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "statement": { "type": "string", "minLength": 1 },
+        "source_confidence": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
         },
         "citations": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "common.schema.json#/$defs/citation" }
-        },
-        "context": { "$ref": "common.schema.json#/$defs/metadata" },
-        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+        }
       }
     },
-    "finding": {
+    "analystAnnotation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "statement", "confidence", "citations", "limitations"],
+      "required": ["annotation_id", "text", "citations"],
+      "properties": {
+        "annotation_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "text": { "type": "string", "minLength": 1 },
+        "citations": {
+          "type": "array",
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+        }
+      }
+    },
+    "inference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "confidence", "citations", "limitations"],
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "title": { "type": "string", "minLength": 1 },
         "statement": { "type": "string", "minLength": 1 },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
         "citations": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "common.schema.json#/$defs/citation" }
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
         },
         "limitations": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "action", "priority", "rationale", "citations"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "action": { "type": "string", "minLength": 1 },
+        "priority": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "rationale": { "type": "string", "minLength": 1 },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
         }
       }
     },
@@ -51,10 +103,17 @@
       "additionalProperties": false,
       "required": [
         "id",
-        "bundle_id",
+        "request_id",
+        "analysis_context_id",
         "status",
+        "locale",
         "summary",
-        "findings",
+        "observed_facts",
+        "analyst_annotations",
+        "inferences",
+        "recommendations",
+        "citations",
+        "confidence",
         "limitations",
         "adapter_ref",
         "created_at",
@@ -63,12 +122,35 @@
       ],
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "bundle_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "analysis_context_id": { "$ref": "common.schema.json#/$defs/uuid" },
         "status": { "enum": ["PENDING", "SUCCEEDED", "FAILED"] },
+        "locale": { "$ref": "common.schema.json#/$defs/locale" },
         "summary": { "type": ["string", "null"] },
-        "findings": {
+        "observed_facts": {
           "type": "array",
-          "items": { "$ref": "#/$defs/finding" }
+          "items": { "$ref": "#/$defs/observedFact" }
+        },
+        "analyst_annotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/analystAnnotation" }
+        },
+        "inferences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/inference" }
+        },
+        "recommendations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/recommendation" }
+        },
+        "citations": {
+          "type": "array",
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+        },
+        "confidence": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
         },
         "limitations": {
           "type": "array",

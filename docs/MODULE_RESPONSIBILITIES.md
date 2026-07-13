@@ -13,6 +13,10 @@
 | Search Engine | 문서화, Keyword/Regex/Index Search | File/Artifact/Timeline | Search Hit | Evidence 원본 변경 |
 | Index/Cache | 재검색/재분석 비용 절감 | 정규화 문서, 파생 Blob | Index Result, Cache Handle | 영구 Fact의 유일 저장소 |
 | Job Orchestrator | 예약, 진행률, 취소, 재시도, Checkpoint | Job Specification | Job/Task 상태 | Analyzer 내부 해석 로직 |
+| Context Service | Live UI DTO 검증, Result Resolve, 불변 Snapshot | GUI 선택/필터, Result ID | UI/Analysis Context | GUI Widget 상태, MCP Tool |
+| Annotation/Tag | 사람의 해석과 주요 증거 분류 | Target ID, 사용자 입력 | Annotation, Tagged Item | Engine Fact 생성 |
+| Report Module | 선택, AI Draft Port, Review/Approval, Export | Context, Citation, 분석자 Action | Report/Export | LLM 호출, 자동 승인 |
+| Localization | Locale/Timezone 정책, Resource Key, 검색 정규화 | 원본 문자열/Case 설정 | 표시 Key, 검색 사본 | GUI 번역 Rendering |
 | API Interface | 인증 경계, DTO 검증, 직렬화, 오류 매핑 | HTTP/내부 호출 | Versioned JSON | Domain 규칙 구현 |
 | AI Layer | 선택적 외부 보강 Port와 DTO | Analysis Bundle | Enrichment Result | Provider 호출, Prompt, Core Fact 변경 |
 | Observability | 구조화 로그, Metric, Trace, Audit 연계 | Domain/Application Event | 운영 Telemetry | Evidence 내용 로깅 |
@@ -23,6 +27,7 @@
 
 - Case 생명주기와 저장 위치를 식별한다.
 - Case의 Timezone과 생성 도구 버전을 보존한다.
+- 기본 `locale=ko-KR`, `timezone=Asia/Seoul`을 적용하고 명시적으로 변경 가능하게 한다.
 - 삭제 대신 `CLOSED` 상태 전환을 기본으로 한다.
 
 ### Evidence
@@ -94,10 +99,11 @@ Lifecycle:
 | Registry | SYSTEM, SOFTWARE, SAM, SECURITY, NTUSER.DAT 등 Hive | Key/Value, User, Installed Program, USB, Run Key | Hive 경로, Key 경로, Value, Cell Offset |
 | Event Log | Windows `.evtx` | Event Record | File 경로, Record ID, Channel, Provider |
 | Prefetch | Windows `.pf` | Program Execution | File 경로, Format Version, Run Count |
-| Browser | SQLite/JSON/Cache DB | Visit, Download, Cookie Metadata | Profile, DB/Table/Row ID |
-| Multimedia | 이미지/영상/음성 | EXIF, GPS, Codec, Duration | File 경로, Metadata Tag/Offset |
+| Browser Communications | SQLite/JSON/Cache DB | Visit, Search, Download, URL, Profile | Profile, DB/Table/Row ID |
+| Media | 이미지/영상 | EXIF, GPS, Thumbnail, Codec, Duration, 삭제 상태 | File 경로, Metadata Tag/Offset |
 
 Analyzer는 특정 조사 결론을 생성하지 않는다. 관찰한 Fact와 제한된 정규화 결과만 생성한다.
+Email과 Messenger는 MVP가 아니며 별도 Plugin Analyzer로만 추가한다.
 
 ## 6. Timeline Engine
 
@@ -128,6 +134,10 @@ Artifact/File -> Projector -> normalized event -> deduplicate -> persist/index
 외부 Index가 도입되더라도 `SearchQuery`와 `SearchHit` 계약은 바꾸지 않는다. Regex를 모든
 Evidence Byte에 무제한 적용하지 않으며, Scope와 Resource Limit을 필수로 둔다.
 
+원본 Unicode Text/경로는 수정하지 않는다. 검색용 사본은 Versioned Normalization Profile로
+NFKC/Case Folding을 적용하고, 한국어 Tokenizer/Trigram 전략은 한글 Fixture Benchmark로
+결정한다. Context/Report가 참조한 Hit에는 안정적인 `search_result_id`를 부여한다.
+
 ## 8. Job Orchestrator
 
 | 구성 요소 | 역할 |
@@ -152,10 +162,58 @@ AI Layer에 허용되는 계약은 다음 세 가지다.
 
 | 계약 | 목적 |
 | --- | --- |
-| `AnalysisBundle` | 선택한 Artifact/Timeline/Search Hit와 Citation 묶음 |
+| `AnalysisContext` | 선택한 File/Artifact/Timeline/Search Result와 Citation 묶음 |
 | `AIEnrichmentPort.enrich` | 공급자 비종속 비동기 보강 요청 |
 | `EnrichmentResult` | Summary, Finding, Citation, 제한/오류 반환 |
 
 AI Layer에는 Provider 선택, Credential, Prompt Template, Agent Loop를 구현하지 않는다. 외부
 구현체가 반환한 결과도 별도 `ai_enrichments` 영역에 저장하며 `artifacts`를 Update하지 않는다.
 
+AI 결과 Item은 다음 Type을 혼합하지 않는다.
+
+| Type | 작성 주체 | 의미 | 원본 Fact 변경 가능 여부 |
+| --- | --- | --- | --- |
+| Observed Fact | Engine Analyzer | 직접 추출된 사실의 인용 | 불가 |
+| Analyst Annotation | 사람 | 분석자의 설명/판단 | Artifact와 분리 |
+| AI Inference | 외부 AI Adapter | Citation 기반 추론 | 불가 |
+| AI Recommendation | 외부 AI Adapter | 추가 분석/대응 제안 | 불가 |
+
+## 11. Context Service
+
+| 구성 요소 | 책임 |
+| --- | --- |
+| UI Context Validator | 화면, 선택 ID, Filter, 시간 범위, Locale/Timezone DTO 검증 |
+| Session Context Port | Backend Session Store의 Revision 기반 읽기/쓰기 계약 |
+| Snapshot Service | Audit/AI/Report용 Canonical JSON과 Hash 생성 |
+| Analysis Context Builder | 기존 DB 결과 Resolve, Citation 생성, 같은 Case 소속 검증 |
+
+Live UI Context는 가변 Session Data이며 Case DB Repository의 책임이 아니다. Snapshot은 생성 후
+Update하지 않는다. MCP Adapter는 Context Service 내부가 아니라 공개 API를 통해 결과를 읽는다.
+
+## 12. Annotation과 Tag
+
+Annotation/Tag Service는 Target Type과 ID가 현재 Case에 존재하는지 검증한다. Annotation은
+Analyst의 작성물이며 Analyzer가 추출한 Artifact와 동일 Table에 저장하지 않는다. Tag는 File,
+Artifact, Timeline, Search Result 등 여러 종류를 연결하되 Report에 사용된 연결은 Version별로
+고정한다.
+
+## 13. Report Module
+
+| 구성 요소 | 책임 |
+| --- | --- |
+| Template Manager | `ko-KR` 기본 Section/Resource Key와 Template Version 관리 |
+| Evidence/Finding/Timeline Selector | Case 소속과 Citation 가능 여부 검증 |
+| `ReportDraftPort` | 외부 AI Draft Adapter에 Analysis Context를 전달하는 계약 |
+| Review Manager | Section별 검토/변경 요청과 사람 Identity 기록 |
+| Approval Manager | 상태 전이, Version/Hash 고정, AI 자동 승인 차단 |
+| Exporter | 승인된 동일 Version을 PDF/HTML로 Render하고 Hash 기록 |
+
+Report Domain은 LLM/MCP SDK를 Import하지 않는다. Draft Adapter 실패는 Report를 `FAILED`로
+표시할 수 있지만 기존 Analysis Result나 Context Snapshot을 수정하지 않는다.
+
+## 14. Localization
+
+Engine은 Error Code, `message_key`, Artifact `display_name_key`와 `description_key`를 반환한다.
+한국어 실제 문구는 Frontend Resource Bundle이 소유한다. Report Template은 Locale별 Resource를
+사용한다. Timestamp의 정본은 UTC/원본 값이며 `Asia/Seoul` 변환은 GUI/Report 표시 단계에서
+수행한다.

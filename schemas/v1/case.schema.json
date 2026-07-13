@@ -12,7 +12,8 @@
         "name",
         "description",
         "status",
-        "default_timezone",
+        "locale",
+        "timezone",
         "created_at",
         "created_by",
         "closed_at",
@@ -34,9 +35,11 @@
         "status": {
           "enum": ["OPEN", "CLOSED", "ARCHIVED"]
         },
-        "default_timezone": {
-          "type": "string",
-          "minLength": 1
+        "locale": {
+          "$ref": "common.schema.json#/$defs/locale"
+        },
+        "timezone": {
+          "$ref": "common.schema.json#/$defs/timezone"
         },
         "created_at": {
           "$ref": "common.schema.json#/$defs/timestamp"

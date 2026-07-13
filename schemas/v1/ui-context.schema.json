@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ui-context.schema.json",
+  "title": "APEX GUI Session Context",
+  "$ref": "#/$defs/uiContext",
+  "$defs": {
+    "nullableUuid": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/uuid" },
+        { "type": "null" }
+      ]
+    },
+    "nullableTimestamp": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    },
+    "timelineRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/nullableTimestamp" },
+        "to": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file_ids",
+        "artifact_ids",
+        "timeline_event_ids",
+        "search_result_ids",
+        "tag_ids",
+        "report_item_ids"
+      ],
+      "properties": {
+        "file_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "artifact_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "timeline_event_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "search_result_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "report_item_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        }
+      }
+    },
+    "uiContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "case_id",
+        "evidence_id",
+        "current_view",
+        "selection",
+        "active_search_query",
+        "active_filters",
+        "timeline_range",
+        "locale",
+        "timezone",
+        "revision",
+        "updated_at",
+        "expires_at"
+      ],
+      "properties": {
+        "session_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "#/$defs/nullableUuid" },
+        "evidence_id": { "$ref": "#/$defs/nullableUuid" },
+        "current_view": {
+          "enum": [
+            "CASE_OVERVIEW",
+            "EVIDENCE",
+            "FILES",
+            "REGISTRY",
+            "EVENT_LOG",
+            "PREFETCH",
+            "BROWSER_COMMUNICATIONS",
+            "MEDIA",
+            "TIMELINE",
+            "SEARCH",
+            "REPORT"
+          ]
+        },
+        "selection": { "$ref": "#/$defs/selection" },
+        "active_search_query": { "type": ["string", "null"] },
+        "active_filters": { "$ref": "common.schema.json#/$defs/metadata" },
+        "timeline_range": { "$ref": "#/$defs/timelineRange" },
+        "locale": { "$ref": "common.schema.json#/$defs/locale" },
+        "timezone": { "$ref": "common.schema.json#/$defs/timezone" },
+        "revision": { "type": "integer", "minimum": 0 },
+        "updated_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "expires_at": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    }
+  }
+}

@@ -23,6 +23,8 @@ flowchart LR
     AA[Artifact Analyzers]
     TL[Timeline Engine]
     SE[Search Engine]
+    CTX[Context Service]
+    RPT[Report Module]
     AI[Optional AI Layer]
     PORTS[Ports]
     DB[(Case SQLite)]
@@ -37,12 +39,17 @@ flowchart LR
     JOB --> AA
     JOB --> TL
     JOB --> SE
-    APP -. optional .-> AI
+    APP --> CTX
+    APP --> RPT
+    CTX -. provider-neutral bundle .-> AI
+    RPT -. draft port .-> AI
     EM --> PORTS
     FS --> PORTS
     AA --> PORTS
     TL --> PORTS
     SE --> PORTS
+    CTX --> PORTS
+    RPT --> PORTS
     AI --> PORTS
     PORTS --> DB
     PORTS --> IDX
@@ -79,9 +86,13 @@ Pagination과 Lazy Loading을 사용한다. 분석 실행 중에도 완료된 Ba
 5. **Artifact 분석**: 파일 후보를 Analyzer에 전달하고 정규화된 Artifact와 원본 Provenance를
    저장한다.
 6. **파생 처리**: Artifact/File Metadata에서 Timeline Event와 Search Document를 생성한다.
-7. **조회**: API는 저장된 결과를 버전이 지정된 JSON으로 반환한다.
-8. **선택적 보강**: AI Layer가 명시적으로 요청된 분석 묶음을 보강할 수 있으나 원본 Fact를
+7. **GUI Context 생성**: Backend Session에 현재 화면, 선택 결과, 필터와 시간 범위를 보관한다.
+8. **Analysis Context 고정**: AI 요청, Audit 또는 Report에 필요한 기존 결과를 Citation과
+   함께 불변 Snapshot으로 저장한다.
+9. **조회**: GUI와 MCP Adapter는 같은 API에서 저장된 결과와 Context를 JSON으로 읽는다.
+10. **선택적 보강**: AI Layer가 명시적으로 요청된 분석 묶음을 보강할 수 있으나 원본 Fact를
    덮어쓰지 않고 별도 Enrichment로 저장한다.
+11. **보고서**: 선택 결과와 AI Draft를 사람이 검토·승인한 뒤 PDF/HTML로 Export한다.
 
 ## 5. Evidence Reader 추상화
 
@@ -125,8 +136,8 @@ Job은 정책에 따라 `PARTIAL` 상태가 될 수 있다.
 1. Windows Registry
 2. Windows Event Log
 3. Windows Prefetch
-4. Browser History
-5. Multimedia Metadata
+4. Browser Communications MVP
+5. Image/Video Metadata
 
 ## 7. 동시성과 작업 상태
 
@@ -166,7 +177,7 @@ Cache는 재생성 가능한 파생 데이터다. Cache 삭제가 Fact나 감사
 `ai_layer`는 Core 내부에서도 별도 선택 모듈로 분리하며 기본값은 비활성화다.
 
 ```text
-Core Fact/Artifact -> AnalysisBundle DTO -> AIEnrichmentPort
+Core Fact/Artifact -> AnalysisContext DTO -> AIEnrichmentPort
 AIEnrichmentPort   -> EnrichmentResult DTO -> 별도 저장소
 ```
 
@@ -177,6 +188,10 @@ AIEnrichmentPort   -> EnrichmentResult DTO -> 별도 저장소
 - `AIEnrichmentPort` 구현은 별도 Adapter 패키지 또는 별도 프로세스가 담당한다.
 - AI 결과는 `source_kind=AI_ENRICHMENT`인 파생 데이터이며 원본 Fact와 병합하지 않는다.
 - 입력에 포함된 Evidence/Artifact ID와 출력의 Citation을 기록해 역추적 가능하게 한다.
+- 결과는 `Observed Fact`, `Analyst Annotation`, `AI Inference`, `AI Recommendation`으로
+  구분하고 AI가 생성한 추론을 Fact로 승격하지 않는다.
+- 출력 Locale은 Case의 `locale`을 기본으로 사용하되, 언어 선택이 결과의 증거성을 바꾸지
+  않도록 Citation과 원본 값은 그대로 유지한다.
 - AI Adapter가 없어도 모든 Core 분석 기능과 API가 정상 동작한다.
 
 ## 10. 무결성 및 감사
@@ -207,6 +222,27 @@ AIEnrichmentPort   -> EnrichmentResult DTO -> 별도 저장소
 Cache가 같은 Host에 있을 수 있다. 원격/다중 사용자 모드가 필요해지면 Repository Port를
 PostgreSQL로, Job Port를 외부 Queue로 교체하되 Domain과 공개 DTO는 유지한다.
 
+제품 배포 경계는 다음과 같다.
+
+```mermaid
+flowchart LR
+    GUI[Frontend GUI]
+    BE[Backend / Session Store]
+    CORE[Forensic Core Engine]
+    MCP[Built-in MCP Adapter]
+    AIEXT[External AI / LLM Provider]
+
+    GUI --> BE
+    BE --> CORE
+    BE --> MCP
+    MCP --> CORE
+    MCP --> AIEXT
+```
+
+MCP Adapter는 APEX Desktop Distribution에 기본 포함할 수 있지만 별도 Component다. Core와
+같은 Process 또는 저장소에 강제하지 않으며, Core Package Dependency에는 MCP/LLM SDK가
+없다.
+
 Workspace에는 Case를 찾기 위한 작은 `catalog.sqlite`를 두고, 각 Case Directory에는
 `case.sqlite`와 Manifest를 둔다. Case의 정본 Metadata와 분석 결과는 `case.sqlite`에 있으며,
 Catalog는 Case Directory를 다시 Scan해 재구성할 수 있는 Projection이다. 따라서 Catalog
@@ -225,3 +261,93 @@ Catalog는 Case Directory를 다시 Scan해 재구성할 수 있는 Projection�
 
 참고 프로젝트는 Workflow와 확장 경계를 이해하기 위한 자료다. APEX의 성능과 포렌식 정확도는
 별도 Fixture, Benchmark, Library Spike로 검증한다.
+
+## 14. GUI Context와 Analysis Context
+
+| 종류 | 생명주기 | 저장 위치 | 목적 |
+| --- | --- | --- | --- |
+| Live UI Context | GUI Session 동안 가변 | Backend Memory/Session Store | 현재 화면과 선택/필터 동기화 |
+| UI Context Snapshot | 명시적 생성 후 불변 | Case DB | Audit 및 UI 상태 재현 |
+| Analysis Context Snapshot | 요청 단위 불변 | Case DB | MCP/AI/Report에 기존 결과 전달 |
+
+Live Context를 매 입력마다 Case DB에 저장하지 않는다. `PUT`은 Session Store의 Revision을
+증가시키며, Snapshot은 `case_id`, `locale`, `timezone`, 선택 ID, Filter, 검색 조건, 시간 범위와
+Canonical Content Hash를 고정한다.
+
+Analysis Context Builder는 선택 ID를 현재 DB 결과로 Resolve하고 Citation을 만든다. 존재하지
+않거나 다른 Case에 속한 ID가 하나라도 있으면 Snapshot 생성 전체를 거부한다. Snapshot은
+원본 Evidence를 다시 Parse하지 않으며, GUI에서 이미 생성된 Artifact, Timeline, Search Result,
+Annotation, Tag와 기존 AI Enrichment를 조회한다.
+
+```text
+GUI Result Selection
+  -> Live UI Context
+  -> immutable UI/Analysis Context Snapshot
+  -> public Engine API
+  -> Built-in MCP Adapter
+  -> AI Agent
+```
+
+## 15. Report Architecture
+
+Report Module은 `template_manager`, `evidence_selector`, `finding_selector`, `timeline_selector`,
+`ai_draft_port`, `review_manager`, `approval_manager`, `exporter`로 구성한다.
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT
+    DRAFT --> GENERATING
+    GENERATING --> REVIEW_REQUIRED
+    GENERATING --> FAILED
+    REVIEW_REQUIRED --> APPROVED
+    REVIEW_REQUIRED --> REJECTED
+    REJECTED --> DRAFT
+    APPROVED --> EXPORTING
+    EXPORTING --> EXPORTED
+    EXPORTING --> FAILED
+```
+
+- `ReportDraftPort`는 Analysis Context와 Citation을 전달하는 Provider-neutral Port다.
+- AI Draft는 `REVIEW_REQUIRED`로만 전환할 수 있고 스스로 승인할 수 없다.
+- `approved_by`는 사람인 Analyst Identity여야 하며 승인 시 Report Version의 Canonical Hash를
+  고정한다.
+- Exporter는 `APPROVED`인 동일 Version만 PDF/HTML로 Render한다.
+- 승인된 내용을 변경하면 Version을 증가시키고 `DRAFT` 또는 `REVIEW_REQUIRED`로 되돌린다.
+- Export 파일은 Hash, Format, Template Version, Locale/Timezone을 기록한다.
+
+## 16. Localization Architecture
+
+Case 기본값은 `locale=ko-KR`, `timezone=Asia/Seoul`이다.
+
+| 영역 | 규칙 |
+| --- | --- |
+| UI 문자열 | `resource_key`를 GUI Resource Bundle의 한국어 문자열로 변환 |
+| 오류 | Engine은 안정적 Error Code와 `message_key` 반환, GUI가 한국어 표시 |
+| Artifact | Type별 `display_name_key`, `description_key` 제공 |
+| 파일명/경로 | 원본 Unicode/Raw 표현 보존, 표시와 검색 사본 분리 |
+| 검색 | 원본을 변경하지 않고 검색 사본에 Unicode 정규화와 Case Folding 적용 |
+| 시간 | UTC/원본 Timestamp 보존, GUI/Report에서 Case Timezone으로 표시 |
+| AI/Report | Case Locale을 출력 언어로 전달하고 기본 한국어 Template 제공 |
+
+검색 정규화 정책은 Unicode NFKC와 Case Folding을 초기 후보로 두되 원본 문자열에는 적용하지
+않는다. 한국어 Keyword Search의 Tokenizer/Trigram 조합은 실제 말뭉치 Benchmark로 확정하며,
+한글 완성형·자모·공백·영문 혼합 Query Fixture를 Contract Test에 포함한다.
+
+## 17. Browser Communications와 Media
+
+Browser Communications MVP는 Browser Profile, 방문 URL/History, 검색 History, Download
+History/File과 시간 기준 조회다. Email, Discord, Telegram, KakaoTalk 및 기타 Messenger는
+공통 Analyzer Plugin 계약을 사용하는 후순위 확장 범위이며 MVP 완료 조건이 아니다.
+
+Media MVP는 Image/Video 분류, EXIF/GPS, Thumbnail, Codec, Duration, 생성/수정 시간과 삭제
+상태 표시를 포함한다. Thumbnail은 Cache 파생물이며 원본 Media를 수정하지 않는다. AI는
+선택된 Media의 저장된 Metadata와 Citation만 요약하고 사건 관련성 설명/보고서 문구를 제안할
+수 있으나 원본을 변경하거나 관련성을 Observed Fact로 확정할 수 없다.
+
+## 18. Backend와 Billing 경계
+
+Token 요금제와 Provider별 사용량은 Backend/Billing 또는 외부 AI Adapter 책임이다. Core는
+과금 계산, 요금제, Provider Credential을 알지 않는다. 향후 외부 계약은 `request_id`,
+`case_id`, `user_id`, `provider`, `model`, `input_tokens`, `output_tokens`, `tool_call_count`,
+`started_at`, `completed_at`을 포함할 수 있지만 이 Event는 AI Adapter가 Backend로 발행한다.
+Core는 요청 상관관계용 `request_id`와 `case_id`만 제공하며 사용량 Record를 생성하지 않는다.

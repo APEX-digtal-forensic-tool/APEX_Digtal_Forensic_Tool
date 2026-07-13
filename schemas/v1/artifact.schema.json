@@ -41,6 +41,8 @@
         "case_id",
         "artifact_type",
         "schema_version",
+        "display_name_key",
+        "description_key",
         "title",
         "payload",
         "confidence",
@@ -58,8 +60,10 @@
           "type": "string",
           "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
         },
+        "display_name_key": { "$ref": "common.schema.json#/$defs/resourceKey" },
+        "description_key": { "$ref": "common.schema.json#/$defs/resourceKey" },
         "title": { "type": "string", "minLength": 1 },
-        "payload": { "type": "object" },
+        "payload": { "type": "object", "additionalProperties": true },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
         "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
         "provenance": { "$ref": "#/$defs/provenance" }

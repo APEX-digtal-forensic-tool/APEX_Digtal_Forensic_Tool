@@ -48,7 +48,17 @@
           ]
         },
         "job_type": {
-          "enum": ["HASH", "FS_INGEST", "ARTIFACT", "TIMELINE", "INDEX", "SEARCH"]
+          "enum": [
+            "HASH",
+            "FS_INGEST",
+            "ARTIFACT",
+            "TIMELINE",
+            "INDEX",
+            "SEARCH",
+            "AI_ENRICHMENT",
+            "REPORT_DRAFT",
+            "REPORT_EXPORT"
+          ]
         },
         "status": {
           "enum": ["QUEUED", "RUNNING", "SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"]

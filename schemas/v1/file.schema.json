@@ -19,6 +19,8 @@
         "evidence_id",
         "parent_file_id",
         "name",
+        "name_encoding",
+        "name_lossy",
         "full_path",
         "file_type",
         "mime_type",
@@ -41,6 +43,8 @@
           ]
         },
         "name": { "type": "string", "minLength": 1 },
+        "name_encoding": { "type": ["string", "null"] },
+        "name_lossy": { "type": "boolean" },
         "full_path": { "type": "string", "minLength": 1 },
         "file_type": {
           "enum": ["REGULAR", "DIRECTORY", "SYMLINK", "STREAM", "SPECIAL"]
