@@ -732,11 +732,8 @@ APEX/
 
 ### Phase 9 — 검증 및 배포
 
-- 성능 Benchmark
-- 안정성 테스트
-- Desktop Packaging
 
-MCP Server와 LLM Provider 구현은 별도 담당자의 Roadmap에서 관리합니다.
+
 
 ---
 
