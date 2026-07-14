@@ -128,3 +128,15 @@
 - [x] MCP/LLM/Billing 분리 경계
 - [ ] 실제 Core/Backend/Frontend/MCP/AI 구현
 - [ ] Library Spike, Forensic Fixture와 성능 Baseline
+
+## Python-Native 하이브리드 요구사항
+
+| ID | 요구사항 | 담당 구조 | 검증 방법 |
+|---|---|---|---|
+| PERF-HYB-001 | Python은 Application 및 Orchestration Layer를 담당하고 성능 핵심 경로는 Native Adapter를 통해 실행해야 한다. | Architecture / Native Adapter | Architecture Review |
+| PERF-HYB-002 | Domain 및 Application Layer는 특정 Native Library API에 직접 의존하지 않아야 한다. | Ports / Adapters | Dependency Test |
+| PERF-HYB-003 | CPU 집약적 Analyzer는 Process 기반 병렬 처리를 지원해야 한다. | Process Pool | Multi-core Benchmark |
+| PERF-HYB-004 | Evidence 전체를 메모리에 적재하지 않고 Streaming 또는 Offset 기반 접근을 사용해야 한다. | Evidence Reader | Large Evidence Memory Test |
+| PERF-HYB-005 | Analyzer 결과는 Bounded Queue를 통해 Single DB Writer에 전달해야 한다. | Result Queue / DB Writer | SQLite Concurrency Test |
+| PERF-HYB-006 | Native Provider는 Windows 지원, License, 유지보수 상태, Packaging 및 Benchmark 결과를 기준으로 선정해야 한다. | Provider Selection | Technology Spike |
+| PERF-HYB-007 | 실제 병목이 확인되기 전에는 Native Extension을 도입하지 않아야 한다. | Performance Strategy | Profiling Report |

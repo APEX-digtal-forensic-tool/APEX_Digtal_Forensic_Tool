@@ -351,3 +351,48 @@ Token 요금제와 Provider별 사용량은 Backend/Billing 또는 외부 AI Ada
 `case_id`, `user_id`, `provider`, `model`, `input_tokens`, `output_tokens`, `tool_call_count`,
 `started_at`, `completed_at`을 포함할 수 있지만 이 Event는 AI Adapter가 Backend로 발행한다.
 Core는 요청 상관관계용 `request_id`와 `case_id`만 제공하며 사용량 Record를 생성하지 않는다.
+
+## Python-Native 하이브리드 아키텍처
+
+APEX는 Python을 Application 및 Orchestration Layer로 사용하며, 성능에 민감한 처리는 Native Analysis Adapter를 통해 실행한다.
+
+~~~text
+Python Application / Orchestration Layer
+|-- Case Manager
+|-- Evidence Manager
+|-- Job Scheduler
+|-- Result Aggregator
+|-- Timeline Engine
+|-- Context Manager
+|-- API Interface
+|-- GUI / MCP Interface
+`-- Report Workflow
+          |
+          v
+Native Analysis Adapter Layer
+|-- Evidence Reader
+|-- File System Provider
+|-- Hash Provider
+|-- Search Index Provider
+|-- Binary Scanner
+`-- Multimedia Processor
+~~~
+
+Domain 및 Application Layer는 특정 Native Library API에 직접 의존하지 않는다.
+
+Native 기능은 다음 Port를 통해 추상화한다.
+
+- `EvidenceReaderPort`
+- `FileSystemProviderPort`
+- `HashProviderPort`
+- `SearchIndexPort`
+- `BinaryScannerPort`
+- `MultimediaProcessorPort`
+
+CPU 집약적 작업은 Process Pool에서 실행하며, I/O 집약적 작업은 Async I/O 또는 제한된 Thread Pool을 사용한다.
+
+Worker 결과는 Bounded Queue를 통해 Case별 Single DB Writer에 전달한다. 여러 Worker가 SQLite에 직접 동시에 기록하지 않는다.
+
+대용량 Evidence는 Chunk Streaming, Offset 기반 Random Access, Lazy Loading 및 Cursor Pagination으로 처리하며 전체 Evidence를 메모리에 적재하지 않는다.
+
+실제 Profiling과 Benchmark에서 병목이 확인된 경우에만 해당 구간을 Rust, C 또는 C++ Extension이나 별도 Native Worker Process로 교체한다.

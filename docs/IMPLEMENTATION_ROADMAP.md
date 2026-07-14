@@ -218,3 +218,40 @@ APEX는 “Autopsy보다 빠르다” 또는 “X-Ways와 동일하다”는 표
 | Canonical JSON | RFC 8785 구현의 숫자/Unicode 처리 |
 | PDF/HTML | 한글 Font 포함, Citation Link, 결정적 Export Hash |
 | Desktop 경계 | Backend Session Store와 Built-in MCP Adapter Process 모델 |
+
+## Python-Native Provider 기술 검증
+
+### Phase 0~1 기술 Spike
+
+- `libtsk` 및 `pytsk3`의 Windows 호환성 검토
+- E01 Provider 후보 검토
+- VHD/VHDX Provider 후보 검토
+- Native Hash Provider Benchmark
+- SQLite FTS5 한국어 검색 검증
+- FFmpeg 및 ffprobe Packaging 검토
+- YARA Process 안전성 검토
+- Native Library License 검토
+- Windows Desktop 배포 가능성 검토
+- Process Pool 및 Single DB Writer Prototype 검증
+
+### Provider 선정 기준
+
+- Windows 지원 여부
+- 지원 Python 버전
+- Evidence 형식 및 File System 지원 범위
+- 삭제 파일 지원 여부
+- Process 및 Thread 안전성
+- 유지보수 상태
+- License
+- 오류 처리 방식
+- Packaging 난이도
+- Benchmark 결과
+
+### Phase 9 검증
+
+- Native Provider별 성능 Benchmark
+- Native Dependency Packaging 검증
+- 설치 환경별 실행 검증
+- Cache Cold/Warm 성능 비교
+- 최대 Memory 및 Disk I/O 측정
+- Worker 수에 따른 Scalability 측정

@@ -143,3 +143,36 @@ contexts     -> GUI framework state object
 MCP Adapter는 이 Core 트리 안에 만들지 않는다. APEX Desktop Distribution에는 별도 Component로
 기본 포함할 수 있으며 `api`의 공개 계약만 소비한다. Frontend의 한국어 Resource 파일도 GUI
 저장소가 소유하고 Core에는 안정적인 Resource Key와 기본 Locale/Timezone 정책만 둔다.
+
+## Python-Native Adapter 제안 구조
+
+~~~text
+src/
+|-- domain/
+|-- application/
+|-- ports/
+|   |-- evidence_reader.py
+|   |-- filesystem_provider.py
+|   |-- hash_provider.py
+|   |-- search_index.py
+|   |-- binary_scanner.py
+|   `-- multimedia_processor.py
+|
+|-- adapters/
+|   |-- native/
+|   |   |-- tsk/
+|   |   |-- ewf/
+|   |   |-- vhdi/
+|   |   |-- yara/
+|   |   `-- ffmpeg/
+|   `-- database/
+|
+|-- workers/
+|   |-- process_pool.py
+|   |-- result_queue.py
+|   `-- db_writer.py
+|
+`-- api/
+~~~
+
+Native Adapter는 선택한 Library에 종속될 수 있지만 Domain과 Application Layer는 Native 구현 세부사항을 알지 못한다.

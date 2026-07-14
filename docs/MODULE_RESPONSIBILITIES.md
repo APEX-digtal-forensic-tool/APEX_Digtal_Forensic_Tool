@@ -217,3 +217,30 @@ Engine은 Error Code, `message_key`, Artifact `display_name_key`와 `description
 한국어 실제 문구는 Frontend Resource Bundle이 소유한다. Report Template은 Locale별 Resource를
 사용한다. Timestamp의 정본은 UTC/원본 값이며 `Asia/Seoul` 변환은 GUI/Report 표시 단계에서
 수행한다.
+
+## Native Analysis Adapter 책임
+
+Native Analysis Adapter는 외부 Native Library와 APEX Domain 사이의 경계를 담당한다.
+
+### 담당 책임
+
+- Native Library 호출
+- Native 결과를 APEX Domain DTO로 변환
+- 지원 기능 및 Capability 확인
+- Native 오류를 Engine 오류 코드로 변환
+- File Handle 및 Native Resource 정리
+- Process 및 Thread 안전성 격리
+- 취소 요청 및 Progress 전달
+- Native Library 이름과 버전 기록
+
+### 담당하지 않는 책임
+
+- Case 정책
+- Artifact 의미 해석
+- AI 판단
+- GUI 표시
+- MCP Tool 정의
+- Report 문장 생성
+- 사용자 권한 및 Billing
+
+Domain 및 Application Module은 구체적인 Native Library가 아니라 Port에만 의존한다.

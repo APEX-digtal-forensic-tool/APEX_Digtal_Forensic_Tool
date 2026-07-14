@@ -785,3 +785,84 @@ APEX는 합법적인 디지털 포렌식 조사, 보안 연구 및 교육을 목
 AI가 생성한 분석 결과와 보고서는 분석 보조 자료이며, 최종 판단은 분석자가 원본 Evidence와 근거를 검토한 후 내려야 합니다.
 
 모든 분석 과정은 Evidence 무결성 유지와 분석 과정 재현 가능성을 기본 원칙으로 합니다.
+
+## Python 기반 하이브리드 성능 구조
+
+APEX의 주 개발 언어는 Python입니다.
+
+Python은 Case 및 Evidence 관리, 분석 작업 제어, 결과 통합, Timeline, Context, API, GUI 및 MCP 연동 인터페이스, Report Workflow를 담당하는 Application 및 Orchestration Layer로 사용합니다.
+
+디스크 이미지 접근, File System Parsing, Hash 계산, Search Index, Binary Scan 및 Multimedia 처리처럼 성능에 민감한 기능까지 모두 순수 Python으로 다시 구현하지는 않습니다.
+
+성능 핵심 경로는 Native Library 또는 Native Tool을 Adapter 형태로 연결합니다.
+
+~~~text
+Python Application / Orchestration Layer
+|-- Case / Evidence Management
+|-- Job Scheduling
+|-- Result Aggregation
+|-- Timeline / Context
+|-- API / JSON Schema
+|-- GUI / MCP Interface
+`-- Report Workflow
+          |
+          v
+Native Analysis Adapter Layer
+|-- Disk Image Reader
+|-- File System Parser
+|-- Hash Provider
+|-- Search Index Provider
+|-- Binary Scanner
+`-- Multimedia Processor
+~~~
+
+APEX는 Autopsy의 Java 코드 또는 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다.
+
+Autopsy에서는 다음 요소만 참고합니다.
+
+- Case 기반 분석 Workflow
+- Artifact 분류 방식
+- Timeline
+- Images / Videos
+- Communications
+- Report 사용자 경험
+- 분석 화면 구성
+
+검토 가능한 Native 기술 후보는 다음과 같습니다.
+
+- Sleuth Kit 및 `libtsk`
+- `pytsk3` 또는 유지보수 가능한 Python Binding
+- E01 처리를 위한 `libewf` 또는 `pyewf`
+- VHD/VHDX 처리를 위한 `libvhdi`
+- SQLite FTS5 또는 동등한 Search Index
+- Python `hashlib`의 Native Hash 구현
+- FFmpeg 또는 ffprobe
+- YARA 및 `yara-python`
+- `mmap` 기반 Random Access
+
+구체적인 Library는 Windows 지원 여부, Python 호환성, 기능 범위, 유지보수 상태, License, Packaging 난이도 및 Benchmark 결과를 검토한 후 확정합니다.
+
+CPU 집약적 분석은 Process Pool을 사용하고, I/O 집약적 처리는 Async I/O 또는 제한된 Thread Pool을 사용합니다.
+
+~~~text
+Registry Worker -----+
+Event Log Worker ----+
+Prefetch Worker -----+--> Bounded Result Queue --> Single DB Writer
+Media Worker --------+
+~~~
+
+여러 Analyzer가 SQLite에 직접 동시에 기록하지 않습니다. 결과는 Bounded Queue를 통해 Single DB Writer로 전달하고 Batch Insert로 저장합니다.
+
+대용량 Evidence는 전체를 메모리에 적재하지 않고 다음 방식으로 처리합니다.
+
+- Chunk 단위 Streaming
+- 필요한 Offset만 선택적으로 조회
+- Lazy Loading
+- Cursor Pagination
+- Checkpoint 및 Resume
+- Evidence Fingerprint 기반 중복 분석 방지
+- 기존 GUI 분석 결과 재사용
+
+Benchmark에서 Python 계층의 실제 병목이 확인된 경우에만 해당 구간을 Rust, C 또는 C++ Accelerator로 확장할 수 있도록 설계합니다.
+
+APEX는 현재 X-Ways 또는 Autopsy보다 빠르다고 단정하지 않습니다. 동일한 Hardware, Evidence, 분석 범위, Cache 상태 및 Index 설정을 사용한 Benchmark 이후에만 성능 결과를 문서화합니다.
