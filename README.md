@@ -1,49 +1,46 @@
 # APEX Forensic Core Engine
 
-APEX는 Python·Native 하이브리드 분석 엔진, 한국어 UI 및 Built-in MCP를 기반으로 Progressive Indexing, AI Keyword 추천, 근거 중심 분석, Timezone 자동화, Report와 Chain of Custody 자동화를 제공하는 디지털 포렌식 플랫폼입니다.
+APEX는 **Python·Native 하이브리드 분석 엔진**, **한국어 기반 사용자 환경**, **Built-in MCP 연동 구조**를 기반으로 디지털 증거 분석의 접근성과 자동화를 높이는 디지털 포렌식 플랫폼입니다.
 
-APEX는 한국어 디지털 포렌식 환경을 우선 지원하고, 대용량 Evidence를 읽기 전용으로 분석하여 버전이 지정된 JSON 결과를 제공하는 Python 기반 Forensic Core Engine입니다.
+본 저장소의 Forensic Core Engine은 대용량 Evidence를 읽기 전용으로 분석하고, GUI·Backend·MCP Adapter가 공통으로 사용할 수 있는 버전화된 JSON 결과를 제공합니다.
 
-X-Ways Forensics의 빠른 분석 철학과 Autopsy의 Case·Artifact 중심 분석 Workflow를 참고하여, 사용자 친화성과 대용량 Evidence 처리 효율성을 함께 확보하는 것을 목표로 합니다.
+APEX는 다음 프로젝트의 장점을 참고합니다.
 
-현재 저장소는 **설계 기준선(Design Baseline)** 단계입니다. 문서와 JSON Schema 설계는 완료되었지만 실제 Forensic Engine, GUI, MCP, AI 및 Report 실행 코드는 아직 구현되지 않았습니다.
+- X-Ways Forensics의 빠른 Evidence 탐색 철학
+- Autopsy의 Case·Artifact 중심 분석 Workflow와 사용자 경험
+- MCP 기반 AI Agent 연동 방식
 
----
+단, Autopsy의 Java 코드나 NetBeans 애플리케이션 구조를 기반으로 구현하지 않습니다. APEX의 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독자적인 구조를 사용합니다.
 
-## 핵심 목표
-
-APEX는 다음 세 가지를 핵심 차별점으로 합니다.
-
-1. **한국어 기반 디지털 포렌식 환경**
-2. **제품에 기본 포함되는 MCP 기반 AI 분석 기능**
-3. **대용량 Evidence 처리를 위한 분석 엔진 최적화**
-
-단, 검증되지 않은 제품 간 성능 우위는 주장하지 않습니다. 성능 수치는 동일한 Hardware, Evidence 및 분석 범위를 사용한 Benchmark 이후에만 문서화합니다.
+> 현재 저장소는 **설계 기준선(Design Baseline)** 단계입니다.  
+> Architecture, Database, API, JSON Schema 및 검증 도구 설계는 완료되었지만 실제 Engine, GUI, MCP, AI, OCR/STT 및 Report 실행 코드는 아직 구현되지 않았습니다.
 
 ---
 
-## 설계 산출물
+## 핵심 차별점
 
-| 산출물 | 문서 |
-|---|---|
-| 전체 아키텍처 및 품질 속성 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
-| 제안 디렉터리 구조 | [`docs/DIRECTORY_STRUCTURE.md`](./docs/DIRECTORY_STRUCTURE.md) |
-| 모듈 역할 및 의존성 | [`docs/MODULE_RESPONSIBILITIES.md`](./docs/MODULE_RESPONSIBILITIES.md) |
-| 데이터베이스 스키마 | [`docs/DATABASE_SCHEMA.md`](./docs/DATABASE_SCHEMA.md) |
-| API 인터페이스 | [`docs/API_INTERFACE.md`](./docs/API_INTERFACE.md) |
-| JSON Schema 규칙 | [`docs/JSON_SCHEMAS.md`](./docs/JSON_SCHEMAS.md) |
-| 단계별 구현 로드맵 | [`docs/IMPLEMENTATION_ROADMAP.md`](./docs/IMPLEMENTATION_ROADMAP.md) |
-| 요구사항 추적표 | [`docs/REQUIREMENTS_TRACEABILITY.md`](./docs/REQUIREMENTS_TRACEABILITY.md) |
+### 1. 한국어 기반 디지털 포렌식 환경
 
-기계 판독용 데이터 계약은 [`schemas/v1/`](./schemas/v1)에 있으며, 설계 검증 도구는 [`tools/`](./tools)에 있습니다.
+APEX는 한국어 사용자를 우선 고려합니다.
 
----
+- 기본 Locale: `ko-KR`
+- 기본 Timezone: `Asia/Seoul`
+- 기본 Encoding: UTF-8
+- 한국어 사용자 인터페이스
+- Artifact와 분석 결과의 한국어 설명
+- 한국어 자연어 기반 AI 질의
+- 한국어 Keyword Search
+- 한국어 Report Template
+- 한글 파일명과 경로의 손실 없는 처리
+- 원본 Timestamp와 표시 Timezone의 명확한 구분
 
-## 제품과 Engine 경계
+UI 문자열은 Resource Key 기반으로 관리하며, Forensic Engine은 언어에 종속되지 않는 오류 코드와 구조화된 결과를 반환합니다.
 
-사용자에게 배포되는 APEX Desktop Distribution에는 GUI, Backend, Forensic Engine 및 Built-in MCP Adapter가 함께 포함될 수 있습니다.
+### 2. Built-in MCP 기반 AI 분석 보조
 
-그러나 개발 구조와 Runtime 의존성은 명확히 분리합니다.
+사용자에게 배포되는 APEX Desktop Distribution에는 MCP 기반 AI 기능이 기본 포함될 수 있습니다.
+
+다만 Forensic Engine 내부에는 MCP SDK, LLM SDK, Prompt, API Key 또는 특정 AI Provider 의존성을 포함하지 않습니다.
 
 ```text
 APEX Desktop Distribution
@@ -54,36 +51,88 @@ APEX Desktop Distribution
     └── AI / LLM Provider
 ```
 
-사용자 관점에서는 MCP 기능이 APEX에 기본 포함되지만, Forensic Engine 내부에는 MCP SDK나 특정 AI Provider 의존성을 포함하지 않습니다.
+AI는 포렌식 엔진을 대체하지 않습니다.
+
+GUI에서 이미 수행된 분석 결과와 현재 Context를 재사용하여 다음 작업을 보조합니다.
+
+- 분석 결과 요약
+- AI Keyword 추천
+- 의심 행위 후보 설명
+- Artifact 간 관계 분석
+- Timeline 흐름 정리
+- 추가 분석 항목 추천
+- Citation 기반 답변
+- 한국어 보고서 초안 작성
+
+### 3. Progressive Indexing 기반 분석 최적화
+
+APEX의 성능 목표는 단순히 Parser 실행 시간을 줄이는 데 그치지 않습니다.
+
+전체 Index가 완료되기 전에도 File Tree와 Partial Result를 확인하고, 사용자가 선택한 범위를 우선 분석할 수 있도록 설계합니다.
+
+```text
+Evidence 등록
+    ↓
+Header / Partition / File System 기본 정보 확인
+    ↓
+최소 Metadata 우선 수집
+    ↓
+File Tree와 Partial Result 표시
+    ↓
+사용자 선택 Scope 우선 분석
+    ↓
+Background Index 및 Artifact 분석
+```
+
+검증되지 않은 제품 간 성능 우위는 주장하지 않습니다. 성능 결과는 동일한 Hardware, Evidence, 분석 범위 및 Cache 조건을 사용한 Benchmark 이후에만 문서화합니다.
 
 ---
 
-## Forensic Core Engine 담당 범위
+## 설계 산출물
 
-Forensic Core Engine은 다음 기능을 담당합니다.
+| 산출물 | 문서 |
+|---|---|
+| 전체 Architecture 및 품질 속성 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
+| 제안 Directory Structure | [`docs/DIRECTORY_STRUCTURE.md`](./docs/DIRECTORY_STRUCTURE.md) |
+| Module 역할 및 의존성 | [`docs/MODULE_RESPONSIBILITIES.md`](./docs/MODULE_RESPONSIBILITIES.md) |
+| Database Schema | [`docs/DATABASE_SCHEMA.md`](./docs/DATABASE_SCHEMA.md) |
+| API Interface | [`docs/API_INTERFACE.md`](./docs/API_INTERFACE.md) |
+| JSON Schema 규칙 | [`docs/JSON_SCHEMAS.md`](./docs/JSON_SCHEMAS.md) |
+| 단계별 Implementation Roadmap | [`docs/IMPLEMENTATION_ROADMAP.md`](./docs/IMPLEMENTATION_ROADMAP.md) |
+| Requirements Traceability | [`docs/REQUIREMENTS_TRACEABILITY.md`](./docs/REQUIREMENTS_TRACEABILITY.md) |
+
+기계 판독용 데이터 계약은 [`schemas/v1/`](./schemas/v1)에 있으며, 설계 검증 도구는 [`tools/`](./tools)에 있습니다.
+
+---
+
+## 제품과 Engine 경계
+
+### Forensic Core Engine 담당 범위
 
 - Case 및 Evidence 관리
+- Evidence Hash와 무결성 검증
 - File System 분석
 - Artifact 분석
+- Progressive Indexing
 - Timeline 생성
 - Search, Index 및 Cache
+- Analysis Job과 Progress 관리
 - Analysis Result Database
-- 분석 Job 및 Progress 관리
-- Evidence 무결성 검증
-- Audit 및 Citation 데이터 관리
-- GUI와 MCP Adapter가 공통으로 사용하는 Application Interface 제공
-- 버전이 지정된 JSON Schema 기반 결과 제공
-- GUI 및 Analysis Context Snapshot 관리
-- Analyst Annotation 및 Tag 관리
-- Report 상태와 승인 규칙 관리
-- Provider-neutral `AIEnrichmentPort` 제공
-- Provider-neutral `ReportDraftPort` 제공
+- Timezone 정규화
+- GUI 및 Analysis Context Snapshot
+- Analyst Annotation 및 Tag
+- Citation과 Raw Locator
+- Chain of Custody Ledger
+- Report 상태와 승인 규칙
+- Machine-extracted Candidate 계약
+- GUI와 MCP Adapter가 사용하는 공통 Application Interface
+- 버전화된 JSON Schema 결과
+- Provider-neutral `AIEnrichmentPort`
+- Provider-neutral `KeywordRecommendationPort`
+- Provider-neutral `ReportDraftPort`
+- Provider-neutral `MachineExtractionPort`
 
----
-
-## Forensic Core Engine 비담당 범위
-
-다음 기능은 Engine 외부 계층에서 담당합니다.
+### Forensic Core Engine 비담당 범위
 
 - MCP Server 구현
 - MCP Tool 정의
@@ -94,7 +143,9 @@ Forensic Core Engine은 다음 기능을 담당합니다.
 - API Key 및 Credential 관리
 - AI Token 과금
 - Provider별 사용량 집계
-- AI 분석 결과를 Observed Fact로 확정하는 동작
+- 실제 OCR/STT Provider 실행
+- 실제 PDF/HTML Renderer 구현
+- AI 결과를 Observed Fact로 확정하는 동작
 - Evidence 원본 수정
 
 Built-in MCP Adapter는 Engine의 공개 Port 또는 API만 사용합니다.
@@ -103,7 +154,94 @@ Built-in MCP Adapter는 Engine의 공개 Port 또는 API만 사용합니다.
 
 ---
 
-## 전체 분석 구조
+## Python-Native 하이브리드 구조
+
+APEX의 주 개발 언어는 Python입니다.
+
+Python은 Application 및 Orchestration Layer를 담당하며, 성능 핵심 경로는 Native Library 또는 Native Tool을 Adapter 형태로 연결합니다.
+
+```text
+Python Application / Orchestration Layer
+├── Case / Evidence Management
+├── Job Scheduling
+├── Analysis Workflow
+├── Result Aggregation
+├── Timeline / Context
+├── API / JSON Schema
+├── GUI / MCP Interface
+└── Report Workflow
+          │
+          ▼
+Native Analysis Adapter Layer
+├── Disk Image Reader
+├── File System Parser
+├── Hash Provider
+├── Search Index Provider
+├── Binary Scanner
+└── Multimedia Processor
+```
+
+검토 가능한 Native 기술 후보:
+
+- Sleuth Kit 및 `libtsk`
+- `pytsk3` 또는 유지보수 가능한 Python Binding
+- E01 처리를 위한 `libewf` 또는 `pyewf`
+- VHD/VHDX 처리를 위한 `libvhdi`
+- SQLite FTS5 또는 동등한 Search Index
+- Python `hashlib`가 사용하는 Native Hash 구현
+- FFmpeg 또는 ffprobe
+- YARA 및 `yara-python`
+- `mmap` 기반 Random Access
+- 병목 구간용 Rust, C 또는 C++ Extension
+
+구체적인 Library는 다음 기준을 확인한 후 확정합니다.
+
+- Windows 지원 여부
+- Python 버전 호환성
+- Evidence 형식 및 File System 지원 범위
+- 삭제 파일 지원 여부
+- Process 및 Thread 안전성
+- 유지보수 상태
+- License
+- 오류 처리 방식
+- Packaging 난이도
+- Benchmark 결과
+
+### 병렬 처리
+
+CPU 집약적인 분석은 Process Pool을 사용하고, I/O 집약적인 처리는 Async I/O 또는 제한된 Thread Pool을 사용합니다.
+
+```text
+Registry Worker ─────┐
+Event Log Worker ────┤
+Prefetch Worker ─────┼──> Bounded Result Queue ──> Single DB Writer
+Media Worker ────────┘
+```
+
+여러 Analyzer가 SQLite에 직접 동시에 기록하지 않습니다.
+
+분석 결과는 Bounded Queue를 통해 Case별 Single DB Writer에 전달하고 Batch Insert로 저장합니다.
+
+### 대용량 Evidence 처리
+
+대용량 Evidence 전체를 메모리에 적재하지 않습니다.
+
+- Chunk 단위 Streaming
+- 필요한 Offset만 선택적으로 조회
+- Lazy Loading
+- Cursor Pagination
+- Memory Mapping 적용 검토
+- Bounded Queue를 통한 Backpressure
+- Checkpoint 및 Resume
+- Evidence Fingerprint 기반 중복 분석 방지
+- Analyzer Version과 Option을 포함한 Cache Key
+- 기존 GUI 분석 결과 재사용
+
+Benchmark 결과 Python 계층에서 실제 병목이 확인된 경우에만 해당 구간을 Rust, C 또는 C++ Accelerator로 교체할 수 있도록 설계합니다.
+
+---
+
+## 전체 Architecture
 
 ```text
 사용자
@@ -113,13 +251,14 @@ Frontend GUI
   │
   │ 분석 실행 및 현재 선택 상태 전달
   ▼
-Application Interface
+Backend / Application Interface
   │
   ▼
 Forensic Core Engine
   │
   ├── Analysis Result Database
   ├── Timeline / Search / Artifact Result
+  ├── Progressive Indexing
   ├── Session Context
   └── Context Snapshot
           │
@@ -130,18 +269,18 @@ Forensic Core Engine
        AI Agent
 ```
 
-GUI와 MCP Adapter는 서로 다른 분석 로직을 구현하지 않고, 동일한 Engine Interface와 JSON Schema를 사용합니다.
+GUI와 MCP Adapter는 서로 다른 분석 로직을 구현하지 않습니다.
+
+두 계층은 동일한 Engine Interface와 JSON Schema를 사용합니다.
 
 ---
 
-## 기존 분석 결과 재사용 Workflow
+## 기존 분석 결과 재사용
 
 APEX의 AI는 Evidence를 무조건 처음부터 다시 분석하지 않습니다.
 
-사용자가 GUI에서 이미 수행한 분석 결과를 저장하고, MCP Adapter가 해당 결과와 Context를 조회하여 AI Agent에 전달합니다.
-
 ```text
-GUI 분석 실행
+GUI에서 분석 실행
     ↓
 Forensic Engine Job
     ↓
@@ -153,7 +292,7 @@ Analysis Context Snapshot 생성
     ↓
 Built-in MCP Adapter 조회
     ↓
-AI 해석 / 추가 분석 제안 / 보고서 초안
+AI 해석 / Keyword 추천 / 추가 분석 제안 / Report Draft
 ```
 
 이를 통해 다음 효과를 기대할 수 있습니다.
@@ -161,13 +300,97 @@ AI 해석 / 추가 분석 제안 / 보고서 초안
 - 동일 Evidence 중복 분석 방지
 - GUI 분석 결과와 AI 답변의 일관성 유지
 - AI 입력 근거 추적
-- 보고서 생성 과정 재현
-- 분석자의 선택 및 판단 보존
-- AI 추론과 실제 Evidence의 명확한 구분
+- 분석 과정과 Report 생성 과정 재현
+- 분석자의 선택과 판단 보존
+- AI 추론과 실제 Evidence의 명확한 분리
 
 ---
 
-## GUI Context
+## Progressive Indexing
+
+### Analysis Profile
+
+| Profile | 목적 | 대표 범위 |
+|---|---|---|
+| Quick Triage | 첫 화면과 최근 활동 후보를 빠르게 제공 | Partition, 경로, 이름, 크기, 형식, 기본 시간, 삭제 여부, 우선 Artifact |
+| Selected Scope | 분석자가 선택한 범위만 우선 처리 | 선택 Evidence, File, Artifact, Time Range, Analyzer |
+| Full Analysis | 전체 재현 가능한 분석 | 전체 Hash, Metadata, Text Index, Artifact, Timeline, Media, Browser |
+| Custom Profile | Analyzer와 Option을 조합 | Artifact Enable/Disable, Hash, Index, Worker 정책 |
+
+### Index Job 기능
+
+- Background Indexing
+- 사용자 선택 Scope Priority Queue
+- Analyzer별 Enable/Disable
+- Pause
+- Resume
+- Cancel
+- Checkpoint 및 Resume
+- 처리 Item 수
+- 추정 전체 Item 수
+- 처리량
+- 경과 시간
+- 추정 잔여 시간
+- ETA Confidence
+- 현재 Analyzer
+- Worker 수
+- Cache Hit/Miss
+- Partial Result 조회
+
+ETA는 확정값이 아닌 추정치로 표시합니다.
+
+전체 Index 완료 전에도 다음 기능을 제공합니다.
+
+- File Tree 조회
+- 현재까지 발견된 Artifact 조회
+- 현재까지 생성된 Timeline 조회
+- 현재까지 생성된 Index 범위 내 Search
+- Partial Result 여부 및 미완료 범위 표시
+
+---
+
+## Timezone 자동화
+
+원본 Timestamp는 절대 재작성하지 않습니다.
+
+- 원본 Timestamp 보존
+- 내부 정규화 Timestamp는 UTC 사용
+- 화면과 Report는 Case Timezone 사용
+- 기본 Case Timezone은 `Asia/Seoul`
+- IANA Timezone ID 사용
+- DST 처리
+- Timezone 출처와 Confidence 기록
+- 자동 탐지 결과에 대한 분석자 확인
+- Timezone 해석 변경 Audit
+- UTC와 Case Timezone 동시 표시
+- 서로 다른 Timezone Artifact의 통합 Timeline
+
+Timezone 후보 출처:
+
+- Case 설정
+- Evidence 운영체제 설정
+- Windows Registry `TimeZoneInformation`
+- Linux `/etc/localtime`
+- Browser Profile
+- Application 설정
+- Artifact 자체 Offset
+- 분석자 수동 지정
+
+신뢰도:
+
+- `CONFIRMED`
+- `HIGH`
+- `MEDIUM`
+- `LOW`
+- `UNKNOWN`
+
+자동 탐지가 불확실한 경우 AI가 Timezone을 임의로 확정하지 않습니다.
+
+---
+
+## GUI Context와 Analysis Context
+
+### GUI Context
 
 GUI Context는 현재 사용자의 분석 상태를 표현하는 Session 단위 임시 데이터입니다.
 
@@ -176,74 +399,56 @@ GUI Context는 현재 사용자의 분석 상태를 표현하는 Session 단위 
 - 현재 Case
 - 현재 Evidence
 - 현재 화면
-- 선택된 파일
+- 선택된 File
 - 선택된 Artifact
 - 선택된 Timeline Event
 - 선택된 Search Result
-- 활성화된 Filter
+- 활성 Filter
 - Timeline 시간 범위
-- Tag 및 주요 증거
-- 현재 Locale
-- 현재 Timezone
+- Tag 및 주요 Evidence
+- Locale 및 Timezone
 
-예시:
+Live GUI Context는 Session Store에서 관리합니다.
 
-```json
-{
-  "case_id": "case-001",
-  "evidence_id": "evidence-001",
-  "current_view": "registry",
-  "selected_file_ids": [],
-  "selected_artifact_ids": [
-    "artifact-001"
-  ],
-  "selected_timeline_event_ids": [],
-  "active_filters": {
-    "risk_level": [
-      "high"
-    ]
-  },
-  "timeline_range": {
-    "from": "2026-07-01T00:00:00Z",
-    "to": "2026-07-13T23:59:59Z"
-  },
-  "locale": "ko-KR",
-  "timezone": "Asia/Seoul"
-}
-```
+Audit, AI 요청 또는 Report 재현이 필요한 경우에만 불변 Context Snapshot으로 저장합니다.
 
-Live GUI Context는 기본적으로 Session Store에서 관리합니다.
+### Scope별 Analysis Context
 
-Audit, AI 요청 또는 보고서 재현이 필요한 경우에만 불변 Context Snapshot으로 저장합니다.
+AI Context는 하나의 거대한 Bundle로 모든 결과를 혼합하지 않습니다.
 
----
+지원 Scope:
 
-## Analysis Context
+- `case`
+- `evidence`
+- `filesystem`
+- `registry`
+- `eventlog`
+- `prefetch`
+- `browser`
+- `media`
+- `timeline`
+- `keyword_search`
+- `report`
+- `chain_of_custody`
 
-Analysis Context는 MCP, AI 및 Report 계층에 전달하기 위해 기존 분석 결과를 고정한 구조화된 Bundle입니다.
+각 Scope는 다음 정보를 포함할 수 있습니다.
 
-포함 가능한 정보:
-
-- Case Metadata
-- Evidence Metadata 및 Hash
-- 선택된 File
-- 선택된 Artifact
-- Timeline Event
-- Search Result
-- Analyst Annotation
-- Tag
-- 기존 AI Enrichment
+- Context Revision
+- 포함 Result ID
+- Analyzer Version
+- Filter 및 Time Range
+- Partial Result 여부
 - Citation
 - Context 생성 시점
-- Context Revision
+- 실제 AI 요청에 전달된 Scope
 
-Analysis Context는 원본 Evidence를 포함하지 않고, Engine이 검증한 구조화된 결과와 실제 결과를 조회할 수 있는 식별자를 제공합니다.
+상위 Case Context는 필요한 Scope만 선택하여 결합합니다.
 
 ---
 
 ## AI 결과 분류
 
-APEX는 AI가 생성한 내용을 포렌식 엔진의 실제 분석 결과와 분리합니다.
+APEX는 Engine이 추출한 사실과 AI가 생성한 내용을 구분합니다.
 
 ### Observed Fact
 
@@ -251,7 +456,7 @@ Forensic Engine이 Evidence에서 직접 추출한 사실입니다.
 
 예:
 
-- 파일 경로
+- File Path
 - Hash
 - Timestamp
 - Registry Value
@@ -260,224 +465,209 @@ Forensic Engine이 Evidence에서 직접 추출한 사실입니다.
 
 ### Analyst Annotation
 
-분석자가 작성하거나 지정한 설명, 태그 및 판단입니다.
+분석자가 작성한 설명, 판단 또는 Tag입니다.
+
+### Machine-extracted Candidate
+
+OCR, STT 또는 자동 Text Extraction을 통해 얻은 검토 전 후보입니다.
 
 ### AI Inference
 
-AI가 Observed Fact와 Context를 기반으로 생성한 추론입니다.
+AI가 Observed Fact와 Context를 기반으로 만든 추론입니다.
 
 ### AI Recommendation
 
-AI가 제안하는 추가 분석 절차 또는 대응 권고입니다.
+AI가 제안하는 추가 분석 절차 또는 대응 방안입니다.
 
-AI Inference와 AI Recommendation은 원본 Artifact를 변경하지 않으며, 가능한 모든 문장에 근거가 되는 Citation을 포함해야 합니다.
+AI는 다음 동작을 수행할 수 없습니다.
 
-Citation은 다음 식별자를 참조할 수 있습니다.
-
-- `evidence_id`
-- `file_id`
-- `artifact_id`
-- `timeline_event_id`
-- `search_result_id`
-- `source_path`
-- `source_offset`
-- `source_reference`
+- 침해 사실을 단독 확정
+- Citation 없이 사실 단정
+- Partial Result를 전체 분석 결과처럼 표현
+- Scope 외 결과 임의 혼합
+- 원본 Artifact 수정
+- AI Inference를 Observed Fact로 승격
+- 분석자가 승인하지 않은 Keyword 자동 실행
 
 ---
 
-## AI 보고서 Workflow
+## AI Keyword Recommendation
 
-AI가 생성한 보고서는 즉시 최종 결과로 확정하지 않습니다.
+AI는 조사 범위를 줄이기 위한 Keyword Candidate를 제안할 수 있습니다.
 
 ```text
-AI Draft
-    ↓
-Human Review
-    ↓
-Approval
-    ↓
-PDF / HTML Export
+Case 배경 정보
++
+선택 Scope
++
+기존 File / Artifact / Timeline / Search Result
+        ↓
+Keyword Candidate 생성
+        ↓
+Reason / Scope / Confidence / Citation 표시
+        ↓
+분석자 검토
+        ↓
+승인된 Keyword만 검색 실행
+        ↓
+Keyword Set과 Search Result 저장
 ```
 
-보고서 상태는 다음과 같이 관리합니다.
+Keyword Candidate 유형:
 
-- `draft`
-- `generating`
-- `review_required`
-- `approved`
-- `rejected`
-- `exporting`
-- `exported`
-- `failed`
+- File Name
+- Process Name
+- Account
+- Email
+- Domain
+- URL
+- IP Address
+- Registry Path
+- Command
+- Path
+- Document Term
+- Hash
+- Regex
+- Related Term
+- Transliteration
+- Typo Variant
 
-분석자가 승인한 특정 Report Version만 Export할 수 있습니다.
+필수 원칙:
 
-승인 후 보고서 내용이 변경되면 기존 승인은 무효화되고 다시 검토해야 합니다.
-
----
-
-## 보고서 구성
-
-보고서는 다음 Section을 포함할 수 있습니다.
-
-1. 사건 개요
-2. 분석 목적
-3. 분석 대상
-4. Evidence 정보
-5. Hash 및 무결성 정보
-6. 분석 환경
-7. 주요 발견 사항
-8. File System 분석 결과
-9. Artifact 분석 결과
-10. Images / Videos 분석 결과
-11. Browser Communications 분석 결과
-12. Timeline
-13. AI 분석 요약
-14. 결론
-15. 대응 권고
-16. 증거 출처 및 Citation
-17. 분석 한계
-
-지원 예정 Export 형식:
-
-- PDF
-- HTML
+- AI 추천 Keyword 자동 실행 금지
+- 분석자 승인 후 Search 실행
+- 추천 이유와 Citation 필수
+- Scope와 Confidence 표시
+- 중복 Keyword 제거
+- Keyword Set Version 관리
+- Search Option 저장
+- Time Range와 Evidence Scope 저장
+- 0건 결과도 보존
+- 동일 검색 재실행 지원
+- 분석자 수동 Keyword도 같은 방식으로 관리
 
 ---
 
-## 한국어 및 Localization
+## Simple / Detailed / Raw View
 
-APEX는 한국어 환경을 기본값으로 사용합니다.
+동일 Finding을 세 단계로 확인할 수 있도록 설계합니다.
 
-- 기본 Locale: `ko-KR`
-- 기본 Timezone: `Asia/Seoul`
-- 기본 Encoding: UTF-8
+| View | 제공 내용 |
+|---|---|
+| Simple | 한국어 설명, 주요 발견 후보, AI 요약, 추천 분석, 핵심 Timeline |
+| Detailed | 전체 Artifact Field, Parser/Version, Source, Timezone 해석, Confidence, Citation, Filter |
+| Raw | 원본 Field/Value, Byte Offset/Length, Encoding, Hex/Text, 원본 Timestamp, Raw Snippet |
 
-Localization 설계 원칙:
+원칙:
 
-- UI 문자열은 Resource Key로 관리
-- Engine 오류 코드는 언어 중립적으로 반환
-- GUI가 오류 코드에 대응하는 한국어 메시지 표시
-- Artifact 표시명과 설명의 다국어 지원
-- 한글 파일명과 경로를 손실 없이 보존
-- 원본 Unicode 문자열과 검색용 정규화 문자열 분리
-- 검색용 문자열에 Unicode Normalization 및 Case Folding 적용
-- 한국어 Keyword Search 지원
-- 한국어 Report Template 제공
-- AI 출력 언어를 Case Locale에 맞춤
-- 원본 Timestamp와 표시용 Timezone 변환 결과 분리
-
----
-
-## Evidence 분석 원칙
-
-원본 Evidence는 항상 읽기 전용으로 처리합니다.
-
-- Evidence 원본 수정 금지
-- Evidence 등록 시 Hash 계산
-- 분석 전후 무결성 검증
-- 원본 경로와 분석 결과 분리
-- 파생 데이터와 원본 데이터 구분
-- 분석 작업 Audit 기록
-- 동일 Evidence 입력 Fingerprint 기반 중복 분석 방지
+- 동일 Finding에서 View 전환
+- AI 설명과 원본 Fact 시각적 분리
+- Raw Locator와 Citation 연결
+- 최대 Read Length 제한
+- 필요한 Offset만 읽기
+- 대용량 파일 전체 로딩 금지
+- 원본 Evidence 읽기 전용 유지
+- Raw View 권한 정책 검토
 
 ---
 
-## 주요 Engine 모듈
+## Chain of Custody
 
-### Case Manager
+Chain of Custody는 일반 Report 문장이 아니라 Evidence 관리의 독립적인 Append-only Ledger입니다.
 
-- Case 생성 및 조회
-- Locale 및 Timezone 관리
-- Case 상태 관리
-- Case별 Evidence 및 분석 결과 연결
+지원 Custody Event 예시:
 
-### Evidence Manager
+- `ACQUISITION`
+- `RECEIVED`
+- `TRANSFERRED`
+- `STORED`
+- `OPENED`
+- `MOUNTED`
+- `ANALYZED`
+- `HASH_VERIFIED`
+- `COPIED`
+- `EXPORTED`
+- `RETURNED`
+- `RELEASED`
+- `ARCHIVED`
+- `DISPOSED`
+- `CORRECTION`
 
-- Disk Image 및 Logical Evidence 등록
-- Metadata 추출
-- Hash 계산
-- 무결성 검증
-- Evidence 분석 상태 관리
+설계 원칙:
 
-지원 예정 형식:
+- 기존 Custody Event 직접 수정·삭제 금지
+- 오류 수정은 `CORRECTION` Event 추가
+- Append-only Ledger
+- Event Hash Chain 적용 검토
+- Evidence 최초 Hash와 재검증 Hash 기록
+- Hash 불일치 경고
+- 사용자·역할·승인자 기록
+- 이동·접근·분석·Export 이력 보존
+- Export 시 Custody Snapshot 생성
+- Report Version과 Custody Snapshot 연결
 
-- E01
-- RAW
-- DD
-- IMG
-- VHD
-- VHDX
-- Directory Evidence
+이 설계는 법적 증거능력을 보장하지 않습니다.
 
-### File System Analyzer
+관할 법률, 조직 정책, Actor Identity 및 전자서명 방식은 Backend·운영·법무 담당자의 최종 검토가 필요합니다.
 
-- Directory Tree 조회
-- 파일 및 폴더 목록 조회
-- File Metadata 추출
-- 삭제 파일 탐색
-- 파일 유형 분류
-- Cursor Pagination
-- Lazy Loading
+---
 
-### Artifact Analyzer
+## Multimedia 분석
 
-초기 지원 대상:
+### Media MVP
 
-- Windows Registry
-- Windows Event Log
-- Windows Prefetch
-- Browser History
-- Download History
-- Recent Activity
+- Image / Video File 분류
 - Image Metadata
 - Video Metadata
+- EXIF
+- GPS
+- Thumbnail
+- Codec
+- Duration
+- 생성·수정 시간
+- 삭제된 Media File 표시
 
-### Timeline Engine
+### Machine-extracted Candidate
 
-- File MAC Time 통합
-- Registry Timestamp 통합
-- Event Log Timestamp 통합
-- Browser Activity 통합
-- Program Execution Time 통합
-- 시간 범위 및 Event Type Filter
-- Citation 가능한 Timeline Event 생성
+확장 기능:
 
-### Search Engine
+- Image OCR
+- Video Frame Sampling
+- Frame OCR
+- Subtitle 추출
+- Audio Speech-to-Text
+- Screen Text 추출
+- 추출 Text의 Search Index 연동
+- Frame 또는 Audio Time Position Citation
 
-- 파일명 검색
-- Keyword Search
-- Regex Search
-- Metadata Search
-- Artifact Search
-- FTS5 또는 동등한 Full Text Index
-- Cursor 기반 결과 조회
-- 검색 결과 Cache
+OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
 
-### Context Module
+Review 상태:
 
-- Live GUI Context 관리
-- Context Revision 관리
-- Analysis Context Bundle 생성
-- 재현용 Context Snapshot 저장
+- `UNREVIEWED`
+- `ACCEPTED`
+- `REJECTED`
+- `CORRECTED`
 
-### Report Module
+Candidate에는 다음 정보를 포함합니다.
 
-- Report Template 관리
-- Evidence 선택
-- Finding 선택
-- Timeline 선택
-- Citation 관리
-- AI Draft 요청 Port
-- Human Review
-- Approval
-- Export 상태 관리
+- Confidence
+- Language
+- Engine 및 Version
+- Frame Number
+- Timestamp Offset
+- Source Region
+- Raw Locator
+- Citation
+- Analyst Review Status
+
+AI는 검토되지 않은 Candidate를 확정 사실로 표현할 수 없습니다.
 
 ---
 
 ## Browser Communications MVP
 
-초기 Communications 범위는 Browser Artifact 중심으로 제한합니다.
+초기 Communications 분석은 Browser Artifact 중심으로 구현합니다.
 
 MVP 범위:
 
@@ -498,166 +688,195 @@ MVP 범위:
 - KakaoTalk
 - 기타 Messenger
 
-README와 설계에서는 후순위 기능을 초기 구현 완료 항목으로 표시하지 않습니다.
+후순위 기능은 초기 구현 완료 항목으로 표시하지 않습니다.
 
 ---
 
-## Images / Videos MVP
+## AI Report와 Human Review
 
-초기 Media 분석 범위:
-
-- Image File 분류
-- Video File 분류
-- Image Metadata
-- Video Metadata
-- EXIF
-- GPS
-- Thumbnail
-- Codec
-- Duration
-- 생성 및 수정 시간
-- 삭제된 Media File 표시
-
-AI는 기존 Metadata와 분석 결과를 요약하거나 사건 관련성을 설명할 수 있지만, 원본 Media를 변경하지 않습니다.
-
----
-
-## 외부 요구사항 인터뷰 반영 설계
-
-대학원 연구자 및 디지털 포렌식·사이버 작전 경험자를 대상으로 한 요구사항 인터뷰를 통해
-기능 범위를 보완하였습니다. 이는 특정 기관의 공식 입장, 협력, 인증 또는 법적 증거능력 보장을
-뜻하지 않습니다. 성능과 Workflow 적합성 검증은 현재 `PLANNED` 상태입니다.
-
-### Progressive Indexing
-
-빠른 분석은 Parser 실행 시간만 의미하지 않습니다. APEX는 다음 순서로 최소 Metadata와
-사용자가 선택한 범위를 먼저 제공하고 나머지를 Background에서 처리하도록 설계합니다.
+AI가 생성한 Report는 즉시 최종 결과로 확정하지 않습니다.
 
 ```text
-Evidence 등록
-  -> Header / Partition / File System 기본 정보
-  -> 최소 Metadata
-  -> File Tree와 Partial Result 표시
-  -> 사용자 선택 Scope 우선 분석
-  -> Background Index와 Artifact 분석
+AI Draft
+    ↓
+Human Review
+    ↓
+Approval
+    ↓
+PDF / HTML Export
 ```
 
-| Profile | 목적 | 대표 범위 |
-|---|---|---|
-| Quick Triage | 첫 화면과 최근 활동 후보를 빠르게 제공 | Partition, 경로, 이름, 크기, 형식, 기본 시간, 삭제 여부, 우선 Artifact |
-| Selected Scope | 분석자가 선택한 Evidence/File/Artifact만 우선 처리 | 선택 범위, 시간 범위, Analyzer |
-| Full Analysis | 전체 재현 가능한 분석 | 전체 Hash/Metadata/Text Index/Artifact/Timeline/Media/Browser |
-| Custom Profile | Analyzer와 Option을 명시적으로 조합 | Artifact Enable/Disable, Hash, Index, Worker 정책 |
+Report 상태:
 
-Index Job은 Pause, Resume, Cancel, Checkpoint/Resume, 사용자 선택 Priority Queue를 지원하도록
-계약을 정의합니다. Progress에는 처리 수, 추정 전체 수, 처리량, 경과 시간, ETA, ETA 신뢰도,
-현재 Analyzer, Worker 수와 Cache Hit/Miss를 포함합니다. ETA는 확정 시간이 아닌 추정치입니다.
-전체 Index 완료 전에도 현재까지의 File Tree, Artifact, Timeline과 생성된 Index 범위 내 검색을
-제공하며 모든 응답과 AI Context에 `is_partial`과 미완료 범위를 표시합니다.
+- `DRAFT`
+- `GENERATING`
+- `REVIEW_REQUIRED`
+- `APPROVED`
+- `REJECTED`
+- `EXPORTING`
+- `EXPORTED`
+- `FAILED`
 
-### Timezone 자동화
+승인된 특정 Report Version만 Export할 수 있습니다.
 
-원본 Timestamp는 절대 재작성하지 않습니다. 원본 값과 원본 Timezone을 보존하고 내부 정규화는
-UTC, 화면과 Report 표시는 Case IANA Timezone을 사용합니다. 기본값은 `Asia/Seoul`과
-`ko-KR`입니다. Case 설정, 운영체제, Windows Registry, Linux `/etc/localtime`, Browser,
-Application, Artifact Offset과 분석자 지정을 Timezone 후보 출처로 기록합니다.
+승인 후 내용이 변경되면 기존 승인은 무효화되고 다시 검토해야 합니다.
 
-자동 탐지 결과에는 `CONFIRMED/HIGH/MEDIUM/LOW/UNKNOWN` 신뢰도를 붙이고 분석자가 확인하거나
-변경할 수 있습니다. 변경 시 표시값만 재계산하며 원본과 UTC 정규화 값은 유지합니다. DST 전환,
-중복 Local Time과 존재하지 않는 Local Time은 경고하고 해석 변경 이력을 Audit에 남깁니다.
+Report에 포함 가능한 항목:
 
-### AI Keyword Recommendation과 Scope
+1. 사건 개요
+2. 분석 목적
+3. 분석 대상
+4. Evidence 정보
+5. Hash 및 무결성 정보
+6. Chain of Custody
+7. 분석 환경
+8. Analysis Profile 및 완료 범위
+9. Timezone 및 변환 정책
+10. 주요 발견 사항
+11. File System 분석 결과
+12. Artifact 분석 결과
+13. Images / Videos 분석 결과
+14. Browser Communications 분석 결과
+15. Timeline
+16. Keyword Set 및 Search Options
+17. AI 분석 요약
+18. Raw Citation
+19. Machine-extracted Candidate와 검토 상태
+20. 결론
+21. 대응 권고
+22. 분석 범위와 제외 범위
+23. 증거 출처 및 Citation
+24. 분석 한계
 
-AI Keyword Candidate에는 Keyword 유형, 추천 이유, Scope, Confidence와 Citation이 필수입니다.
-AI 추천은 자동 검색되지 않으며 분석자가 승인한 Keyword만 Versioned Keyword Set에 포함됩니다.
-대소문자, Regex, Encoding, 시간 범위, Evidence Scope, Index Version과 0건 결과까지 Search
-Execution에 저장하여 동일 조건으로 재실행할 수 있습니다. 분석자가 직접 입력한 Keyword도 같은
-관리 절차를 사용합니다.
+지원 예정 Export:
 
-AI Context는 `case`, `evidence`, `filesystem`, `registry`, `eventlog`, `prefetch`, `browser`,
-`media`, `timeline`, `keyword_search`, `report`, `chain_of_custody` Scope별 Revision으로
-분리합니다. 실제 AI 요청에 전달한 Scope와 Partial 여부를 기록합니다. AI는 Citation 없는
-사실 단정, Scope 외 데이터 혼합, 침해 사실 단독 확정, 미승인 Keyword 실행, Inference의
-Observed Fact 승격을 할 수 없습니다.
-
-### Simple / Detailed / Raw View
-
-| View | 설계 범위 |
-|---|---|
-| Simple | 한국어 설명, 주요 발견 후보, AI 요약, 추천 분석, 핵심 Timeline |
-| Detailed | 전체 Artifact Field, Parser/Version, Source, Timezone 해석, Confidence, Citation, Filter |
-| Raw | 원본 Field/Value, Byte Offset/Length, Encoding, Hex/Text, 원본 Timestamp, Raw Snippet |
-
-동일 Finding에서 세 View를 전환할 수 있고 AI 설명과 원본 Fact를 시각적으로 구분합니다.
-Raw Locator는 Citation과 연결되며 권한과 최대 Read Length를 적용해 필요한 Offset만 읽습니다.
-원본 Evidence는 항상 읽기 전용이며 대용량 파일 전체를 Raw View 메모리에 적재하지 않습니다.
-
-### Chain of Custody
-
-Chain of Custody는 Report 문장만이 아니라 Evidence 관리의 독립적인 Append-only Ledger입니다.
-기존 Event는 수정·삭제할 수 없고 오류는 `CORRECTION` Event로 연결합니다. Event Hash Chain,
-Evidence 최초·재검증 Hash, 불일치 경고, 사용자/역할/승인자, 이동·접근·분석·Export 이력을
-보존합니다. Export 시 불변 Custody Snapshot을 만들고 Report Version과 연결합니다.
-
-이 설계는 법적 증거능력을 보장하지 않습니다. 관할 법률, 조직 정책, Actor Identity와 전자서명
-방식은 Backend 및 법무·운영 담당자의 최종 검토가 필요합니다.
-
-### Multimedia Text Candidate
-
-기존 EXIF/GPS/Thumbnail/Codec/Duration Media MVP를 유지하면서 Image OCR, Video Frame OCR,
-Subtitle, Audio STT와 Screen Text를 확장 계약으로 정의합니다. 실제 OCR/STT 실행 코드는 이
-설계 작업에 포함하지 않습니다.
-
-추출 Text는 Observed Fact가 아니라 `Machine-extracted Candidate`이며 Confidence, 언어,
-Engine/Version, Frame 또는 Audio 위치, Raw Locator와 Citation을 기록합니다. 분석자는
-`UNREVIEWED`, `ACCEPTED`, `REJECTED`, `CORRECTED` 상태로 검토합니다. AI는 검토 전 Candidate를
-확정 사실로 표현할 수 없습니다.
-
-### Report와 외부 검증
-
-Report는 기존 `AI Draft -> Human Review -> Approval -> PDF/HTML Export` Gate를 유지합니다.
-Index Profile/완료 범위, Partial 여부, Timezone 정책, Keyword Set/Search Options, Custody
-Snapshot, Hash 검증, Raw Citation, Machine Candidate 상태, Tool/Analyzer Version, Cache 상태와
-분석 한계를 승인 Version에 고정합니다. 문장은 Observed Fact, Analyst Annotation,
-Machine-extracted Candidate, AI Inference, AI Recommendation으로 구분합니다.
-
-APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실무 경험을 보유한 외부 전문가의
-자문을 통해 성능과 Workflow 적합성을 검증할 예정입니다. 공개 DFIR Dataset, Synthetic
-Evidence와 법적으로 사용 가능한 Test Image만 사용하고 비공개 작전 자료, 개인정보와
-기밀정보는 사용하지 않습니다. 비교 결과는 동일 Hardware, Evidence, Scope, Hash/Index,
-Cache, Worker와 Storage 조건에서만 문서화합니다.
-
-## 성능 최적화 방향
-
-APEX는 X-Ways의 빠른 분석 철학을 참고하여 대용량 Evidence 처리 최적화를 목표로 합니다.
-
-설계에 포함된 최적화 항목:
-
-- Lazy Loading
-- Cursor Pagination
-- Evidence Streaming
-- Process Pool
-- Async I/O
-- Artifact 병렬 분석
-- Case별 단일 DB Writer
-- FTS5 또는 동등한 Full Text Index
-- Content Cache
-- Checkpoint 및 Resume
-- 입력 Fingerprint 기반 중복 분석 방지
-- 취소 가능한 Long-running Job
-- Progress Reporting
-- 분석 결과 재사용
-- 변경되지 않은 Evidence의 재분석 방지
-
-성능 비교는 동일한 조건의 Benchmark 이후에만 수행합니다.
+- PDF
+- HTML
 
 ---
 
-## 데이터 계약
+## 주요 Engine 모듈
+
+### Case Manager
+
+- Case 생성 및 조회
+- Locale 및 Timezone 관리
+- Case 상태 관리
+- Evidence 및 분석 결과 연결
+
+### Evidence Manager
+
+- Disk Image 및 Logical Evidence 등록
+- Metadata 추출
+- Hash 계산
+- 무결성 검증
+- Evidence Fingerprint 관리
+- Custody 기본 Event 생성
+
+지원 예정 형식:
+
+- E01
+- RAW
+- DD
+- IMG
+- VHD
+- VHDX
+- Directory Evidence
+
+### Progressive Indexing Coordinator
+
+- Analysis Profile 적용
+- Background Index 관리
+- Priority Queue
+- Pause / Resume / Cancel
+- Partial Result
+- Progress 및 ETA
+- Checkpoint 및 Resume
+
+### File System Analyzer
+
+- Directory Tree
+- File 및 Folder 목록
+- Metadata
+- 삭제 File
+- File Type 분류
+- Cursor Pagination
+- Lazy Loading
+- Raw Locator
+
+### Artifact Analyzer
+
+초기 지원 대상:
+
+- Windows Registry
+- Windows Event Log
+- Windows Prefetch
+- Browser History
+- Search History
+- Download History
+- Recent Activity
+- Image Metadata
+- Video Metadata
+
+### Timeline Engine
+
+- File MAC Time
+- Registry Timestamp
+- Event Log Timestamp
+- Browser Activity
+- Program Execution Time
+- Timezone 정규화
+- Event Type 및 Time Range Filter
+- Citation 가능한 Timeline Event
+
+### Search Engine
+
+- File Name Search
+- Keyword Search
+- Regex Search
+- Metadata Search
+- Artifact Search
+- 한국어 Search
+- FTS5 또는 동등한 Index
+- Cursor Pagination
+- Search Result Cache
+- Keyword Set
+- Search Reproduction
+
+### Context Module
+
+- Live GUI Context
+- Scope별 Context Revision
+- Analysis Context Bundle
+- Partial Result 표시
+- 재현용 Context Snapshot
+
+### Chain of Custody Module
+
+- Append-only Custody Event
+- Correction Event
+- Hash Verification
+- Ledger Integrity
+- Custody Snapshot
+- Report Version 연결
+
+### Report Module
+
+- Template 관리
+- Evidence / Finding / Timeline 선택
+- Citation 관리
+- AI Draft Port
+- Human Review
+- Approval
+- Export 상태 관리
+
+---
+
+## Data Contract
 
 APEX는 JSON Schema Draft 2020-12 기반 데이터 계약을 사용합니다.
 
-현재 주요 Schema:
+주요 Schema:
 
 - Case
 - Evidence
@@ -667,9 +886,9 @@ APEX는 JSON Schema Draft 2020-12 기반 데이터 계약을 사용합니다.
 - Search Result
 - Job
 - API Response
-- AI Enrichment
 - UI Context
 - Analysis Context
+- AI Enrichment
 - Citation
 - Report
 - Analysis Profile
@@ -677,14 +896,17 @@ APEX는 JSON Schema Draft 2020-12 기반 데이터 계약을 사용합니다.
 - Chain of Custody
 - Machine-extracted Candidate
 
-모든 Schema는 다음 원칙을 따릅니다.
+Schema 원칙:
 
 - 명시적인 `required`
 - 명시적인 `additionalProperties`
 - 일관된 ID 형식
 - ISO 8601 Timestamp
+- IANA Timezone
 - 로컬 `$ref`
-- Schema Version 명시
+- Schema Version
+- Partial Result 표시
+- Confidence와 Review Status 구분
 - Observed Fact와 AI 결과 분리
 - 순환 참조 방지
 
@@ -710,14 +932,18 @@ APEX/
 │   └── v1/
 │       ├── ai-enrichment.schema.json
 │       ├── analysis-context.schema.json
+│       ├── analysis-profile.schema.json
 │       ├── api-response.schema.json
 │       ├── artifact.schema.json
 │       ├── case.schema.json
+│       ├── chain-of-custody.schema.json
 │       ├── citation.schema.json
 │       ├── common.schema.json
 │       ├── evidence.schema.json
 │       ├── file.schema.json
 │       ├── job.schema.json
+│       ├── keyword-recommendation.schema.json
+│       ├── machine-extraction.schema.json
 │       ├── report.schema.json
 │       ├── search.schema.json
 │       ├── timeline-event.schema.json
@@ -735,75 +961,75 @@ APEX/
 
 ### 설계 완료
 
-- [x] Core Architecture 설계
-- [x] Database Schema 설계
-- [x] API Interface 설계
-- [x] JSON Schema v1 설계 및 검증
-- [x] Module Responsibility 정의
-- [x] Requirements Traceability 작성
-- [x] Implementation Roadmap 작성
-- [x] GUI Context 설계
-- [x] Analysis Context 설계
-- [x] Citation 설계
-- [x] Provider-neutral AI 경계 설계
-- [x] Report Module 설계
-- [x] Human Review 및 Approval 설계
-- [x] 한국어 및 Localization 설계
-- [x] Browser Communications MVP 범위 설계
-- [x] Images / Videos MVP 범위 설계
-- [x] MCP 및 Billing 경계 설계
-- [x] 설계 검증 도구 작성
-- [x] Progressive Indexing 및 Analysis Profile 설계
-- [x] Timezone 탐지·정규화·해석 이력 설계
-- [x] AI Keyword 추천과 Search 재현 계약 설계
-- [x] Append-only Chain of Custody 설계
-- [x] Simple/Detailed/Raw View와 Raw Locator 설계
-- [x] OCR/STT Machine-extracted Candidate 계약 설계
-- [x] 외부 전문가 검증 계획 설계
+- [x] Core Architecture
+- [x] Database Schema
+- [x] API Interface
+- [x] JSON Schema v1
+- [x] Module Responsibility
+- [x] Requirements Traceability
+- [x] Implementation Roadmap
+- [x] Python-Native 하이브리드 구조
+- [x] GUI Context
+- [x] Scope별 Analysis Context
+- [x] Citation 및 Raw Locator
+- [x] Provider-neutral AI 경계
+- [x] Report Human Review 및 Approval
+- [x] 한국어 및 Localization
+- [x] Progressive Indexing 및 Analysis Profile
+- [x] Timezone 탐지·정규화·Audit
+- [x] AI Keyword Recommendation
+- [x] Search Reproduction
+- [x] Append-only Chain of Custody
+- [x] Simple / Detailed / Raw View
+- [x] Browser Communications MVP
+- [x] Media Metadata MVP
+- [x] OCR/STT Machine-extracted Candidate 계약
+- [x] 외부 전문가 검증 계획
+- [x] 설계 검증 도구
 
 ### 구현 예정
 
-- [ ] Project Skeleton 구현
-- [ ] Case Manager 구현
-- [ ] Evidence Manager 구현
-- [ ] Hash 계산 및 무결성 검증 구현
-- [ ] File System Analyzer 구현
-- [ ] Registry Analyzer 구현
-- [ ] Event Log Analyzer 구현
-- [ ] Prefetch Analyzer 구현
-- [ ] Browser Communications Analyzer 구현
-- [ ] Images / Videos Analyzer 구현
-- [ ] Timeline Engine 구현
-- [ ] Search 및 Index Engine 구현
-- [ ] Cache 및 병렬 Job 구조 구현
-- [ ] GUI Context 구현
-- [ ] Analysis Context Snapshot 구현
-- [ ] Report Application 구현
-- [ ] PDF 및 HTML Export 구현
-- [ ] 한국어 Keyword Search 구현
-- [ ] Built-in MCP Adapter 구현 — 별도 담당
-- [ ] LLM Provider 및 Prompt Workflow 구현 — 별도 담당
-- [ ] Token Billing 구현 — Backend 담당
-- [ ] 성능 Benchmark
-- [ ] Desktop Packaging
-- [ ] Progressive Indexing Coordinator 및 Profile Manager 구현
-- [ ] Timezone Resolver와 Timestamp Normalizer 구현
-- [ ] Keyword Set/Search Reproduction 구현
-- [ ] Chain of Custody Ledger와 검증 Service 구현
-- [ ] Simple/Detailed/Raw View 구현
-- [ ] OCR/STT Provider 및 Candidate Review 구현
-- [ ] 외부 전문가 검증 수행
+- [ ] Project Skeleton 및 공통 Infrastructure
+- [ ] Case / Evidence / Hash 관리
+- [ ] Chain of Custody Ledger 및 검증 Service
+- [ ] Progressive File System 및 Indexing
+- [ ] Registry / Event Log / Prefetch Analyzer
+- [ ] Timeline / Search / Keyword Set
+- [ ] Timezone Resolver 및 Timestamp Normalizer
+- [ ] Browser Communications Analyzer
+- [ ] Images / Videos Analyzer
+- [ ] OCR/STT Provider 및 Candidate Review
+- [ ] GUI Context 및 Scope별 Analysis Context
+- [ ] Simple / Detailed / Raw View
+- [ ] MCP Adapter용 공개 Interface
+- [ ] AI Keyword Recommendation 및 Citation Workflow
+- [ ] Report Review / Approval / PDF·HTML Export
+- [ ] 한국어 Search 및 Localization
+- [ ] 성능 Benchmark 및 외부 전문가 검토
+- [ ] Windows Desktop Packaging
+
+### 별도 담당
+
+- [ ] Built-in MCP Adapter — MCP 담당
+- [ ] LLM Provider / Prompt / Agent Workflow — MCP·AI 담당
+- [ ] Identity / Approval / Billing — Backend 담당
+- [ ] 한국어 GUI 및 View 구현 — Frontend 담당
 
 ---
 
-## 구현 Roadmap
+## Implementation Roadmap
 
-### Phase 0 — 설계 정합성 검증
+### Phase 0 — 설계 및 기술 Spike
 
-- Schema 검증
-- 문서 링크 검증
-- Requirements Traceability 검증
-- 테스트 기반 준비
+- Schema 및 문서 정합성 검증
+- Native Provider 기술 검토
+- Progressive Index Prototype
+- Timezone Fixture
+- Chain of Custody Event Model
+- Keyword Recommendation Contract
+- Raw Range Reader 제한
+- OCR/STT Provider 기술 검토
+- External Validation Plan
 
 ### Phase 1 — Core Foundation
 
@@ -811,64 +1037,145 @@ APEX/
 - Case Manager
 - Evidence Manager
 - Hash 및 무결성 검증
+- Custody 기본 Event
+- Timezone 기본 설정
 
-### Phase 2 — File System
+### Phase 2 — Progressive File System
 
 - File System Analyzer
+- Quick Triage
+- File Tree 우선 표시
+- Background Index
+- Priority Queue
+- Pause / Resume / Cancel
+- Partial Result
 - Lazy Loading
 - Cursor Pagination
-- 기본 Index
 
 ### Phase 3 — Windows Artifact
 
 - Registry
 - Event Log
 - Prefetch
+- Raw Locator
 
-### Phase 4 — Timeline 및 Search
+### Phase 4 — Search 및 Timeline
 
-- Timeline
-- Search
-- Cache
-- Parallel Job
+- Search Index
+- Keyword Set
+- Search Reproduction
+- Timezone Normalization
+- Timeline 통합
+- Cache 및 Parallel Job
 
-### Phase 5 — Media 및 Browser Communications
+### Phase 5 — Browser와 Media
 
-- Images / Videos
 - Browser Communications MVP
+- Image / Video Metadata
+- OCR/STT Contract
+- Machine-extracted Candidate
 
-### Phase 6 — Context 및 MCP Interface
+### Phase 6 — GUI Context 및 View
 
 - GUI Context
-- Analysis Context
+- Scope별 Analysis Context
+- Simple / Detailed / Raw View
 - MCP Adapter용 공개 Interface
 
-### Phase 7 — AI Enrichment
+### Phase 7 — AI Assistance
 
+- Keyword Recommendation
+- Scope Summary
 - Citation
-- Fact / Inference 분리
-- 한국어 분석 결과
+- Partial Result 경고
+- Human Verification
 
-### Phase 8 — Report
+### Phase 8 — Report 및 Chain of Custody
 
 - AI Draft
 - Human Review
 - Approval
-- PDF 및 HTML Export
+- Chain of Custody Section
+- PDF / HTML Export
 
-### Phase 9 — 검증 및 배포
+### Phase 9 — Benchmark 및 배포
 
+- 동일 조건 기반 내부 Benchmark
+- Progressive Indexing 및 Cache Cold/Warm 비교
+- Timezone 정확성과 Timeline 재현성 검증
+- Chain of Custody 무결성 검증
+- AI Citation 및 Keyword 추천 유용성 평가
+- 공개 또는 Synthetic Evidence 기반 외부 전문가 검토
+- 전문가 피드백 반영 및 재검증
+- Native Dependency Packaging 검증
+- Windows Desktop Packaging
+- 최종 문서 및 Release 준비
 
+---
 
+## 외부 전문가 검증 계획
+
+APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실무 경험을 보유한 외부 전문가의 자문을 통해 성능과 Workflow 적합성을 검증할 예정입니다.
+
+현재 상태는 `PLANNED`입니다.
+
+검증 데이터 원칙:
+
+- 공개 DFIR Dataset
+- 직접 제작한 Synthetic Evidence
+- 법적으로 사용 가능한 Test Image
+- 비공개 작전 자료 사용 금지
+- 개인정보 및 기밀정보 사용 금지
+- 외부 공개 시 Dataset과 조건 명시
+
+검증 항목:
+
+- Evidence 등록 시간
+- E01 최초 열기 시간
+- 첫 File Tree 표시 시간
+- Quick Triage 완료 시간
+- Full Index 완료 시간
+- Artifact별 분석 시간
+- Keyword Search 응답 시간
+- AI Keyword 추천 유용성
+- Cache Cold/Warm 성능
+- Index Pause/Resume
+- Timezone 정확성
+- Timeline 재현성
+- Report 작성 시간 절감
+- Chain of Custody 완전성
+- CPU, Memory 및 Disk I/O
+- GUI 사용성
+- Raw View 검증 가능성
+- AI Citation 정확성
+- 실제 조사 Workflow 적합성
+
+공식 승인이나 협력이 확정되지 않은 기관명은 인증 또는 협력 기관으로 표시하지 않습니다.
 
 ---
 
 ## 설계 검증
 
-문서와 JSON Schema의 정합성은 다음 명령으로 검증합니다.
+### Python 기본 검증
+
+Node 또는 Ajv가 없는 환경에서도 기본 검증을 실행할 수 있습니다.
+
+```powershell
+python -X utf8 .\tools\validate_design_basic.py
+```
+
+### Node 기반 전체 검증
+
+Node가 설치된 환경:
+
+```powershell
+node .\tools\validate_design.mjs
+```
+
+### Linux / WSL / CI 검증
 
 ```bash
-bash tools/validate_design.sh
+bash ./tools/validate_design.sh
 ```
 
 검증 범위:
@@ -879,10 +1186,18 @@ bash tools/validate_design.sh
 - 로컬 `$ref`
 - 순환 참조
 - Markdown Link
+- Requirement ID 중복
+- API Endpoint 중복
 - API와 Schema 대응 관계
-- Requirements Traceability
-- Database와 Module 소유권
+- Database Table과 Module Owner
+- Partial Result 필드
+- Timezone 계약
+- Keyword Candidate의 Reason 및 Citation
+- Machine Extraction의 Confidence 및 Review Status
+- Custody Event Enum과 Report Section 일치
 - MCP 및 LLM 실행 코드 미포함 여부
+
+Node 또는 Ajv가 없는 경우 기본 검증을 수행하고, 생략된 검증 항목과 이유를 출력합니다.
 
 ---
 
@@ -894,101 +1209,29 @@ bash tools/validate_design.sh
 
 | 참고 프로젝트 | 참고 영역 |
 |---|---|
-| X-Ways 스타일 포렌식 엔진 | 빠른 Evidence 탐색 및 대용량 분석 구조 |
-| Autopsy | Case 기반 Workflow, Artifact 분석 구조 및 사용자 경험 |
+| X-Ways 스타일 포렌식 엔진 | 빠른 Evidence 탐색 및 대용량 처리 철학 |
+| Autopsy | Case 기반 Workflow, Artifact 구조, Timeline, Report 및 사용자 경험 |
 | X-Ways Forensics MCP | GUI 결과와 포렌식 기능을 MCP Context로 연결하는 방식 |
 
-APEX는 위 프로젝트의 구조와 Workflow를 참고하지만, 특정 제품을 그대로 복제하는 것을 목표로 하지 않습니다.
+APEX는 위 프로젝트의 구조와 Workflow를 참고하지만 특정 제품을 그대로 복제하는 것을 목표로 하지 않습니다.
 
-외부 소스 코드를 직접 사용하는 경우 각 프로젝트의 License와 저작권 조건을 확인해야 합니다.
+외부 소스 코드를 직접 사용하는 경우 각 프로젝트의 License와 저작권 조건을 확인합니다.
 
 ---
 
-## 개발 목적
+## 개발 목적 및 주의사항
 
 APEX는 합법적인 디지털 포렌식 조사, 보안 연구 및 교육을 목적으로 개발합니다.
 
-AI가 생성한 분석 결과와 보고서는 분석 보조 자료이며, 최종 판단은 분석자가 원본 Evidence와 근거를 검토한 후 내려야 합니다.
+AI가 생성한 분석 결과와 Report는 분석 보조 자료이며, 최종 판단은 분석자가 원본 Evidence와 근거를 검토한 후 내려야 합니다.
 
-모든 분석 과정은 Evidence 무결성 유지와 분석 과정 재현 가능성을 기본 원칙으로 합니다.
+모든 분석 과정은 다음 원칙을 따릅니다.
 
-## Python 기반 하이브리드 성능 구조
-
-APEX의 주 개발 언어는 Python입니다.
-
-Python은 Case 및 Evidence 관리, 분석 작업 제어, 결과 통합, Timeline, Context, API, GUI 및 MCP 연동 인터페이스, Report Workflow를 담당하는 Application 및 Orchestration Layer로 사용합니다.
-
-디스크 이미지 접근, File System Parsing, Hash 계산, Search Index, Binary Scan 및 Multimedia 처리처럼 성능에 민감한 기능까지 모두 순수 Python으로 다시 구현하지는 않습니다.
-
-성능 핵심 경로는 Native Library 또는 Native Tool을 Adapter 형태로 연결합니다.
-
-~~~text
-Python Application / Orchestration Layer
-|-- Case / Evidence Management
-|-- Job Scheduling
-|-- Result Aggregation
-|-- Timeline / Context
-|-- API / JSON Schema
-|-- GUI / MCP Interface
-`-- Report Workflow
-          |
-          v
-Native Analysis Adapter Layer
-|-- Disk Image Reader
-|-- File System Parser
-|-- Hash Provider
-|-- Search Index Provider
-|-- Binary Scanner
-`-- Multimedia Processor
-~~~
-
-APEX는 Autopsy의 Java 코드 또는 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다.
-
-Autopsy에서는 다음 요소만 참고합니다.
-
-- Case 기반 분석 Workflow
-- Artifact 분류 방식
-- Timeline
-- Images / Videos
-- Communications
-- Report 사용자 경험
-- 분석 화면 구성
-
-검토 가능한 Native 기술 후보는 다음과 같습니다.
-
-- Sleuth Kit 및 `libtsk`
-- `pytsk3` 또는 유지보수 가능한 Python Binding
-- E01 처리를 위한 `libewf` 또는 `pyewf`
-- VHD/VHDX 처리를 위한 `libvhdi`
-- SQLite FTS5 또는 동등한 Search Index
-- Python `hashlib`의 Native Hash 구현
-- FFmpeg 또는 ffprobe
-- YARA 및 `yara-python`
-- `mmap` 기반 Random Access
-
-구체적인 Library는 Windows 지원 여부, Python 호환성, 기능 범위, 유지보수 상태, License, Packaging 난이도 및 Benchmark 결과를 검토한 후 확정합니다.
-
-CPU 집약적 분석은 Process Pool을 사용하고, I/O 집약적 처리는 Async I/O 또는 제한된 Thread Pool을 사용합니다.
-
-~~~text
-Registry Worker -----+
-Event Log Worker ----+
-Prefetch Worker -----+--> Bounded Result Queue --> Single DB Writer
-Media Worker --------+
-~~~
-
-여러 Analyzer가 SQLite에 직접 동시에 기록하지 않습니다. 결과는 Bounded Queue를 통해 Single DB Writer로 전달하고 Batch Insert로 저장합니다.
-
-대용량 Evidence는 전체를 메모리에 적재하지 않고 다음 방식으로 처리합니다.
-
-- Chunk 단위 Streaming
-- 필요한 Offset만 선택적으로 조회
-- Lazy Loading
-- Cursor Pagination
-- Checkpoint 및 Resume
-- Evidence Fingerprint 기반 중복 분석 방지
-- 기존 GUI 분석 결과 재사용
-
-Benchmark에서 Python 계층의 실제 병목이 확인된 경우에만 해당 구간을 Rust, C 또는 C++ Accelerator로 확장할 수 있도록 설계합니다.
-
-APEX는 현재 X-Ways 또는 Autopsy보다 빠르다고 단정하지 않습니다. 동일한 Hardware, Evidence, 분석 범위, Cache 상태 및 Index 설정을 사용한 Benchmark 이후에만 성능 결과를 문서화합니다.
+- Evidence 무결성 유지
+- 원본 Evidence 읽기 전용 처리
+- 분석 과정 Audit
+- Citation 기반 근거 추적
+- AI 결과와 Observed Fact 분리
+- 분석 결과 재현 가능성 확보
+- Chain of Custody Event 불변성 유지
+- 검증되지 않은 성능 또는 법적 효력 주장 금지
