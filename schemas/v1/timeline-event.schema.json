@@ -22,18 +22,42 @@
         "actor",
         "path",
         "confidence",
-        "metadata"
+        "metadata",
+        "timestamp_interpretation"
       ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "evidence_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "source_kind": { "enum": ["FILE", "ARTIFACT"] },
-        "source_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "timestamp_utc": { "$ref": "common.schema.json#/$defs/timestamp" },
-        "timestamp_raw": { "type": ["string", "null"] },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_kind": {
+          "enum": [
+            "FILE",
+            "ARTIFACT"
+          ]
+        },
+        "source_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "timestamp_utc": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "timestamp_raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "timezone_offset_minutes": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": -840,
           "maximum": 840
         },
@@ -41,12 +65,39 @@
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
         },
-        "title": { "type": "string", "minLength": 1 },
-        "description": { "type": ["string", "null"] },
-        "actor": { "type": ["string", "null"] },
-        "path": { "type": ["string", "null"] },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "metadata": { "$ref": "common.schema.json#/$defs/metadata" }
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "timestamp_interpretation": {
+          "$ref": "common.schema.json#/$defs/timestampInterpretation"
+        }
       }
     }
   }

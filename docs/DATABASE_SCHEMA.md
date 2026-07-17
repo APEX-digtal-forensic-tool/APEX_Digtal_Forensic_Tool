@@ -629,3 +629,490 @@ Core의 `artifacts`와 FK로 강결합하지 않고 Citation 배열로 Source ID
 5. DB Migration은 전·후 Integrity Check, Backup, Checksum 검증을 수행한다.
 6. Live UI Context는 Session 만료 시 폐기하며 명시적 Snapshot만 Case 보존 정책을 따른다.
 7. 승인된 Report Version과 Export는 Append-only로 취급하고 수정 시 새 Version을 생성한다.
+
+## 11. Progressive Indexing
+
+기존 `ingest_jobs`와 `ingest_tasks`는 범용 실행 상태를 유지한다. Progressive Index 전용
+Profile, Scope, Checkpoint와 추세 데이터는 다음 Table로 분리한다. Live Progress Event는
+Backend Session Store/Stream이 우선이며 재현과 장애 복구에 필요한 표본만 Case DB에 저장한다.
+
+### `analysis_profiles`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Profile UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `name` | TEXT | NOT NULL | Profile 이름 |
+| `profile_type` | TEXT | CHECK | `QUICK_TRIAGE`, `SELECTED_SCOPE`, `FULL_ANALYSIS`, `CUSTOM_PROFILE` |
+| `revision` | INTEGER | NOT NULL, CHECK >= 1 | 불변 설정 Revision |
+| `stages_json` | TEXT | NOT NULL | Stage 목록 |
+| `hashing_mode` | TEXT | NOT NULL | `NONE`, `ON_DEMAND`, `FULL` |
+| `analyzers_json` | TEXT | NOT NULL | Enable/Disable, Version 조건, Options |
+| `scope_json` | TEXT | NOT NULL | Evidence/File/Path/Artifact/시간 범위 |
+| `priority_policy` | TEXT | NOT NULL | 사용자 Scope 우선 정책 |
+| `background_indexing` | INTEGER | NOT NULL | Background 실행 여부 |
+| `content_sha256` | TEXT | NOT NULL | Canonical Profile Hash |
+| `created_by` | TEXT | NOT NULL | 생성 분석자 |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+Unique: `(case_id, name, revision)`. 실행된 Profile Revision은 Update하지 않고 새 Revision을 만든다.
+
+### `indexing_jobs`
+
+`ingest_jobs`의 `job_type=INDEX` 행과 1:1로 연결하는 Progressive Index 특화 Projection이다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `job_id` | TEXT | PK/FK `ingest_jobs(id)` | 범용 Job |
+| `profile_id` | TEXT | FK, NOT NULL | 실행 Profile |
+| `profile_revision` | INTEGER | NOT NULL | 실행 설정 Revision |
+| `evidence_fingerprint_id` | TEXT | FK, NOT NULL | 입력 Fingerprint |
+| `queue_class` | TEXT | NOT NULL | `USER_SELECTED`, `FOREGROUND`, `BACKGROUND` |
+| `priority` | INTEGER | NOT NULL | 낮을수록 우선 |
+| `pause_requested_at` | TEXT | NULL | Pause 요청 UTC |
+| `paused_at` | TEXT | NULL | Checkpoint 완료 UTC |
+| `resumed_at` | TEXT | NULL | 마지막 Resume UTC |
+| `partial_results_available` | INTEGER | NOT NULL | 완료 Batch 조회 가능 여부 |
+| `completed_scope_json` | TEXT | NOT NULL | 완료 Scope |
+| `pending_scope_json` | TEXT | NOT NULL | 대기 Scope |
+
+Index: `(queue_class, priority, job_id)`, `(profile_id, profile_revision)`.
+
+### `indexing_job_scopes`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Scope UUID |
+| `job_id` | TEXT | FK, NOT NULL | Index Job |
+| `scope_type` | TEXT | NOT NULL | Case/Evidence/File/Artifact 범위 |
+| `scope_json` | TEXT | NOT NULL | 검증된 Scope |
+| `priority` | INTEGER | NOT NULL | 사용자 선택 우선순위 |
+| `status` | TEXT | NOT NULL | `QUEUED`, `RUNNING`, `PAUSED`, 종료 상태 |
+| `processed_items` | INTEGER | NOT NULL DEFAULT 0 | 처리 수 |
+| `estimated_total_items` | INTEGER | NULL | 추정 전체 수 |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+| `finished_at` | TEXT | NULL | 종료 UTC |
+
+### `indexing_checkpoints`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Checkpoint UUID |
+| `job_id` | TEXT | FK, NOT NULL | Job |
+| `scope_id` | TEXT | FK, NOT NULL | Scope |
+| `analyzer_id` | TEXT | NOT NULL | Analyzer |
+| `analyzer_version` | TEXT | NOT NULL | Cache/Resume 검증 Version |
+| `options_hash` | TEXT | NOT NULL | Canonical Options SHA-256 |
+| `cursor_json` | TEXT | NOT NULL | 재개 Cursor |
+| `processed_items` | INTEGER | NOT NULL | Checkpoint 처리 수 |
+| `checkpoint_hash` | TEXT | NOT NULL | 내용 무결성 Hash |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+Unique: `(job_id, scope_id, analyzer_id, processed_items)`.
+
+### `analyzer_progress`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | INTEGER | PK AUTOINCREMENT | 표본 순서 |
+| `job_id` | TEXT | FK, NOT NULL | Job |
+| `analyzer_id` | TEXT | NOT NULL | 현재 Analyzer |
+| `processed_items` | INTEGER | NOT NULL | 처리 수 |
+| `estimated_total_items` | INTEGER | NULL | 추정 전체 |
+| `throughput_items_per_second` | REAL | NULL | 관측 처리량 |
+| `elapsed_seconds` | REAL | NOT NULL | 경과 시간 |
+| `estimated_remaining_seconds` | REAL | NULL | ETA |
+| `estimate_confidence` | TEXT | NOT NULL | `HIGH`, `MEDIUM`, `LOW`, `UNKNOWN` |
+| `worker_count` | INTEGER | NOT NULL | Worker 수 |
+| `cache_hits` | INTEGER | NOT NULL | 누적 Hit |
+| `cache_misses` | INTEGER | NOT NULL | 누적 Miss |
+| `sampled_at` | TEXT | NOT NULL | 표본 UTC |
+
+고빈도 Event 전체를 저장하지 않고 상태 전환, Checkpoint와 주기적 표본만 보존한다.
+
+### `evidence_fingerprints`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Fingerprint UUID |
+| `evidence_id` | TEXT | FK, NOT NULL | Evidence |
+| `algorithm` | TEXT | NOT NULL | 초기 `SHA256` |
+| `fingerprint_hex` | TEXT | NOT NULL | 입력 식별 Hash |
+| `size_bytes` | INTEGER | NOT NULL | 계산 당시 크기 |
+| `reader_id` | TEXT | NOT NULL | Reader |
+| `reader_version` | TEXT | NOT NULL | Reader Version |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+Unique: `(evidence_id, algorithm, fingerprint_hex, reader_version)`.
+
+기존 `cache_entries`를 재사용한다. `producer_json`의 Cache Key 계약은 Evidence Fingerprint,
+Analyzer ID/Version, Canonical Options Hash와 Scope Fingerprint를 포함한다.
+
+## 12. Timezone
+
+### `timezone_candidates`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | 후보 UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `timezone` | TEXT | NOT NULL | IANA Timezone ID |
+| `source` | TEXT | NOT NULL | Case/OS/Registry/Linux/Browser/Application/Offset/Analyst |
+| `confidence` | TEXT | NOT NULL | `CONFIRMED`, `HIGH`, `MEDIUM`, `LOW`, `UNKNOWN` |
+| `citation_json` | TEXT | NOT NULL | 후보 근거 |
+| `status` | TEXT | NOT NULL | `CANDIDATE`, `CONFIRMED`, `REJECTED` |
+| `detected_at` | TEXT | NOT NULL | 탐지 UTC |
+
+Index: `(case_id, status, confidence)`.
+
+### `timezone_decisions`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Decision UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `timezone` | TEXT | NOT NULL | 선택 IANA ID |
+| `candidate_id` | TEXT | FK, NULL | 근거 후보 |
+| `confidence` | TEXT | NOT NULL | 확인 신뢰도 |
+| `reason` | TEXT | NULL | 수동 변경 사유 |
+| `decided_by` | TEXT | NOT NULL | 분석자 Identity |
+| `decided_at` | TEXT | NOT NULL | Decision UTC |
+| `supersedes_decision_id` | TEXT | FK, NULL | 이전 Decision |
+
+Decision은 Update하지 않고 새 행으로 이전 Decision을 대체한다.
+
+### `timestamp_interpretations`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Interpretation UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `source_kind` | TEXT | NOT NULL | File/Artifact/Timeline Source |
+| `source_id` | TEXT | NOT NULL | Source UUID |
+| `field_name` | TEXT | NOT NULL | Timestamp Field |
+| `raw_timestamp` | TEXT | NOT NULL | 원본 값 |
+| `raw_timezone` | TEXT | NULL | 원본 Timezone/Offset |
+| `normalized_utc` | TEXT | NULL | UTC 해석 |
+| `display_timestamp` | TEXT | NULL | 당시 Case Timezone 표시값 |
+| `display_timezone` | TEXT | NOT NULL | IANA ID |
+| `timezone_source` | TEXT | NOT NULL | 해석 출처 |
+| `timezone_confidence` | TEXT | NOT NULL | 신뢰도 |
+| `dst_status` | TEXT | NOT NULL | Standard/Daylight/Transition |
+| `ambiguity` | TEXT | NOT NULL | 중복/불가능/오류 Local Time |
+| `decision_id` | TEXT | FK, NOT NULL | 사용 Decision |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+Unique: `(source_kind, source_id, field_name, decision_id)`. 새 Decision은 새 Interpretation
+Projection을 만들며 원본 행을 수정하지 않는다.
+
+## 13. Keyword와 Search Reproduction
+
+### `keyword_recommendations`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Candidate UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `analysis_context_snapshot_id` | TEXT | FK, NOT NULL | Scope Context |
+| `context_scope` | TEXT | NOT NULL | 전달 Scope |
+| `context_revision` | INTEGER | NOT NULL | Context Revision |
+| `keyword` | TEXT | NOT NULL | 원본 Keyword |
+| `keyword_type` | TEXT | NOT NULL | File/Process/Account/URL 등 Enum |
+| `reason` | TEXT | NOT NULL | 추천 이유 |
+| `scope` | TEXT | NOT NULL | 검색 Scope |
+| `citations_json` | TEXT | NOT NULL | AI 추천은 최소 1개 |
+| `confidence` | REAL | NULL | AI 추천 신뢰도 |
+| `source_kind` | TEXT | NOT NULL | `AI_RECOMMENDATION`, `ANALYST` |
+| `status` | TEXT | NOT NULL | `PENDING_REVIEW`, `APPROVED`, `REJECTED` |
+| `partial_result` | INTEGER | NOT NULL | Partial Context 여부 |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+중복 후보는 Case/Scope/정규화 Keyword/Type 기준으로 표시하되 원본 제안 이력은 보존한다.
+
+### `keyword_sets`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Set UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `name` | TEXT | NOT NULL | 이름 |
+| `version` | INTEGER | NOT NULL | 불변 Version |
+| `status` | TEXT | NOT NULL | `DRAFT`, `APPROVED`, `EXECUTED`, `SUPERSEDED` |
+| `content_sha256` | TEXT | NOT NULL | Set Hash |
+| `created_by` | TEXT | NOT NULL | 생성자 |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+Unique: `(case_id, name, version)`.
+
+### `keyword_set_items`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Item UUID |
+| `keyword_set_id` | TEXT | FK, NOT NULL | Set |
+| `recommendation_id` | TEXT | FK, NULL | AI Candidate 또는 null |
+| `keyword` | TEXT | NOT NULL | 실행 문자열 |
+| `keyword_type` | TEXT | NOT NULL | Keyword Type |
+| `source_kind` | TEXT | NOT NULL | AI/Analyst |
+| `approved` | INTEGER | NOT NULL | 승인 여부 |
+| `ordinal` | INTEGER | NOT NULL | 결정적 순서 |
+
+Unique: `(keyword_set_id, ordinal)`.
+
+### `keyword_approvals`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Approval UUID |
+| `recommendation_id` | TEXT | FK, NOT NULL | Candidate |
+| `decision` | TEXT | NOT NULL | `APPROVED`, `REJECTED` |
+| `reason` | TEXT | NULL | 검토 사유 |
+| `decided_by` | TEXT | NOT NULL | 분석자 |
+| `decided_at` | TEXT | NOT NULL | 결정 UTC |
+
+Approval은 Append-only이며 최신 Decision을 Application에서 Projection한다.
+
+### `search_executions`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Execution UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `keyword_set_id` | TEXT | FK, NOT NULL | 승인 Set |
+| `keyword_set_version` | INTEGER | NOT NULL | 실행 Version |
+| `status` | TEXT | NOT NULL | Job 상태 |
+| `index_version` | TEXT | NOT NULL | 사용 Index |
+| `executed_by` | TEXT | NOT NULL | 실행 분석자 |
+| `started_at` | TEXT | NOT NULL | 시작 UTC |
+| `completed_at` | TEXT | NULL | 완료 UTC |
+| `result_count` | INTEGER | NOT NULL DEFAULT 0 | 전체 결과 수 |
+| `zero_result_keyword_ids_json` | TEXT | NOT NULL | 0건 Keyword |
+| `rerun_of_execution_id` | TEXT | FK, NULL | 원 실행 |
+| `content_sha256` | TEXT | NOT NULL | 재현 Snapshot Hash |
+
+### `search_execution_options`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `execution_id` | TEXT | PK/FK | Search Execution |
+| `case_sensitive` | INTEGER | NOT NULL | 대소문자 |
+| `regex_enabled` | INTEGER | NOT NULL | Regex |
+| `encodings_json` | TEXT | NOT NULL | Encoding 목록 |
+| `time_from` | TEXT | NULL | 시작 UTC |
+| `time_to` | TEXT | NULL | 종료 UTC |
+| `evidence_scope_json` | TEXT | NOT NULL | Evidence Scope |
+| `source_scope_json` | TEXT | NOT NULL | File/Artifact/Timeline/Candidate |
+| `normalization_profile` | TEXT | NOT NULL | 검색 정규화 Version |
+
+기존 `search_queries`와 `search_results`는 각 실행의 Query/Hit Snapshot으로 연결한다.
+
+## 14. Chain of Custody
+
+### `custody_events`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `event_id` | TEXT | PK | Event UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `evidence_id` | TEXT | FK, NOT NULL | Evidence |
+| `event_type` | TEXT | NOT NULL, CHECK | 15개 Custody Event Enum |
+| `actor_id` | TEXT | NULL | Backend Identity |
+| `actor_name` | TEXT | NOT NULL | 당시 표시 이름 |
+| `actor_role` | TEXT | NULL | 당시 Role |
+| `organization` | TEXT | NULL | 당시 Organization |
+| `source_location` | TEXT | NULL | 이동 전 위치 |
+| `destination_location` | TEXT | NULL | 이동 후 위치 |
+| `action` | TEXT | NOT NULL | 수행 행위 |
+| `reason` | TEXT | NULL | 사유 |
+| `occurred_at_utc` | TEXT | NOT NULL | 실제 발생 UTC |
+| `displayed_at` | TEXT | NOT NULL | Snapshot 표시 시간 |
+| `timezone` | TEXT | NOT NULL | IANA ID |
+| `tool_name` | TEXT | NULL | Tool |
+| `tool_version` | TEXT | NULL | Tool Version |
+| `previous_hash_json` | TEXT | NULL | 이전 Evidence Hash |
+| `current_hash_json` | TEXT | NULL | 현재 Evidence Hash |
+| `notes` | TEXT | NULL | 메모 |
+| `created_at` | TEXT | NOT NULL | 기록 UTC |
+| `immutable_revision` | INTEGER | NOT NULL | Evidence별 단조 Revision |
+| `previous_event_hash` | TEXT | NULL | 이전 Ledger Event Hash |
+| `event_hash` | TEXT | NOT NULL | 현재 Canonical Event Hash |
+| `ledger_algorithm` | TEXT | NOT NULL | 초기 `SHA256` |
+| `ledger_version` | TEXT | NOT NULL | Canonicalization Version |
+| `approval_json` | TEXT | NULL | 승인/서명 Reference |
+| `correction_of_event_id` | TEXT | FK, NULL | Correction 대상 |
+
+Unique: `(evidence_id, immutable_revision)`. Application 권한과 SQLite Trigger 정책으로
+`UPDATE`와 `DELETE`를 거부한다. `CORRECTION`만 원 Event를 참조할 수 있다.
+
+### `custody_hash_verifications`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Verification UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `evidence_id` | TEXT | FK, NOT NULL | Evidence |
+| `expected_hash_json` | TEXT | NOT NULL | 기대 Hash |
+| `observed_hash_json` | TEXT | NOT NULL | 관측 Hash |
+| `status` | TEXT | NOT NULL | `MATCH`, `MISMATCH` |
+| `verified_by` | TEXT | NOT NULL | 실행 Actor |
+| `verified_at` | TEXT | NOT NULL | 실행 UTC |
+| `tool_name` | TEXT | NOT NULL | Tool |
+| `tool_version` | TEXT | NOT NULL | Tool Version |
+| `custody_event_id` | TEXT | FK, NOT NULL | `HASH_VERIFIED` Event |
+
+### `custody_snapshots`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Snapshot UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `evidence_id` | TEXT | FK, NOT NULL | Evidence |
+| `from_event_id` | TEXT | FK, NOT NULL | 시작 Event |
+| `through_event_id` | TEXT | FK, NOT NULL | 끝 Event |
+| `event_count` | INTEGER | NOT NULL | Event 수 |
+| `head_event_hash` | TEXT | NOT NULL | Ledger Head |
+| `snapshot_hash` | TEXT | NOT NULL | Snapshot Hash |
+| `verification_status` | TEXT | NOT NULL | `VALID`, `INVALID`, `INCOMPLETE` |
+| `report_id` | TEXT | FK, NULL | 연결 Report |
+| `report_version` | INTEGER | NULL | 연결 Version |
+| `created_by` | TEXT | NOT NULL | 생성자 |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+### `custody_approvals`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Approval UUID |
+| `snapshot_id` | TEXT | FK, NOT NULL | Snapshot |
+| `status` | TEXT | NOT NULL | `PENDING`, `APPROVED`, `REJECTED` |
+| `approved_by` | TEXT | NULL | 사람 Identity |
+| `approved_at` | TEXT | NULL | 승인 UTC |
+| `signature_reference` | TEXT | NULL | 외부 서명 Reference |
+| `notes` | TEXT | NULL | 검토 메모 |
+
+전자서명 방식과 법적 효력은 관할 정책 검토 대상이며 DB 설계가 이를 보장하지 않는다.
+
+## 15. Machine Extraction
+
+### `machine_extractions`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Extraction UUID |
+| `case_id` | TEXT | FK, NOT NULL | Case |
+| `evidence_id` | TEXT | FK, NOT NULL | Evidence |
+| `file_id` | TEXT | FK, NOT NULL | Media/File |
+| `media_type` | TEXT | NOT NULL | Image/Video/Audio/Document |
+| `extraction_type` | TEXT | NOT NULL | OCR/Frame OCR/Subtitle/STT 등 |
+| `extracted_text` | TEXT | NOT NULL | 원 Candidate Text |
+| `confidence` | REAL | NOT NULL CHECK 0..1 | Machine Confidence |
+| `language` | TEXT | NULL | 탐지 언어 |
+| `engine_id` | TEXT | NOT NULL | Provider-neutral Engine ID |
+| `engine_version` | TEXT | NOT NULL | Engine Version |
+| `frame_number` | INTEGER | NULL | Video Frame |
+| `timestamp_offset_ms` | INTEGER | NULL | Video/Audio Offset |
+| `source_region_json` | TEXT | NULL | 이미지 영역 |
+| `source_locator_json` | TEXT | NOT NULL | Raw Locator |
+| `citations_json` | TEXT | NOT NULL | Source Citation |
+| `analyst_status` | TEXT | NOT NULL | `UNREVIEWED`, `ACCEPTED`, `REJECTED`, `CORRECTED` |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+Candidate 원문은 Update하지 않는다.
+
+### `machine_extraction_reviews`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Review UUID |
+| `extraction_id` | TEXT | FK, NOT NULL | Candidate |
+| `decision` | TEXT | NOT NULL | Accept/Reject/Correct |
+| `corrected_text` | TEXT | NULL | Correction Text |
+| `reason` | TEXT | NULL | 사유 |
+| `reviewed_by` | TEXT | NOT NULL | 분석자 |
+| `reviewed_at` | TEXT | NOT NULL | 검토 UTC |
+
+Review는 Append-only이며 현재 상태는 최신 Review Projection이다. OCR/STT 결과는 승인 전에도
+Observed Fact가 아니며 Review 상태를 항상 함께 조회한다.
+
+## 16. Benchmark와 External Validation
+
+### `benchmark_runs`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Run UUID |
+| `case_id` | TEXT | FK, NULL | Synthetic/Test Case |
+| `dataset_name` | TEXT | NOT NULL | 공개 가능한 Dataset |
+| `dataset_kind` | TEXT | NOT NULL | `PUBLIC_DFIR`, `SYNTHETIC`, `LEGAL_TEST_IMAGE` |
+| `dataset_reference` | TEXT | NOT NULL | Version/URI/Hash |
+| `hardware_json` | TEXT | NOT NULL | CPU/Memory/Storage |
+| `scope_json` | TEXT | NOT NULL | Analyzer/Hash/Index 범위 |
+| `cache_state` | TEXT | NOT NULL | `COLD`, `WARM`, `MIXED` |
+| `worker_count` | INTEGER | NOT NULL | Worker |
+| `tool_version` | TEXT | NOT NULL | APEX Version |
+| `status` | TEXT | NOT NULL | `PLANNED`, `RUNNING`, `COMPLETED`, `FAILED` |
+| `started_at` | TEXT | NULL | 시작 UTC |
+| `completed_at` | TEXT | NULL | 완료 UTC |
+
+### `benchmark_measurements`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Measurement UUID |
+| `benchmark_run_id` | TEXT | FK, NOT NULL | Run |
+| `metric_name` | TEXT | NOT NULL | 첫 Tree/Index/P95/RSS/I/O 등 |
+| `value` | REAL | NOT NULL | 측정값 |
+| `unit` | TEXT | NOT NULL | 단위 |
+| `sample_count` | INTEGER | NOT NULL | 표본 수 |
+| `conditions_json` | TEXT | NOT NULL | 측정 조건 |
+| `recorded_at` | TEXT | NOT NULL | 기록 UTC |
+
+### `external_validation_reviews`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| `id` | TEXT | PK | Review UUID |
+| `benchmark_run_id` | TEXT | FK, NULL | 관련 Benchmark |
+| `status` | TEXT | NOT NULL | 초기 `PLANNED` |
+| `review_scope_json` | TEXT | NOT NULL | 성능/사용성/Workflow 범위 |
+| `reviewer_reference` | TEXT | NULL | 동의된 경우에만 공개 가능한 식별자 |
+| `identity_disclosure_consent` | INTEGER | NOT NULL | 공개 동의 |
+| `findings_json` | TEXT | NULL | 자문 결과 |
+| `limitations_json` | TEXT | NOT NULL | 검증 한계 |
+| `created_at` | TEXT | NOT NULL | 생성 UTC |
+
+비공개 작전 자료, 개인정보와 기밀정보를 Dataset으로 사용할 수 없다. 기관명이나 인증 상태를
+이 Table에서 추론하거나 자동 표시하지 않는다.
+
+## 17. Report Link와 보존 확장
+
+| Table | 복합 PK/FK | 역할 |
+|---|---|---|
+| `report_keyword_set_links` | `(report_id, report_version, keyword_set_id, keyword_set_version)` | Keyword Set 고정 |
+| `report_search_execution_links` | `(report_id, report_version, search_execution_id)` | Search Options/Result 고정 |
+| `report_custody_snapshot_links` | `(report_id, report_version, custody_snapshot_id)` | Custody 부록 연결 |
+| `report_machine_extraction_links` | `(report_id, report_version, extraction_id)` | Candidate와 Review 상태 고정 |
+| `report_index_job_links` | `(report_id, report_version, index_job_id)` | Profile/완료 범위 고정 |
+| `report_timezone_decision_links` | `(report_id, report_version, timezone_decision_id)` | 표시 정책 고정 |
+
+승인 Version의 Link와 Provenance는 Update하지 않는다. Report Section Type에는
+`INDEXING_SCOPE`, `TIMEZONE_POLICY`, `KEYWORD_SEARCH`, `CHAIN_OF_CUSTODY`,
+`HASH_VERIFICATION`, `MACHINE_EXTRACTION`, `EXTERNAL_VALIDATION`을 추가한다.
+
+## 18. 신규 Table과 Module Owner
+
+| Table 그룹 | Module Owner |
+|---|---|
+| `analysis_profiles` | Analysis Profile Manager |
+| `indexing_jobs`, `indexing_job_scopes`, `indexing_checkpoints`, `analyzer_progress` | Progressive Indexing Coordinator / Job Orchestrator |
+| `evidence_fingerprints`, `cache_entries` | Evidence Manager / Cache Port |
+| `timezone_candidates`, `timezone_decisions`, `timestamp_interpretations` | Timezone Resolver / Timestamp Normalizer |
+| `keyword_recommendations`, `keyword_sets`, `keyword_set_items`, `keyword_approvals` | Keyword Set Manager |
+| `search_executions`, `search_execution_options` | Search Reproduction Manager |
+| `custody_events` | Chain of Custody Ledger |
+| `custody_hash_verifications`, `custody_snapshots`, `custody_approvals` | Custody Verification Service |
+| `machine_extractions`, `machine_extraction_reviews` | Media Extraction Candidate Store |
+| `benchmark_runs`, `benchmark_measurements`, `external_validation_reviews` | External Validation Plan |
+
+Live Progress와 Live GUI Context는 Session Store를 우선한다. 재현, Audit, Recovery와 Report에
+필요한 Snapshot만 DB에 저장한다.

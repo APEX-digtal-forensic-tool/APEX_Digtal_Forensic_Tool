@@ -10,30 +10,52 @@
       "allOf": [
         {
           "if": {
-            "properties": { "algorithm": { "const": "SHA256" } },
-            "required": ["algorithm"]
+            "properties": {
+              "algorithm": {
+                "const": "SHA256"
+              }
+            },
+            "required": [
+              "algorithm"
+            ]
           },
           "then": {
             "properties": {
-              "digest_hex": { "$ref": "common.schema.json#/$defs/sha256" }
+              "digest_hex": {
+                "$ref": "common.schema.json#/$defs/sha256"
+              }
             }
           }
         },
         {
           "if": {
-            "properties": { "algorithm": { "const": "MD5" } },
-            "required": ["algorithm"]
+            "properties": {
+              "algorithm": {
+                "const": "MD5"
+              }
+            },
+            "required": [
+              "algorithm"
+            ]
           },
           "then": {
             "properties": {
-              "digest_hex": { "$ref": "common.schema.json#/$defs/md5" }
+              "digest_hex": {
+                "$ref": "common.schema.json#/$defs/md5"
+              }
             }
           }
         },
         {
           "if": {
-            "properties": { "algorithm": { "const": "SHA512" } },
-            "required": ["algorithm"]
+            "properties": {
+              "algorithm": {
+                "const": "SHA512"
+              }
+            },
+            "required": [
+              "algorithm"
+            ]
           },
           "then": {
             "properties": {
@@ -55,14 +77,21 @@
       ],
       "properties": {
         "algorithm": {
-          "enum": ["SHA256", "MD5", "SHA512"]
+          "enum": [
+            "SHA256",
+            "MD5",
+            "SHA512"
+          ]
         },
         "digest_hex": {
           "type": "string",
           "pattern": "^[0-9a-f]+$"
         },
         "scope": {
-          "enum": ["FULL_SOURCE", "LOGICAL_STREAM"]
+          "enum": [
+            "FULL_SOURCE",
+            "LOGICAL_STREAM"
+          ]
         },
         "bytes_hashed": {
           "type": "integer",
@@ -72,7 +101,11 @@
           "$ref": "common.schema.json#/$defs/timestamp"
         },
         "verification_status": {
-          "enum": ["NOT_CHECKED", "MATCH", "MISMATCH"]
+          "enum": [
+            "NOT_CHECKED",
+            "MATCH",
+            "MISMATCH"
+          ]
         }
       }
     },
@@ -91,7 +124,8 @@
         "reader",
         "capabilities",
         "hashes",
-        "metadata"
+        "metadata",
+        "fingerprint"
       ],
       "properties": {
         "id": {
@@ -105,17 +139,31 @@
           "minLength": 1
         },
         "format": {
-          "enum": ["DIRECTORY", "RAW", "E01", "VHD", "VHDX"]
+          "enum": [
+            "DIRECTORY",
+            "RAW",
+            "E01",
+            "VHD",
+            "VHDX"
+          ]
         },
         "status": {
-          "enum": ["REGISTERED", "HASHING", "READY", "FAILED"]
+          "enum": [
+            "REGISTERED",
+            "HASHING",
+            "READY",
+            "FAILED"
+          ]
         },
         "size_bytes": {
           "type": "integer",
           "minimum": 0
         },
         "sector_size": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "read_only": {
@@ -123,8 +171,12 @@
         },
         "acquired_at": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/timestamp" },
-            { "type": "null" }
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "registered_at": {
@@ -133,10 +185,19 @@
         "reader": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "version"],
+          "required": [
+            "id",
+            "version"
+          ],
           "properties": {
-            "id": { "type": "string", "minLength": 1 },
-            "version": { "type": "string", "minLength": 1 }
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "capabilities": {
@@ -155,6 +216,51 @@
         },
         "metadata": {
           "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "fingerprint": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/evidenceFingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "evidenceFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "value",
+        "size_bytes",
+        "reader_id",
+        "reader_version",
+        "created_at"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "SHA256"
+        },
+        "value": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reader_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reader_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
         }
       }
     }

@@ -3,35 +3,60 @@
   "$id": "https://schemas.apex-forensics.dev/v1/search.schema.json",
   "title": "APEX Search",
   "oneOf": [
-    { "$ref": "#/$defs/searchQuery" },
-    { "$ref": "#/$defs/searchResult" }
+    {
+      "$ref": "#/$defs/searchQuery"
+    },
+    {
+      "$ref": "#/$defs/searchResult"
+    },
+    {
+      "$ref": "#/$defs/searchExecution"
+    }
   ],
   "$defs": {
     "filters": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["evidence_ids", "artifact_types", "time_from", "time_to"],
+      "required": [
+        "evidence_ids",
+        "artifact_types",
+        "time_from",
+        "time_to"
+      ],
       "properties": {
         "evidence_ids": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
         },
         "artifact_types": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "time_from": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/timestamp" },
-            { "type": "null" }
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "time_to": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/timestamp" },
-            { "type": "null" }
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -39,19 +64,58 @@
     "searchQuery": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "query", "scope", "filters", "cursor", "limit"],
+      "required": [
+        "mode",
+        "query",
+        "scope",
+        "filters",
+        "cursor",
+        "limit",
+        "options"
+      ],
       "properties": {
-        "mode": { "enum": ["KEYWORD", "EXACT", "REGEX"] },
-        "query": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "mode": {
+          "enum": [
+            "KEYWORD",
+            "EXACT",
+            "REGEX"
+          ]
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
         "scope": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["FILE", "ARTIFACT", "TIMELINE"] }
+          "items": {
+            "enum": [
+              "FILE",
+              "ARTIFACT",
+              "TIMELINE",
+              "MACHINE_EXTRACTION"
+            ]
+          }
         },
-        "filters": { "$ref": "#/$defs/filters" },
-        "cursor": { "type": ["string", "null"] },
-        "limit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+        "filters": {
+          "$ref": "#/$defs/filters"
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "options": {
+          "$ref": "#/$defs/searchOptions"
+        }
       }
     },
     "searchHit": {
@@ -69,36 +133,257 @@
         "matched_fields"
       ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "evidence_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "source_kind": { "enum": ["FILE", "ARTIFACT", "TIMELINE"] },
-        "source_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "title": { "type": "string", "minLength": 1 },
-        "path": { "type": ["string", "null"] },
-        "snippet": { "type": ["string", "null"] },
-        "score": { "type": "number", "minimum": 0 },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_kind": {
+          "enum": [
+            "FILE",
+            "ARTIFACT",
+            "TIMELINE",
+            "MACHINE_EXTRACTION"
+          ]
+        },
+        "source_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0
+        },
         "matched_fields": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
     "searchResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["query_id", "took_ms", "hits", "page", "warnings"],
+      "required": [
+        "query_id",
+        "took_ms",
+        "hits",
+        "page",
+        "warnings",
+        "result_completeness"
+      ],
       "properties": {
-        "query_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "took_ms": { "type": "integer", "minimum": 0 },
+        "query_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "took_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
         "hits": {
           "type": "array",
-          "items": { "$ref": "#/$defs/searchHit" }
+          "items": {
+            "$ref": "#/$defs/searchHit"
+          }
         },
-        "page": { "$ref": "common.schema.json#/$defs/pageInfo" },
+        "page": {
+          "$ref": "common.schema.json#/$defs/pageInfo"
+        },
         "warnings": {
           "type": "array",
-          "items": { "$ref": "common.schema.json#/$defs/warning" }
+          "items": {
+            "$ref": "common.schema.json#/$defs/warning"
+          }
+        },
+        "result_completeness": {
+          "$ref": "common.schema.json#/$defs/partialResult"
+        }
+      }
+    },
+    "searchOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_sensitive",
+        "regex_enabled",
+        "encodings",
+        "time_from",
+        "time_to",
+        "evidence_ids",
+        "source_scopes",
+        "normalization_profile"
+      ],
+      "properties": {
+        "case_sensitive": {
+          "type": "boolean"
+        },
+        "regex_enabled": {
+          "type": "boolean"
+        },
+        "encodings": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "time_from": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "time_to": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "source_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "FILE",
+              "ARTIFACT",
+              "TIMELINE",
+              "MACHINE_EXTRACTION"
+            ]
+          }
+        },
+        "normalization_profile": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "searchExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "keyword_set_id",
+        "keyword_set_version",
+        "options",
+        "status",
+        "executed_by",
+        "started_at",
+        "completed_at",
+        "result_count",
+        "zero_result_keyword_ids",
+        "index_version",
+        "rerun_of_execution_id",
+        "content_sha256"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "keyword_set_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "keyword_set_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "options": {
+          "$ref": "#/$defs/searchOptions"
+        },
+        "status": {
+          "enum": [
+            "QUEUED",
+            "RUNNING",
+            "SUCCEEDED",
+            "PARTIAL",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "executed_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "started_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "completed_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "zero_result_keyword_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "index_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rerun_of_execution_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
         }
       }
     }

@@ -1,0 +1,496 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/chain-of-custody.schema.json",
+  "title": "APEX Chain of Custody Ledger",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/custodyEvent"
+    },
+    {
+      "$ref": "#/$defs/hashVerification"
+    },
+    {
+      "$ref": "#/$defs/custodySnapshot"
+    },
+    {
+      "$ref": "#/$defs/custodyApproval"
+    }
+  ],
+  "$defs": {
+    "hashValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "digest_hex"
+      ],
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "SHA256",
+            "SHA512",
+            "MD5"
+          ]
+        },
+        "digest_hex": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32,128}$"
+        }
+      }
+    },
+    "approvalInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "approved_by",
+        "approved_at",
+        "signature_reference"
+      ],
+      "properties": {
+        "approval_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "approved_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approved_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "signature_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "custodyEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "event_id",
+        "case_id",
+        "evidence_id",
+        "event_type",
+        "actor_id",
+        "actor_name",
+        "actor_role",
+        "organization",
+        "source_location",
+        "destination_location",
+        "action",
+        "reason",
+        "occurred_at_utc",
+        "displayed_at",
+        "timezone",
+        "tool_name",
+        "tool_version",
+        "previous_hash",
+        "current_hash",
+        "notes",
+        "created_at",
+        "immutable_revision",
+        "previous_event_hash",
+        "event_hash",
+        "ledger_algorithm",
+        "ledger_version",
+        "approval",
+        "correction_of_event_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "event_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "event_type": {
+          "enum": [
+            "ACQUISITION",
+            "RECEIVED",
+            "TRANSFERRED",
+            "STORED",
+            "OPENED",
+            "MOUNTED",
+            "ANALYZED",
+            "HASH_VERIFIED",
+            "COPIED",
+            "EXPORTED",
+            "RETURNED",
+            "RELEASED",
+            "ARCHIVED",
+            "DISPOSED",
+            "CORRECTION"
+          ]
+        },
+        "actor_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actor_role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "organization": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "occurred_at_utc": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "displayed_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "timezone": {
+          "$ref": "common.schema.json#/$defs/timezone"
+        },
+        "tool_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous_hash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hashValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current_hash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hashValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "immutable_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "previous_event_hash": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_hash": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "ledger_algorithm": {
+          "const": "SHA256"
+        },
+        "ledger_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approval": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/approvalInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "correction_of_event_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "CORRECTION"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "correction_of_event_id": {
+                "$ref": "common.schema.json#/$defs/uuid"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "hashVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "evidence_id",
+        "expected_hash",
+        "observed_hash",
+        "status",
+        "verified_by",
+        "verified_at",
+        "tool_name",
+        "tool_version",
+        "custody_event_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "expected_hash": {
+          "$ref": "#/$defs/hashValue"
+        },
+        "observed_hash": {
+          "$ref": "#/$defs/hashValue"
+        },
+        "status": {
+          "enum": [
+            "MATCH",
+            "MISMATCH"
+          ]
+        },
+        "verified_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verified_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "tool_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "custody_event_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        }
+      }
+    },
+    "custodySnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "evidence_id",
+        "from_event_id",
+        "through_event_id",
+        "event_count",
+        "head_event_hash",
+        "snapshot_hash",
+        "verification_status",
+        "report_id",
+        "report_version",
+        "created_by",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "from_event_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "through_event_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "event_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "head_event_hash": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "snapshot_hash": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "verification_status": {
+          "enum": [
+            "VALID",
+            "INVALID",
+            "INCOMPLETE"
+          ]
+        },
+        "report_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "report_version": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "created_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "custodyApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "evidence_id",
+        "snapshot_id",
+        "status",
+        "approved_by",
+        "approved_at",
+        "signature_reference",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "snapshot_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "status": {
+          "enum": [
+            "PENDING",
+            "APPROVED",
+            "REJECTED"
+          ]
+        },
+        "approved_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "approved_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signature_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

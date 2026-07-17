@@ -352,7 +352,7 @@ Token 요금제와 Provider별 사용량은 Backend/Billing 또는 외부 AI Ada
 `started_at`, `completed_at`을 포함할 수 있지만 이 Event는 AI Adapter가 Backend로 발행한다.
 Core는 요청 상관관계용 `request_id`와 `case_id`만 제공하며 사용량 Record를 생성하지 않는다.
 
-## Python-Native 하이브리드 아키텍처
+## 19. Python-Native 하이브리드 아키텍처
 
 APEX는 Python을 Application 및 Orchestration Layer로 사용하며, 성능에 민감한 처리는 Native Analysis Adapter를 통해 실행한다.
 
@@ -396,3 +396,190 @@ Worker 결과는 Bounded Queue를 통해 Case별 Single DB Writer에 전달한�
 대용량 Evidence는 Chunk Streaming, Offset 기반 Random Access, Lazy Loading 및 Cursor Pagination으로 처리하며 전체 Evidence를 메모리에 적재하지 않는다.
 
 실제 Profiling과 Benchmark에서 병목이 확인된 경우에만 해당 구간을 Rust, C 또는 C++ Extension이나 별도 Native Worker Process로 교체한다.
+
+## 20. 요구사항 인터뷰와 설계 상태
+
+대학원 연구자 및 디지털 포렌식·사이버 작전 경험자를 대상으로 한 요구사항 인터뷰를 통해
+기능 범위를 보완하였다. 인터뷰는 사용자 요구사항 입력이며 특정 기관의 공식 입장, 협력,
+인증 또는 APEX의 법적 증거능력 검증을 의미하지 않는다.
+
+이번 보강에서 설계 계약과 책임 경계만 정의한다. Progressive Indexing, Timezone 자동화,
+Custody Ledger, Keyword 추천, Raw View, OCR/STT, 외부 검증의 실행 구현은 아직 없다.
+
+## 21. Progressive Indexing Architecture
+
+```mermaid
+flowchart TD
+    REG[Evidence 등록] --> PROBE[Header / Partition / FS Probe]
+    PROBE --> MIN[최소 Metadata 수집]
+    MIN --> TREE[File Tree와 Partial Result 공개]
+    TREE --> USER[사용자 선택 Scope Priority Queue]
+    TREE --> BG[Background Index / Artifact Queue]
+    USER --> WRITER[Case별 Single DB Writer]
+    BG --> WRITER
+    WRITER --> RESULT[(Partial / Complete Result)]
+```
+
+| Component | 책임 | 기존 Component와 관계 |
+|---|---|---|
+| Progressive Indexing Coordinator | Profile을 실행 Stage와 Scope Job으로 분해하고 Partial 공개 시점을 결정 | Job Orchestrator 확장 |
+| Analysis Profile Manager | Quick Triage, Selected Scope, Full Analysis, Custom Profile의 Versioned 설정 관리 | Application Service |
+| Priority Job Scheduler | 사용자 선택 Scope를 Background Job보다 우선 배치 | Scheduler 확장 |
+| Progress Estimator | 처리량과 관측 표본으로 ETA 및 신뢰도 계산 | Progress Aggregator 확장 |
+| Search Reproduction Manager | Keyword Set, Options, Index Version과 실행 결과를 고정 | Search Engine 확장 |
+
+`Quick Triage`는 Partition/Volume, 경로, 이름, 크기, 형식, 기본 Timestamp, 삭제 여부와 우선
+Artifact를 먼저 처리한다. Hash는 Profile에 따라 생략 또는 On-demand다. `Full Analysis`는 전체
+Metadata/Hash/Text Index/Artifact/Timeline/Media/Browser 범위를 처리한다.
+
+Index 상태는 `QUEUED -> RUNNING -> PAUSING -> PAUSED -> RESUMING`과 종료 상태를 구분한다.
+Pause와 Cancel은 Batch 경계에서 협력적으로 처리하고 Checkpoint가 영속화된 뒤 상태를 확정한다.
+Resume은 동일 Profile Revision, Evidence Fingerprint, Analyzer Version과 Options를 검증한다.
+
+Progress에는 처리 Item, 추정 전체 Item, 처리량, 경과 시간, ETA, `HIGH/MEDIUM/LOW/UNKNOWN`
+추정 신뢰도, 현재 Analyzer, Worker 수와 Cache Hit/Miss를 포함한다. 추정 전체가 불명확하면
+Percent와 ETA를 `null`로 둘 수 있다. Cache Key는 Evidence Fingerprint, Analyzer ID/Version,
+정규화된 Options와 Scope Fingerprint를 포함한다.
+
+Partial Result Query는 완료된 Batch만 읽으며 `as_of`, 완료 Scope, 대기 Scope와 사용 가능한
+Item 수를 반환한다. File Tree, Artifact, Timeline, Search와 AI Context는 공통
+`result_completeness`를 사용해 미완료 상태를 숨기지 않는다.
+
+## 22. Timezone Resolution Architecture
+
+| Component | 책임 |
+|---|---|
+| Timezone Resolver | Case/Evidence/OS/Application/Artifact에서 IANA Timezone 후보와 출처 수집 |
+| Timestamp Normalizer | 원본 Timestamp를 보존하고 선택된 해석으로 UTC 정규화 |
+| Timezone Decision Service | 분석자 확인, Override와 이전 Decision 연결 |
+| Timeline Display Projection | UTC 정본을 선택한 Case Timezone으로 계산해 표시 |
+| Timezone Audit | 해석 변경, DST 경고와 Decision 이력 기록 |
+
+Case 기본 Timezone은 `Asia/Seoul`이며 저장된 정규화 Timestamp는 UTC다. 원본 문자열, 원본
+Timezone/Offset, 정규화 UTC, 표시 Timestamp, 표시 IANA Timezone, 출처, 신뢰도와 DST
+모호성을 분리한다. Timezone 변경은 표시 Projection을 재계산하지만 원본과 기존 해석 이력을
+수정하지 않는다.
+
+Resolver 후보 출처는 Case 설정, Evidence 운영체제, Windows Registry
+`TimeZoneInformation`, Linux `/etc/localtime`, Browser Profile, Application 설정, Artifact
+Offset과 분석자 수동 지정을 포함한다. 자동 후보는 분석자가 확인할 수 있으며 AI는
+`LOW/UNKNOWN` 후보를 확정하지 않는다. 서로 다른 Timezone Artifact는 UTC 축에서 비교하고
+화면에는 UTC와 Case Timezone을 동시에 제공한다.
+
+## 23. Chain of Custody Architecture
+
+Chain of Custody Ledger는 일반 `audit_events`와 목적이 다르다. Audit는 모든 Application
+상태 변경을 기록하고, Custody Ledger는 Evidence의 획득·접수·이동·보관·접근·분석·Hash
+검증·복사·Export·반환·폐기를 독립적으로 재현한다.
+
+```text
+Custody Event N
+  previous_event_hash -> Event N-1 hash
+  event_hash          -> Canonical(Event N excluding event_hash)
+  immutable_revision  -> append order revision
+```
+
+기존 Event에 Update/Delete Command를 제공하지 않는다. 오류는 원 Event ID를 참조하는
+`CORRECTION` Event로 추가한다. Hash Chain Algorithm과 Ledger Version을 기록하고 검증 실패는
+경고와 별도 Verification 결과로 보존한다. 이 Hash Chain은 변조 탐지 보조 수단이며 전자서명,
+WORM 저장소 또는 관할 법률상 증거능력을 대체하지 않는다.
+
+Custody Verification Service는 Event 순서, 이전 Hash 연결, Evidence Hash 재검증과 승인 정보를
+검사한다. Export 시 Event 범위와 Head Hash를 고정한 Snapshot을 만들고 Report Version에
+연결한다. Actor Identity, Role, Organization과 Approval은 Backend 계약과 합의해야 한다.
+
+## 24. Keyword와 Scope별 AI Architecture
+
+`KeywordRecommendationPort`는 Analysis Context를 받아 구조화된 Candidate를 반환하는
+Provider-neutral Port다. Core는 Candidate Schema 검증, Citation Resolve, 중복 제거, Review
+상태와 Keyword Set Version을 관리한다. 실제 Candidate 생성, Provider, Prompt와 Agent Loop는
+MCP/AI Component 책임이다.
+
+```text
+Scope Context Snapshot
+  -> KeywordRecommendationPort
+  -> Candidate(reason + citation + confidence)
+  -> Analyst Approve/Reject
+  -> Versioned Keyword Set
+  -> Search Execution(options + index version)
+  -> Reproducible Results including zero-hit keywords
+```
+
+AI 추천 Keyword는 자동 실행하지 않는다. 수동 Keyword도 동일 Set/Execution 계약에 넣는다.
+Context 최소화 정책은 실제 전달 Scope, Revision, Filter, Time Range, Item Count와 Partial
+여부를 기록하고 Scope 외 결과를 Adapter에 전달하지 않는다.
+
+Scope는 `CASE`, `EVIDENCE`, `FILESYSTEM`, `REGISTRY`, `EVENTLOG`, `PREFETCH`, `BROWSER`,
+`MEDIA`, `TIMELINE`, `KEYWORD_SEARCH`, `REPORT`, `CHAIN_OF_CUSTODY`로 분리하며 각 Snapshot이
+독립 Revision과 Content Hash를 가진다. 상위 Case Context는 필요한 Scope Reference만
+결합한다. AI는 침해 사실을 단독 확정하거나 Citation 없는 Fact를 만들 수 없고, Partial
+Context를 전체 결과처럼 표현하거나 Inference를 Observed Fact로 승격할 수 없다.
+
+## 25. Simple, Detailed와 Raw View
+
+View는 Frontend 표현이지만 데이터 계약과 Raw 접근 정책은 Engine/Application이 제공한다.
+
+| View | Engine 계약 | Frontend 책임 |
+|---|---|---|
+| Simple | 주요 Finding, 분류, Citation, 추천 분석 DTO | 한국어 요약과 AI/Fact 시각 분리 |
+| Detailed | 전체 Payload, Analyzer/Version, Timestamp 해석, Filter, Related ID | 전문 Field 탐색 |
+| Raw | Raw Locator, 제한된 Byte Range, Encoding, Hex/Text | Chunk 요청과 권한 오류 표시 |
+
+Raw Evidence Locator는 Evidence/File/Artifact/Machine Extraction Source, Offset, Length,
+Encoding, Reference와 선택적 Content Hash를 가진다. 최대 1 MiB의 기본 계약 제한을 두고
+Pagination/Chunk로 필요한 범위만 읽는다. Raw View와 Snippet Export는 Audit 대상이며 원본
+Evidence를 쓰기 모드로 열지 않는다. Raw 접근 Role/Permission은 Backend와 합의한다.
+
+## 26. Machine Extraction Architecture
+
+`MachineExtractionPort`는 Image OCR, Video Frame Sampling/OCR, Subtitle, Audio STT와 Screen
+Text를 위한 구조화된 경계다. 실제 OCR/STT Engine 실행은 별도 Adapter 책임이며 이번
+설계에는 구현하지 않는다.
+
+결과는 `Machine-extracted Candidate`로 저장하고 Observed Fact와 구분한다. Candidate는
+Evidence/File, Extraction Type, Text, Confidence, Language, Engine ID/Version, Frame,
+Audio Offset, Region, Raw Locator와 Citation을 가진다. Media Extraction Candidate Store는
+원본 Candidate를 보존하고 분석자 Accept/Reject/Correct Review를 별도 행으로 기록한다.
+Search Index는 Candidate와 Review 상태를 함께 표시하며 미검토 결과를 확정 사실로 승격하지
+않는다.
+
+## 27. Report Provenance 보강
+
+Report Version은 다음 Provenance를 고정한다.
+
+- Analysis Profile, Index Job과 Partial/Complete Scope
+- Timezone Decision과 표시 정책
+- Keyword Set, Search Options/Execution과 0건 Keyword
+- Custody Snapshot과 Hash Verification
+- Raw Artifact Citation
+- Machine-extracted Candidate와 Review 상태
+- Tool/Analyzer Version, Cache 상태, 분석 범위·제외 범위와 한계
+- 사용한 Scope별 Analysis Context Snapshot
+
+Report Statement는 `OBSERVED_FACT`, `ANALYST_ANNOTATION`,
+`MACHINE_EXTRACTED_CANDIDATE`, `AI_INFERENCE`, `AI_RECOMMENDATION`을 혼합하지 않는다.
+기존 AI Draft, Human Review, Approval과 승인 Version Export Gate는 그대로 유지한다.
+
+## 28. Benchmark와 외부 검증 계획
+
+External Validation 상태는 `PLANNED`다. APEX는 내부 Benchmark와 함께 디지털 포렌식 및
+사이버 작전 실무 경험을 보유한 외부 전문가의 자문을 통해 성능과 Workflow 적합성을 검증할
+예정이다. 공식 협력·인증이 확정되지 않은 기관명은 기록하지 않는다.
+
+공개 DFIR Dataset, Synthetic Evidence와 법적으로 사용 가능한 Test Image만 사용한다.
+비공개 작전 자료, 개인정보와 기밀정보는 사용하지 않는다. 외부 공개 시 Dataset, Hardware,
+Evidence, Scope, Hash/Index 옵션, Cache 상태, Worker 수, Storage와 Tool Version을 명시한다.
+
+측정 범위는 Evidence 등록/E01 최초 열기/첫 File Tree/Quick Triage/Full Index/Artifact,
+Keyword Search, Cache Cold/Warm, Pause/Resume, Timezone/Timeline 재현성, Report 시간,
+Custody 완전성, CPU/Memory/Disk I/O, 취소 응답, GUI/Raw View, AI Citation·한계 표시와 실제
+Workflow 적합성을 포함한다. 동일 조건이 아니면 제품 간 비교 결론을 내리지 않는다.
+
+## 29. 계층별 책임 보강
+
+| 계층 | 추가 책임 | 제외 책임 |
+|---|---|---|
+| Engine | Profile/Job 상태, UTC 정규화, Keyword/Search 계약, Custody/Hash, Raw Locator, Candidate 계약, Benchmark 측정 Interface | Provider/Prompt, GUI Rendering, User/Billing |
+| MCP/AI | Keyword Candidate 생성, Scope 요약, AI Draft/Inference/Recommendation | 자동 Keyword 실행, Fact 확정, Scope 외 데이터 사용 |
+| Frontend | Profile/Progress, Timezone 확인, Keyword 승인, 세 View, Custody 입력, Candidate 검토 | 원본 수정, Engine 상태 우회 |
+| Backend | Session, Actor Identity, User/Role, Approval, Billing, 외부 검증 결과 관리 협의 | 포렌식 Parser와 AI 결론 생성 |

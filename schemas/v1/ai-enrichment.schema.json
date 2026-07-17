@@ -3,16 +3,31 @@
   "$id": "https://schemas.apex-forensics.dev/v1/ai-enrichment.schema.json",
   "title": "APEX Provider-neutral AI Enrichment Boundary",
   "oneOf": [
-    { "$ref": "#/$defs/enrichmentRequest" },
-    { "$ref": "#/$defs/enrichmentResult" }
+    {
+      "$ref": "#/$defs/enrichmentRequest"
+    },
+    {
+      "$ref": "#/$defs/enrichmentResult"
+    }
   ],
   "$defs": {
     "enrichmentRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "analysis_context", "purpose", "output_locale", "requested_at"],
+      "required": [
+        "id",
+        "analysis_context",
+        "purpose",
+        "output_locale",
+        "requested_at",
+        "transmitted_scopes",
+        "context_is_partial",
+        "human_verification_required"
+      ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
         "analysis_context": {
           "$ref": "analysis-context.schema.json#/$defs/analysisContext"
         },
@@ -24,77 +39,171 @@
             "ASSESS_RISK",
             "SUMMARIZE_TIMELINE",
             "RECOMMEND_NEXT_ANALYSIS",
-            "DRAFT_REPORT"
+            "DRAFT_REPORT",
+            "RECOMMEND_KEYWORDS",
+            "SUMMARIZE_SCOPE",
+            "SUGGEST_ADDITIONAL_ANALYSIS"
           ]
         },
-        "output_locale": { "$ref": "common.schema.json#/$defs/locale" },
-        "requested_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+        "output_locale": {
+          "$ref": "common.schema.json#/$defs/locale"
+        },
+        "requested_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "transmitted_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/analysisScope"
+          }
+        },
+        "context_is_partial": {
+          "type": "boolean"
+        },
+        "human_verification_required": {
+          "const": true
+        }
       }
     },
     "observedFact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "statement", "source_confidence", "citations"],
+      "required": [
+        "id",
+        "statement",
+        "source_confidence",
+        "citations",
+        "source_kind"
+      ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "statement": { "type": "string", "minLength": 1 },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
         "source_confidence": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1
         },
         "citations": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "source_kind": {
+          "const": "ENGINE_QUOTED_FACT"
         }
       }
     },
     "analystAnnotation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["annotation_id", "text", "citations"],
+      "required": [
+        "annotation_id",
+        "text",
+        "citations"
+      ],
       "properties": {
-        "annotation_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "text": { "type": "string", "minLength": 1 },
+        "annotation_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
         "citations": {
           "type": "array",
-          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
         }
       }
     },
     "inference": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "statement", "confidence", "citations", "limitations"],
+      "required": [
+        "id",
+        "statement",
+        "confidence",
+        "citations",
+        "limitations"
+      ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "statement": { "type": "string", "minLength": 1 },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
         "citations": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
         },
         "limitations": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
     "recommendation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "action", "priority", "rationale", "citations"],
+      "required": [
+        "id",
+        "action",
+        "priority",
+        "rationale",
+        "citations"
+      ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "action": { "type": "string", "minLength": 1 },
-        "priority": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
-        "rationale": { "type": "string", "minLength": 1 },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "priority": {
+          "enum": [
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
         "citations": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
         }
       }
     },
@@ -118,55 +227,136 @@
         "adapter_ref",
         "created_at",
         "completed_at",
-        "errors"
+        "errors",
+        "scope",
+        "scope_revision",
+        "partial_result",
+        "human_verification_required",
+        "machine_extraction_ids",
+        "keyword_recommendation_ids"
       ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "request_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "analysis_context_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "status": { "enum": ["PENDING", "SUCCEEDED", "FAILED"] },
-        "locale": { "$ref": "common.schema.json#/$defs/locale" },
-        "summary": { "type": ["string", "null"] },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "request_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "analysis_context_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "status": {
+          "enum": [
+            "PENDING",
+            "SUCCEEDED",
+            "FAILED"
+          ]
+        },
+        "locale": {
+          "$ref": "common.schema.json#/$defs/locale"
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "observed_facts": {
           "type": "array",
-          "items": { "$ref": "#/$defs/observedFact" }
+          "items": {
+            "$ref": "#/$defs/observedFact"
+          }
         },
         "analyst_annotations": {
           "type": "array",
-          "items": { "$ref": "#/$defs/analystAnnotation" }
+          "items": {
+            "$ref": "#/$defs/analystAnnotation"
+          }
         },
         "inferences": {
           "type": "array",
-          "items": { "$ref": "#/$defs/inference" }
+          "items": {
+            "$ref": "#/$defs/inference"
+          }
         },
         "recommendations": {
           "type": "array",
-          "items": { "$ref": "#/$defs/recommendation" }
+          "items": {
+            "$ref": "#/$defs/recommendation"
+          }
         },
         "citations": {
           "type": "array",
-          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
         },
         "confidence": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1
         },
         "limitations": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "adapter_ref": { "type": ["string", "null"] },
-        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "adapter_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
         "completed_at": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/timestamp" },
-            { "type": "null" }
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "errors": {
           "type": "array",
-          "items": { "$ref": "common.schema.json#/$defs/error" }
+          "items": {
+            "$ref": "common.schema.json#/$defs/error"
+          }
+        },
+        "scope": {
+          "$ref": "common.schema.json#/$defs/analysisScope"
+        },
+        "scope_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "partial_result": {
+          "type": "boolean"
+        },
+        "human_verification_required": {
+          "const": true
+        },
+        "machine_extraction_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "keyword_recommendation_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
         }
       }
     }

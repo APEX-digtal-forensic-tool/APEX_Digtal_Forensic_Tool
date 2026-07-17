@@ -176,3 +176,55 @@ src/
 ~~~
 
 Native Adapter는 선택한 Library에 종속될 수 있지만 Domain과 Application Layer는 Native 구현 세부사항을 알지 못한다.
+
+## Progressive 분석 확장 제안 구조
+
+아래 경로는 구현 단계의 책임 배치를 위한 설계이며 현재 생성된 실행 코드를 뜻하지 않는다.
+
+```text
+src/apex/
+├── domain/
+│   ├── analysis_profiles/
+│   ├── custody/
+│   ├── keywords/
+│   ├── machine_extractions/
+│   └── timezones/
+├── application/services/
+│   ├── progressive_indexing_coordinator.py
+│   ├── analysis_profile_manager.py
+│   ├── progress_estimator.py
+│   ├── timezone_resolver.py
+│   ├── timestamp_normalizer.py
+│   ├── keyword_set_manager.py
+│   ├── search_reproduction_manager.py
+│   ├── custody_verification_service.py
+│   └── raw_evidence_locator.py
+├── ports/
+│   ├── keyword_recommendation.py
+│   ├── machine_extraction.py
+│   └── benchmark_measurement.py
+├── jobs/
+│   ├── priority_scheduler.py
+│   └── progressive_indexing.py
+└── adapters/
+    └── persistence/sqlite/
+        ├── custody_repository.py
+        ├── keyword_repository.py
+        └── machine_extraction_repository.py
+
+schemas/v1/
+├── analysis-profile.schema.json
+├── keyword-recommendation.schema.json
+├── chain-of-custody.schema.json
+└── machine-extraction.schema.json
+
+tools/
+├── validate_design.mjs
+├── validate_design_basic.py
+└── validate_design.sh
+```
+
+`keyword_recommendation.py`와 `machine_extraction.py`는 Provider-neutral Port만 정의한다.
+MCP Server, LLM API, Prompt, Agent Loop, OCR/STT Provider 실행 코드는 Core 트리에 만들지
+않는다. Live Progress와 Live UI Context는 Session Store 우선이며 재현·Audit·Report에 필요한
+Checkpoint와 Snapshot만 Case DB에 저장한다.

@@ -1,5 +1,7 @@
 # APEX Forensic Core Engine
 
+APEX는 Python·Native 하이브리드 분석 엔진, 한국어 UI 및 Built-in MCP를 기반으로 Progressive Indexing, AI Keyword 추천, 근거 중심 분석, Timezone 자동화, Report와 Chain of Custody 자동화를 제공하는 디지털 포렌식 플랫폼입니다.
+
 APEX는 한국어 디지털 포렌식 환경을 우선 지원하고, 대용량 Evidence를 읽기 전용으로 분석하여 버전이 지정된 JSON 결과를 제공하는 Python 기반 Forensic Core Engine입니다.
 
 X-Ways Forensics의 빠른 분석 철학과 Autopsy의 Case·Artifact 중심 분석 Workflow를 참고하여, 사용자 친화성과 대용량 Evidence 처리 효율성을 함께 확보하는 것을 목표로 합니다.
@@ -520,6 +522,111 @@ AI는 기존 Metadata와 분석 결과를 요약하거나 사건 관련성을 �
 
 ---
 
+## 외부 요구사항 인터뷰 반영 설계
+
+대학원 연구자 및 디지털 포렌식·사이버 작전 경험자를 대상으로 한 요구사항 인터뷰를 통해
+기능 범위를 보완하였습니다. 이는 특정 기관의 공식 입장, 협력, 인증 또는 법적 증거능력 보장을
+뜻하지 않습니다. 성능과 Workflow 적합성 검증은 현재 `PLANNED` 상태입니다.
+
+### Progressive Indexing
+
+빠른 분석은 Parser 실행 시간만 의미하지 않습니다. APEX는 다음 순서로 최소 Metadata와
+사용자가 선택한 범위를 먼저 제공하고 나머지를 Background에서 처리하도록 설계합니다.
+
+```text
+Evidence 등록
+  -> Header / Partition / File System 기본 정보
+  -> 최소 Metadata
+  -> File Tree와 Partial Result 표시
+  -> 사용자 선택 Scope 우선 분석
+  -> Background Index와 Artifact 분석
+```
+
+| Profile | 목적 | 대표 범위 |
+|---|---|---|
+| Quick Triage | 첫 화면과 최근 활동 후보를 빠르게 제공 | Partition, 경로, 이름, 크기, 형식, 기본 시간, 삭제 여부, 우선 Artifact |
+| Selected Scope | 분석자가 선택한 Evidence/File/Artifact만 우선 처리 | 선택 범위, 시간 범위, Analyzer |
+| Full Analysis | 전체 재현 가능한 분석 | 전체 Hash/Metadata/Text Index/Artifact/Timeline/Media/Browser |
+| Custom Profile | Analyzer와 Option을 명시적으로 조합 | Artifact Enable/Disable, Hash, Index, Worker 정책 |
+
+Index Job은 Pause, Resume, Cancel, Checkpoint/Resume, 사용자 선택 Priority Queue를 지원하도록
+계약을 정의합니다. Progress에는 처리 수, 추정 전체 수, 처리량, 경과 시간, ETA, ETA 신뢰도,
+현재 Analyzer, Worker 수와 Cache Hit/Miss를 포함합니다. ETA는 확정 시간이 아닌 추정치입니다.
+전체 Index 완료 전에도 현재까지의 File Tree, Artifact, Timeline과 생성된 Index 범위 내 검색을
+제공하며 모든 응답과 AI Context에 `is_partial`과 미완료 범위를 표시합니다.
+
+### Timezone 자동화
+
+원본 Timestamp는 절대 재작성하지 않습니다. 원본 값과 원본 Timezone을 보존하고 내부 정규화는
+UTC, 화면과 Report 표시는 Case IANA Timezone을 사용합니다. 기본값은 `Asia/Seoul`과
+`ko-KR`입니다. Case 설정, 운영체제, Windows Registry, Linux `/etc/localtime`, Browser,
+Application, Artifact Offset과 분석자 지정을 Timezone 후보 출처로 기록합니다.
+
+자동 탐지 결과에는 `CONFIRMED/HIGH/MEDIUM/LOW/UNKNOWN` 신뢰도를 붙이고 분석자가 확인하거나
+변경할 수 있습니다. 변경 시 표시값만 재계산하며 원본과 UTC 정규화 값은 유지합니다. DST 전환,
+중복 Local Time과 존재하지 않는 Local Time은 경고하고 해석 변경 이력을 Audit에 남깁니다.
+
+### AI Keyword Recommendation과 Scope
+
+AI Keyword Candidate에는 Keyword 유형, 추천 이유, Scope, Confidence와 Citation이 필수입니다.
+AI 추천은 자동 검색되지 않으며 분석자가 승인한 Keyword만 Versioned Keyword Set에 포함됩니다.
+대소문자, Regex, Encoding, 시간 범위, Evidence Scope, Index Version과 0건 결과까지 Search
+Execution에 저장하여 동일 조건으로 재실행할 수 있습니다. 분석자가 직접 입력한 Keyword도 같은
+관리 절차를 사용합니다.
+
+AI Context는 `case`, `evidence`, `filesystem`, `registry`, `eventlog`, `prefetch`, `browser`,
+`media`, `timeline`, `keyword_search`, `report`, `chain_of_custody` Scope별 Revision으로
+분리합니다. 실제 AI 요청에 전달한 Scope와 Partial 여부를 기록합니다. AI는 Citation 없는
+사실 단정, Scope 외 데이터 혼합, 침해 사실 단독 확정, 미승인 Keyword 실행, Inference의
+Observed Fact 승격을 할 수 없습니다.
+
+### Simple / Detailed / Raw View
+
+| View | 설계 범위 |
+|---|---|
+| Simple | 한국어 설명, 주요 발견 후보, AI 요약, 추천 분석, 핵심 Timeline |
+| Detailed | 전체 Artifact Field, Parser/Version, Source, Timezone 해석, Confidence, Citation, Filter |
+| Raw | 원본 Field/Value, Byte Offset/Length, Encoding, Hex/Text, 원본 Timestamp, Raw Snippet |
+
+동일 Finding에서 세 View를 전환할 수 있고 AI 설명과 원본 Fact를 시각적으로 구분합니다.
+Raw Locator는 Citation과 연결되며 권한과 최대 Read Length를 적용해 필요한 Offset만 읽습니다.
+원본 Evidence는 항상 읽기 전용이며 대용량 파일 전체를 Raw View 메모리에 적재하지 않습니다.
+
+### Chain of Custody
+
+Chain of Custody는 Report 문장만이 아니라 Evidence 관리의 독립적인 Append-only Ledger입니다.
+기존 Event는 수정·삭제할 수 없고 오류는 `CORRECTION` Event로 연결합니다. Event Hash Chain,
+Evidence 최초·재검증 Hash, 불일치 경고, 사용자/역할/승인자, 이동·접근·분석·Export 이력을
+보존합니다. Export 시 불변 Custody Snapshot을 만들고 Report Version과 연결합니다.
+
+이 설계는 법적 증거능력을 보장하지 않습니다. 관할 법률, 조직 정책, Actor Identity와 전자서명
+방식은 Backend 및 법무·운영 담당자의 최종 검토가 필요합니다.
+
+### Multimedia Text Candidate
+
+기존 EXIF/GPS/Thumbnail/Codec/Duration Media MVP를 유지하면서 Image OCR, Video Frame OCR,
+Subtitle, Audio STT와 Screen Text를 확장 계약으로 정의합니다. 실제 OCR/STT 실행 코드는 이
+설계 작업에 포함하지 않습니다.
+
+추출 Text는 Observed Fact가 아니라 `Machine-extracted Candidate`이며 Confidence, 언어,
+Engine/Version, Frame 또는 Audio 위치, Raw Locator와 Citation을 기록합니다. 분석자는
+`UNREVIEWED`, `ACCEPTED`, `REJECTED`, `CORRECTED` 상태로 검토합니다. AI는 검토 전 Candidate를
+확정 사실로 표현할 수 없습니다.
+
+### Report와 외부 검증
+
+Report는 기존 `AI Draft -> Human Review -> Approval -> PDF/HTML Export` Gate를 유지합니다.
+Index Profile/완료 범위, Partial 여부, Timezone 정책, Keyword Set/Search Options, Custody
+Snapshot, Hash 검증, Raw Citation, Machine Candidate 상태, Tool/Analyzer Version, Cache 상태와
+분석 한계를 승인 Version에 고정합니다. 문장은 Observed Fact, Analyst Annotation,
+Machine-extracted Candidate, AI Inference, AI Recommendation으로 구분합니다.
+
+APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실무 경험을 보유한 외부 전문가의
+자문을 통해 성능과 Workflow 적합성을 검증할 예정입니다. 공개 DFIR Dataset, Synthetic
+Evidence와 법적으로 사용 가능한 Test Image만 사용하고 비공개 작전 자료, 개인정보와
+기밀정보는 사용하지 않습니다. 비교 결과는 동일 Hardware, Evidence, Scope, Hash/Index,
+Cache, Worker와 Storage 조건에서만 문서화합니다.
+
 ## 성능 최적화 방향
 
 APEX는 X-Ways의 빠른 분석 철학을 참고하여 대용량 Evidence 처리 최적화를 목표로 합니다.
@@ -565,6 +672,10 @@ APEX는 JSON Schema Draft 2020-12 기반 데이터 계약을 사용합니다.
 - Analysis Context
 - Citation
 - Report
+- Analysis Profile
+- Keyword Recommendation 및 Keyword Set
+- Chain of Custody
+- Machine-extracted Candidate
 
 모든 Schema는 다음 원칙을 따릅니다.
 
@@ -614,6 +725,7 @@ APEX/
 │
 └── tools/
     ├── validate_design.mjs
+    ├── validate_design_basic.py
     └── validate_design.sh
 ```
 
@@ -641,6 +753,13 @@ APEX/
 - [x] Images / Videos MVP 범위 설계
 - [x] MCP 및 Billing 경계 설계
 - [x] 설계 검증 도구 작성
+- [x] Progressive Indexing 및 Analysis Profile 설계
+- [x] Timezone 탐지·정규화·해석 이력 설계
+- [x] AI Keyword 추천과 Search 재현 계약 설계
+- [x] Append-only Chain of Custody 설계
+- [x] Simple/Detailed/Raw View와 Raw Locator 설계
+- [x] OCR/STT Machine-extracted Candidate 계약 설계
+- [x] 외부 전문가 검증 계획 설계
 
 ### 구현 예정
 
@@ -667,6 +786,13 @@ APEX/
 - [ ] Token Billing 구현 — Backend 담당
 - [ ] 성능 Benchmark
 - [ ] Desktop Packaging
+- [ ] Progressive Indexing Coordinator 및 Profile Manager 구현
+- [ ] Timezone Resolver와 Timestamp Normalizer 구현
+- [ ] Keyword Set/Search Reproduction 구현
+- [ ] Chain of Custody Ledger와 검증 Service 구현
+- [ ] Simple/Detailed/Raw View 구현
+- [ ] OCR/STT Provider 및 Candidate Review 구현
+- [ ] 외부 전문가 검증 수행
 
 ---
 

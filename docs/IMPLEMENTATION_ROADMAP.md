@@ -37,7 +37,7 @@ Acceptance Gate:
 - UTF-8 API와 한글 Case/Evidence 표시명이 손실 없이 Round-trip
 - API Fixture가 Case/Evidence/Job Schema를 통과
 
-## Phase 2. File System, Lazy Loading와 기본 Index
+## Phase 2. Progressive File System, Lazy Loading와 기본 Index
 
 구현:
 
@@ -72,7 +72,7 @@ Acceptance Gate:
 - Analyzer 하나의 실패가 다른 결과를 Rollback하지 않음
 - Artifact 표시명/설명이 한국어 Resource Key로 Resolve됨
 
-## Phase 4. Timeline, Search, Cache와 병렬 Job
+## Phase 4. Search, Timeline, Timezone, Cache와 병렬 Job
 
 구현:
 
@@ -113,7 +113,7 @@ Acceptance Gate:
 - AI 없이도 Media/Browser 결과를 JSON으로 완전히 조회 가능
 - 손상 Media/Browser DB가 전체 Job을 중단하지 않음
 
-## Phase 6. GUI Context, Analysis Context와 MCP Adapter Interface
+## Phase 6. GUI Context, View와 MCP Adapter Interface
 
 구현:
 
@@ -132,7 +132,7 @@ Acceptance Gate:
 
 MCP Server/Tool과 GUI-to-MCP 전달 구현 자체는 별도 MCP 담당자가 수행한다.
 
-## Phase 7. AI Enrichment, Citation과 한국어 결과
+## Phase 7. AI Assistance, Citation과 한국어 결과
 
 Core 구현 범위:
 
@@ -154,7 +154,7 @@ Acceptance Gate:
 - Citation 없는 Inference/Recommendation 거부
 - Adapter 실패가 Ingest/Timeline/Search를 변경하지 않음
 
-## Phase 8. Report, AI Draft와 Human Review
+## Phase 8. Report, Chain of Custody와 Human Review
 
 구현:
 
@@ -172,7 +172,7 @@ Acceptance Gate:
 - 모든 주요 발견/AI 문장의 Citation Source가 실제 Case 결과로 Resolve됨
 - PDF/HTML이 같은 승인 Version, Locale, Timezone과 Citation을 표현
 
-## Phase 9. Benchmark, 안정성 및 Packaging
+## Phase 9. Benchmark, 외부 검증, 안정성 및 Packaging
 
 구현/검증:
 
@@ -255,3 +255,44 @@ APEX는 “Autopsy보다 빠르다” 또는 “X-Ways와 동일하다”는 표
 - Cache Cold/Warm 성능 비교
 - 최대 Memory 및 Disk I/O 측정
 - Worker 수에 따른 Scalability 측정
+
+## 외부 요구사항 반영 Phase 보강
+
+기존 Phase 0~9의 순서와 Acceptance Gate를 유지하면서 다음 설계·구현 항목을 각 Phase에
+추가한다. 아래 항목은 Roadmap이며 현재 구현 완료 상태가 아니다.
+
+| Phase | 추가 범위 | 추가 Acceptance/Validation |
+|---|---|---|
+| 0 | Progressive Index Prototype, Timezone Dataset/Fixture, Custody Event Model, Keyword Contract, Raw Range 제한, OCR/STT Provider 기술 검토, External Validation Plan | Schema/DB/API/Owner 추적, DST/부분 결과/Custody Hash Fixture 설계 |
+| 1 | Custody 기본 Event, Evidence Fingerprint, Case Timezone 기본 Decision | Event Update/Delete 부재, 원본 Timestamp 불변, Actor Identity 계약 |
+| 2 | Quick Triage, File Tree 우선 표시, Background Index, Pause/Resume/Cancel, Priority Queue, Partial Result | 첫 File Tree 시간, Partial 표시, Checkpoint 재개와 사용자 Scope 우선순위 |
+| 3 | Registry/Event Log/Prefetch Raw Locator | Artifact에서 제한된 원본 Range와 Citation Resolve |
+| 4 | Keyword Set, Search Reproduction, Timezone Normalization, Timeline 표시 전환 | 0건 Keyword 기록, 동일 Options 재실행, DST/다중 Timezone 재현 |
+| 5 | OCR/STT Contract와 Machine-extracted Candidate | Confidence/Engine/Locator, Accept/Reject/Correct Review |
+| 6 | Scope별 Context, Simple/Detailed/Raw View | Scope Revision/Partial 전파, 최대 Raw Length와 읽기 전용 접근 |
+| 7 | AI Keyword Recommendation, Scope Summary, Partial 경고, Human Verification | 승인 전 검색 차단, Citation 없는 결과 거부, Scope 외 데이터 거부 |
+| 8 | Custody Snapshot/Hash History, 확장 Report Provenance | Report Version 연결, 다섯 결과 분류, 승인 후 불변성 |
+| 9 | 내부 Benchmark와 외부 DFIR·사이버 작전 실무 전문가 자문, 사용성 평가, 재검증 | 공개/Synthetic Dataset, 동일 조건, `PLANNED` 상태와 기관명 미표기 |
+
+### Phase 0 기술 Spike 추가
+
+- Progressive Index Queue의 사용자 선택 Scope 선점 정책과 Background 기아 방지
+- ETA 표본 수, 신뢰도 하향 조건과 알 수 없는 전체 Item 처리
+- IANA tzdb Version, Windows/Linux Timezone 매핑과 DST 경계 Fixture
+- Custody Canonicalization/Hash Chain Algorithm과 Correction 규칙
+- Keyword Variant, 중복 정규화와 민감 Context 최소화
+- Raw Hex/Text 1 MiB 제한, Chunk Cursor와 Audit
+- OCR/STT Candidate Contract 및 Provider Packaging 비교
+- External Validation Dataset, 동의와 공개 정책
+
+### Phase 9 검증 항목 추가
+
+Evidence 등록, E01 최초 열기, 첫 File Tree, Quick Triage, Full Index, Artifact별 시간,
+Keyword Search/추천 유용성, Cache Cold/Warm, Pause/Resume, Timezone 정확성, Timeline
+재현성, Report 시간, Custody 완전성, CPU/Memory/Disk I/O, 취소 응답, GUI/Raw View,
+AI Citation·한계 표시와 실제 조사 Workflow 적합성을 측정한다.
+
+비교는 동일 Hardware, Evidence, 분석 범위, Hash/Index 옵션, Cache 상태, Worker 수와
+Storage에서만 수행한다. 외부 검증은 공개 DFIR Dataset, Synthetic Evidence와 법적으로 사용
+가능한 Test Image만 사용하며 비공개 작전 자료, 개인정보와 기밀정보를 사용하지 않는다.
+외부 전문가 검증 상태는 구현·평가가 끝날 때까지 `PLANNED`다.

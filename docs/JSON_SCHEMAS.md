@@ -24,6 +24,11 @@
 | `job.schema.json` | Job, JobError | 비동기 작업 상태 |
 | `ai-enrichment.schema.json` | EnrichmentRequest, EnrichmentResult | Provider-neutral 선택 경계 |
 
+| `analysis-profile.schema.json` | AnalysisProfile | Quick/Selected/Full/Custom Profile |
+| `keyword-recommendation.schema.json` | KeywordCandidate, KeywordSet, KeywordApproval | AI/수동 Keyword 검토와 Set Version |
+| `chain-of-custody.schema.json` | CustodyEvent, HashVerification, CustodySnapshot, CustodyApproval | Append-only Evidence Custody Ledger |
+| `machine-extraction.schema.json` | MachineExtraction, ExtractionReview | OCR/STT Candidate와 분석자 검토 |
+
 ## 3. 공통 규칙
 
 1. `schema_version`은 Semantic Version 문자열이며 API Envelope에 항상 포함한다.
@@ -106,3 +111,126 @@ Inference와 Recommendation은 Citation, Confidence/우선순위, Limitation을 
 - Schema 파일 간 순환 `$ref`
 - API Resource에 대응하는 Schema 누락
 - Context/AI/Report Citation의 다른 Case Source 참조
+
+## 10. 기존 Schema 확장 결정
+
+요구사항과 역할이 겹치는 구조는 새 파일을 만들지 않았다.
+
+| 요구사항 | 확장 Schema | 이유 |
+|---|---|---|
+| Timestamp/Timezone | `common.schema.json` | 모든 File/Artifact/Timeline/Report가 공유 |
+| Case Timezone 후보/Decision | `case.schema.json` | Case 설정 Aggregate |
+| Evidence Fingerprint | `evidence.schema.json` | Evidence 중복 분석 방지 Identity |
+| File 시간 해석 | `file.schema.json` | 기존 UTC 시간과 구조화 Interpretation 병행 |
+| Artifact Raw/시간 Provenance | `artifact.schema.json` | 기존 Artifact Provenance 확장 |
+| Progressive Progress/ETA | `job.schema.json` | Job 상태·Checkpoint 계약 확장 |
+| Search Options/Execution | `search.schema.json` | 검색 재현 정보가 Search Aggregate 소유 |
+| Scope별 Context | `analysis-context.schema.json` | 기존 불변 Context Snapshot 확장 |
+| Raw Locator | `citation.schema.json` | Citation과 Byte/Record Locator 연결 |
+| AI Partial/Scope/Human Gate | `ai-enrichment.schema.json` | Provider-neutral 결과 경계 유지 |
+| Report Provenance/Section | `report.schema.json` | 승인 Version Aggregate 내부 일관성 |
+| Simple/Detailed/Raw 상태 | `ui-context.schema.json` | Live GUI 선택 상태 |
+
+## 11. 신규 Schema 분리 근거
+
+`analysis-profile`은 실행 Job과 별개로 Versioned 분석 의도를 소유한다.
+`keyword-recommendation`은 AI/분석자 Candidate, Human Review와 Keyword Set 생명주기를
+소유한다. `chain-of-custody`는 일반 Audit와 다른 Evidence 중심 Append-only Ledger와 Snapshot을
+소유한다. `machine-extraction`은 Artifact Fact가 아닌 Machine Candidate와 Review를 소유한다.
+따라서 네 계약은 기존 Schema에 억지로 중첩하지 않고 독립 Aggregate로 분리했다.
+
+모든 신규 Root DTO는 `schema_version=1.0.0`을 포함하며 모든 파일은 Draft 2020-12 `$schema`,
+`/v1/` `$id`, 명시적 `required`와 `additionalProperties`를 사용한다. ID는 기존 UUID 규칙,
+시간은 RFC 3339, Timezone은 IANA ID를 사용한다.
+
+## 12. Timestamp와 Partial Result
+
+`common.timestampInterpretation`은 다음 필드를 분리한다.
+
+- `raw_timestamp`와 `raw_timezone`
+- `normalized_utc`
+- `display_timestamp`와 `display_timezone`
+- `timezone_source`와 `timezone_confidence`
+- `dst_status`와 `ambiguity`
+
+원본 Timestamp는 수정하지 않으며 정규화 실패 시 UTC가 `null`일 수 있다. IANA ID의 실제
+유효성은 Regex만으로 확정하지 않고 Runtime tzdb와 Fixture로 검증한다.
+
+`common.partialResult`은 `is_partial`, `as_of`, 완료/대기 Scope, 사용 가능한 Item 수와 Warning을
+제공한다. Job, Search, UI Context, Analysis Context와 Report Provenance가 같은 정의를 참조해
+전체 Index 완료 전 결과라는 사실을 AI와 사용자에게 전달한다.
+
+## 13. Custody Event Enum
+
+Schema와 문서가 공유하는 Canonical Enum은 다음과 같다.
+
+```text
+ACQUISITION
+RECEIVED
+TRANSFERRED
+STORED
+OPENED
+MOUNTED
+ANALYZED
+HASH_VERIFIED
+COPIED
+EXPORTED
+RETURNED
+RELEASED
+ARCHIVED
+DISPOSED
+CORRECTION
+```
+
+`CORRECTION`은 `correction_of_event_id`가 필수다. Event는 `immutable_revision`,
+`previous_event_hash`, `event_hash`, `ledger_algorithm`과 `ledger_version`을 가진다. Update나
+Delete 계약은 없다.
+
+## 14. Report Section Enum
+
+기존 Section을 유지하고 다음 Section을 추가한다.
+
+```text
+INDEXING_SCOPE
+TIMEZONE_POLICY
+KEYWORD_SEARCH
+CHAIN_OF_CUSTODY
+HASH_VERIFICATION
+MACHINE_EXTRACTION
+EXTERNAL_VALIDATION
+```
+
+Report Statement는 `OBSERVED_FACT`, `ANALYST_ANNOTATION`,
+`MACHINE_EXTRACTED_CANDIDATE`, `AI_INFERENCE`, `AI_RECOMMENDATION` 중 하나로 분류한다.
+Candidate와 AI 결과를 Observed Fact로 직렬화하지 않는다.
+
+## 15. Keyword와 Machine Candidate 검증
+
+AI `keywordCandidate`는 `reason`, 하나 이상의 `citations`, `scope`, `confidence`와
+`PENDING_REVIEW` 상태를 요구한다. `ANALYST` Candidate는 Confidence가 null일 수 있지만 같은
+Keyword Set Version 계약을 사용한다.
+
+`machineExtraction`은 `confidence`, `engine_id`, `engine_version`, `source_locator`,
+`citations`와 `analyst_status`를 요구한다. Review 상태는
+`UNREVIEWED/ACCEPTED/REJECTED/CORRECTED`이며 Correction은 원 Candidate Text를 변경하지 않는다.
+
+## 16. 검증 Gate 보강
+
+설계 검증은 다음을 실패 조건으로 추가한다.
+
+- Requirement ID 또는 Method+API Path 중복
+- API-to-Schema Mapping 누락
+- 신규 DB Table의 Module Owner 누락
+- Custody Event Enum의 문서/Schema 불일치
+- Report Section Enum의 문서/Schema 불일치
+- IANA Timezone 정책 문서 누락
+- AI Keyword의 Reason/Citation 필수 계약 누락
+- Machine Candidate의 Confidence/Review/Locator 누락
+- Job/Search/Context의 Partial Result 계약 누락
+- `src`, `mcp`, `prompts` 또는 Python 실행 구현 추가
+- MCP/LLM/Prompt/OCR/STT/PDF 실행 의존성 추가
+
+Node/Ajv가 없는 환경에서는 Python 기본 검증으로 JSON Syntax, 파일, Markdown Link,
+Requirement 중복과 로컬 `$ref` 파일을 검사한다. Node가 있으면 구조/순환 참조 검사를 추가하고,
+로컬 Ajv가 설치된 경우에만 Strict Compile을 실행한다. Ajv가 없으면 기본 검증 성공을 유지하고
+생략 이유를 출력한다.

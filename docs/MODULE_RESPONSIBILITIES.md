@@ -244,3 +244,89 @@ Native Analysis Adapter는 외부 Native Library와 APEX Domain 사이의 경계
 - 사용자 권한 및 Billing
 
 Domain 및 Application Module은 구체적인 Native Library가 아니라 Port에만 의존한다.
+
+## 15. 외부 요구사항 반영 Component
+
+| Component | 단일 책임 | 주요 입력 | 주요 출력 | 소유하지 않는 책임 |
+|---|---|---|---|---|
+| Progressive Indexing Coordinator | Profile Stage, Partial 공개, Background 실행 조정 | Analysis Profile, Evidence Fingerprint | Index Job/Scope 계획 | Analyzer Parsing |
+| Analysis Profile Manager | 4개 Profile과 Revision/Options 관리 | 사용자 선택, Analyzer Manifest | Versioned Profile | Job 실행 |
+| Priority Job Scheduler | 선택 Scope 우선순위와 Background 공정성 | Scope Job, Priority | 실행 Queue | ETA 계산 |
+| Progress Estimator | 처리량/ETA/신뢰도와 Cache 지표 집계 | Analyzer Progress Event | Progress DTO | 완료 보장 |
+| Timezone Resolver | IANA 후보, 출처와 Confidence 수집 | Case/Evidence/Artifact 설정 | Timezone Candidate | 불확실 후보 확정 |
+| Timestamp Normalizer | 원본 보존과 UTC/표시 해석 생성 | Raw Timestamp, Decision | Timestamp Interpretation | 원본 수정 |
+| Keyword Recommendation Port | Scope Context 기반 Candidate 계약 | Analysis Context | Candidate DTO | Provider/Prompt |
+| Keyword Set Manager | Review, 중복 제거, Set Version | AI/Analyst Keyword | Approved Keyword Set | 자동 검색 |
+| Search Reproduction Manager | Options/Index Version/Result 재현 | Approved Set, Options | Search Execution | Keyword 승인 |
+| Chain of Custody Ledger | Append-only Evidence Custody Event | Actor/Evidence Action | Hash-linked Event | 기존 Event 수정/삭제 |
+| Custody Verification Service | 순서/Hash/Evidence 재검증과 Snapshot | Ledger 범위 | Verification/Snapshot | 법적 효력 보장 |
+| Raw Evidence Locator | 제한된 Byte Range와 Citation 연결 | Source ID/Offset/Length | Raw Locator/Chunk | Evidence 쓰기 |
+| Machine Extraction Port | OCR/STT Provider-neutral 계약 | Media Source/Options | Candidate DTO | OCR/STT 실행 구현 |
+| Media Extraction Candidate Store | Candidate 원본과 Analyst Review 보존 | Candidate/Review | Review 상태 | Observed Fact 승격 |
+| External Validation Plan | Benchmark 조건과 자문 결과 계약 | Dataset/환경/측정값 | Planned Review | 공식 인증 주장 |
+
+## 16. Progressive Index와 Cache 책임
+
+Analysis Profile은 분석 의도를 소유하고 Job은 실행 상태를 소유한다. Analyzer Manifest는
+기능과 Version을 소유하며 Cache는 다음 Key Projection만 소유한다.
+
+```text
+Evidence Fingerprint
++ Analyzer ID / Version
++ Canonical Options Hash
++ Scope Fingerprint
+= Cache Key
+```
+
+Quick Triage가 완료되어도 Full Analysis Job은 별도로 Background에서 계속될 수 있다. Query는
+완료된 Batch와 `result_completeness`를 함께 반환한다. Progress Estimator는 ETA를 추정하며
+완료 시각을 보장하지 않는다. Pause/Resume은 Checkpoint와 동일 Profile Revision 검증 뒤
+처리한다.
+
+## 17. Timezone 책임
+
+Timezone Resolver는 후보를 만들고 Analyst Decision을 대체하지 않는다. Timestamp Normalizer는
+원본 문자열/Timezone, UTC 정규화, Case Timezone 표시, 출처, 신뢰도와 DST 모호성을 분리한다.
+Timeline은 UTC를 정렬 정본으로 사용하고 GUI/Report가 표시 Timezone을 선택한다. Decision
+변경은 새 해석과 Audit Event를 만들며 원본 Timestamp를 Update하지 않는다.
+
+## 18. Keyword와 AI Scope 책임
+
+AI/MCP Component는 Candidate 생성과 Scope 요약만 담당한다. Core의 Keyword Set Manager는
+Citation, Confidence, Review 상태와 중복을 검증한다. 승인 전 Candidate를 Search Engine에
+전달하지 않는다. Search Reproduction Manager는 대소문자, Regex, Encoding, Time Range,
+Evidence Scope, Index Version, 실행자/시각과 0건 Keyword를 보존한다.
+
+Context Service는 Scope별 독립 Revision, Analyzer Version, Filter, Time Range, Item Count,
+Partial 여부와 Citation을 고정한다. 실제 AI 요청에 전달한 Scope를 기록하고 서로 다른 Scope의
+결론을 암묵적으로 혼합하지 않는다.
+
+## 19. Custody와 Audit 책임 분리
+
+| 데이터 | Owner | 불변성 |
+|---|---|---|
+| 일반 상태 변경 Audit | Audit Service | Append-only Audit Hash Chain |
+| Evidence Custody Event | Chain of Custody Ledger | Append-only, Correction Event만 허용 |
+| Evidence Hash 재검증 | Custody Verification Service | 실행별 새 Result |
+| Export Custody Snapshot | Custody Verification Service | 생성 후 불변, Report Version 연결 |
+| Actor/User/Role | Backend | Engine에는 검증된 Identity DTO 전달 |
+| 전자서명/Approval 정책 | Backend/조직 정책 | Engine은 Reference와 승인 결과만 보존 |
+
+Custody Hash Chain은 변조 탐지 보조 수단이며 법적 증거능력을 보장하지 않는다.
+
+## 20. View와 Multimedia 책임
+
+Frontend는 Simple/Detailed/Raw Rendering과 Role별 접근 UX를 소유한다. Engine은 동일 Finding
+ID, 구조화 Fact, AI 분류, Timestamp Interpretation, Citation과 제한된 Raw Locator를 제공한다.
+Raw API는 필요한 Offset만 읽고 원본을 수정하지 않는다.
+
+Machine Extraction Port는 OCR/STT 계약만 제공하고 Provider 실행은 Adapter가 담당한다.
+Candidate Store는 Confidence, Engine/Version, Frame/Audio 위치와 Analyst Review를 보존한다.
+미검토 Candidate는 Observed Fact가 아니며 AI와 Report에서 분류를 유지한다.
+
+## 21. Report와 검증 책임
+
+Report Module은 Profile/Partial/Timezone/Keyword/Custody/Raw/Machine Candidate Provenance를
+승인 Version에 고정한다. AI Draft는 다섯 분류를 유지하고 사람 검토 없이 승인될 수 없다.
+External Validation Plan은 공개/Synthetic Dataset과 동일 비교 조건을 기록하며 상태는
+`PLANNED`다. 외부 전문가 Identity 공개와 결과 관리는 별도 동의 및 Backend 합의가 필요하다.

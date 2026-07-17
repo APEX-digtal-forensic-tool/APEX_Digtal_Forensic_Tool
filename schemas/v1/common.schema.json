@@ -19,7 +19,8 @@
     "timezone": {
       "type": "string",
       "pattern": "^(?:UTC|[A-Za-z_+-]+(?:/[A-Za-z0-9_+.-]+)+)$",
-      "default": "Asia/Seoul"
+      "default": "Asia/Seoul",
+      "description": "IANA Time Zone Database identifier. UTC is accepted as the canonical zero-offset identifier."
     },
     "resourceKey": {
       "type": "string",
@@ -40,7 +41,13 @@
     "error": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message_key", "developer_message", "retryable", "details"],
+      "required": [
+        "code",
+        "message_key",
+        "developer_message",
+        "retryable",
+        "details"
+      ],
       "properties": {
         "code": {
           "type": "string",
@@ -50,10 +57,16 @@
           "$ref": "#/$defs/resourceKey"
         },
         "developer_message": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "target": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "retryable": {
           "type": "boolean"
@@ -66,7 +79,12 @@
     "warning": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message_key", "developer_message", "details"],
+      "required": [
+        "code",
+        "message_key",
+        "developer_message",
+        "details"
+      ],
       "properties": {
         "code": {
           "type": "string",
@@ -76,12 +94,19 @@
           "$ref": "#/$defs/resourceKey"
         },
         "developer_message": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "source_id": {
           "oneOf": [
-            { "$ref": "#/$defs/uuid" },
-            { "type": "null" }
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "details": {
@@ -92,10 +117,17 @@
     "pageInfo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["next_cursor", "has_more", "returned"],
+      "required": [
+        "next_cursor",
+        "has_more",
+        "returned"
+      ],
       "properties": {
         "next_cursor": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "has_more": {
           "type": "boolean"
@@ -109,7 +141,11 @@
     "errorResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "request_id", "errors"],
+      "required": [
+        "schema_version",
+        "request_id",
+        "errors"
+      ],
       "properties": {
         "schema_version": {
           "const": "1.0.0"
@@ -123,6 +159,162 @@
           "items": {
             "$ref": "#/$defs/error"
           }
+        }
+      }
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "analysisScope": {
+      "enum": [
+        "CASE",
+        "EVIDENCE",
+        "FILESYSTEM",
+        "REGISTRY",
+        "EVENTLOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "TIMELINE",
+        "KEYWORD_SEARCH",
+        "REPORT",
+        "CHAIN_OF_CUSTODY"
+      ]
+    },
+    "confidenceLevel": {
+      "enum": [
+        "CONFIRMED",
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "UNKNOWN"
+      ]
+    },
+    "partialResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "is_partial",
+        "as_of",
+        "completed_scopes",
+        "pending_scopes",
+        "available_item_count",
+        "warning"
+      ],
+      "properties": {
+        "is_partial": {
+          "type": "boolean"
+        },
+        "as_of": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "completed_scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/analysisScope"
+          }
+        },
+        "pending_scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/analysisScope"
+          }
+        },
+        "available_item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "timestampInterpretation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_timestamp",
+        "raw_timezone",
+        "normalized_utc",
+        "display_timestamp",
+        "display_timezone",
+        "timezone_source",
+        "timezone_confidence",
+        "dst_status",
+        "ambiguity"
+      ],
+      "properties": {
+        "raw_timestamp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_timezone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "normalized_utc": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "display_timestamp": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "display_timezone": {
+          "$ref": "#/$defs/timezone"
+        },
+        "timezone_source": {
+          "enum": [
+            "CASE_SETTING",
+            "EVIDENCE_OS",
+            "WINDOWS_REGISTRY",
+            "LINUX_LOCALTIME",
+            "BROWSER_PROFILE",
+            "APPLICATION_SETTING",
+            "ARTIFACT_OFFSET",
+            "ANALYST_OVERRIDE",
+            "UNKNOWN"
+          ]
+        },
+        "timezone_confidence": {
+          "$ref": "#/$defs/confidenceLevel"
+        },
+        "dst_status": {
+          "enum": [
+            "STANDARD",
+            "DAYLIGHT",
+            "TRANSITION",
+            "NOT_APPLICABLE",
+            "UNKNOWN"
+          ]
+        },
+        "ambiguity": {
+          "enum": [
+            "NONE",
+            "AMBIGUOUS_LOCAL_TIME",
+            "NONEXISTENT_LOCAL_TIME",
+            "INVALID_RAW_TIME"
+          ]
         }
       }
     }

@@ -6,8 +6,12 @@
   "$defs": {
     "nullableTimestamp": {
       "oneOf": [
-        { "$ref": "common.schema.json#/$defs/timestamp" },
-        { "type": "null" }
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "fileEntry": {
@@ -30,50 +34,150 @@
         "hidden",
         "times",
         "hash_sha256",
-        "metadata"
+        "metadata",
+        "time_interpretations"
       ],
       "properties": {
-        "id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "object_id": { "$ref": "common.schema.json#/$defs/uuid" },
-        "evidence_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "object_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
         "parent_file_id": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/uuid" },
-            { "type": "null" }
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "name": { "type": "string", "minLength": 1 },
-        "name_encoding": { "type": ["string", "null"] },
-        "name_lossy": { "type": "boolean" },
-        "full_path": { "type": "string", "minLength": 1 },
-        "file_type": {
-          "enum": ["REGULAR", "DIRECTORY", "SYMLINK", "STREAM", "SPECIAL"]
+        "name": {
+          "type": "string",
+          "minLength": 1
         },
-        "mime_type": { "type": ["string", "null"] },
-        "size_bytes": { "type": "integer", "minimum": 0 },
-        "allocated": { "type": "boolean" },
-        "deleted": { "type": "boolean" },
-        "hidden": { "type": "boolean" },
+        "name_encoding": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name_lossy": {
+          "type": "boolean"
+        },
+        "full_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file_type": {
+          "enum": [
+            "REGULAR",
+            "DIRECTORY",
+            "SYMLINK",
+            "STREAM",
+            "SPECIAL"
+          ]
+        },
+        "mime_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allocated": {
+          "type": "boolean"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
         "times": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["created", "modified", "accessed", "changed", "raw"],
+          "required": [
+            "created",
+            "modified",
+            "accessed",
+            "changed",
+            "raw"
+          ],
           "properties": {
-            "created": { "$ref": "#/$defs/nullableTimestamp" },
-            "modified": { "$ref": "#/$defs/nullableTimestamp" },
-            "accessed": { "$ref": "#/$defs/nullableTimestamp" },
-            "changed": { "$ref": "#/$defs/nullableTimestamp" },
-            "raw": { "$ref": "common.schema.json#/$defs/metadata" }
+            "created": {
+              "$ref": "#/$defs/nullableTimestamp"
+            },
+            "modified": {
+              "$ref": "#/$defs/nullableTimestamp"
+            },
+            "accessed": {
+              "$ref": "#/$defs/nullableTimestamp"
+            },
+            "changed": {
+              "$ref": "#/$defs/nullableTimestamp"
+            },
+            "raw": {
+              "$ref": "common.schema.json#/$defs/metadata"
+            }
           }
         },
         "hash_sha256": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/sha256" },
-            { "type": "null" }
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "metadata": { "$ref": "common.schema.json#/$defs/metadata" }
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "time_interpretations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "created",
+            "modified",
+            "accessed",
+            "changed"
+          ],
+          "properties": {
+            "created": {
+              "$ref": "#/$defs/nullableTimestampInterpretation"
+            },
+            "modified": {
+              "$ref": "#/$defs/nullableTimestampInterpretation"
+            },
+            "accessed": {
+              "$ref": "#/$defs/nullableTimestampInterpretation"
+            },
+            "changed": {
+              "$ref": "#/$defs/nullableTimestampInterpretation"
+            }
+          }
+        }
       }
+    },
+    "nullableTimestampInterpretation": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestampInterpretation"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   }
 }
