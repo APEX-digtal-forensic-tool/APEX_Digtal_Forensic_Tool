@@ -917,6 +917,7 @@ Schema 원칙:
 ```text
 APEX/
 ├── README.md
+├── pyproject.toml
 │
 ├── docs/
 │   ├── API_INTERFACE.md
@@ -927,6 +928,16 @@ APEX/
 │   ├── JSON_SCHEMAS.md
 │   ├── MODULE_RESPONSIBILITIES.md
 │   └── REQUIREMENTS_TRACEABILITY.md
+│
+├── src/
+│   └── apex_forensic/
+│       ├── domain/
+│       ├── application/
+│       ├── ports/
+│       ├── adapters/
+│       ├── jobs/
+│       ├── cli/
+│       └── config/
 │
 ├── schemas/
 │   └── v1/
@@ -953,6 +964,11 @@ APEX/
     ├── validate_design.mjs
     ├── validate_design_basic.py
     └── validate_design.sh
+
+tests/
+├── unit/
+├── integration/
+└── conftest.py
 ```
 
 ---
@@ -989,9 +1005,13 @@ APEX/
 
 ### 구현 예정
 
-- [ ] Project Skeleton 및 공통 Infrastructure
-- [ ] Case / Evidence / Hash 관리
-- [ ] Chain of Custody Ledger 및 검증 Service
+- [x] Phase 1 Core Foundation
+- [x] Project Skeleton 및 공통 Infrastructure
+- [x] Case / Evidence / Hash 관리
+- [x] Chain of Custody Ledger 및 검증 Service
+- [x] SQLite Repository 기반 저장
+- [x] CLI Smoke Test Interface
+- [x] Unit / Integration Test
 - [ ] Progressive File System 및 Indexing
 - [ ] Registry / Event Log / Prefetch Analyzer
 - [ ] Timeline / Search / Keyword Set
@@ -1039,6 +1059,9 @@ APEX/
 - Hash 및 무결성 검증
 - Custody 기본 Event
 - Timezone 기본 설정
+- Job 및 Progress 기본 구조
+- JSON Schema 기반 출력 검증
+- CLI Smoke Test Interface
 
 ### Phase 2 — Progressive File System
 
@@ -1151,6 +1174,89 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 - 실제 조사 Workflow 적합성
 
 공식 승인이나 협력이 확정되지 않은 기관명은 인증 또는 협력 기관으로 표시하지 않습니다.
+
+---
+
+## Phase 1 실행 방법
+
+현재 실행 구현은 Phase 1 Core Foundation에 한정됩니다. Evidence 원본은 읽기 전용으로 열고,
+Directory Evidence는 Metadata 등록만 지원하며 Directory 전체 Hash는 아직 지원하지 않습니다.
+
+### 가상환경 생성 및 Dependency 설치
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+```
+
+### 테스트 실행
+
+```bash
+.venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy src
+```
+
+### Database 초기화
+
+```bash
+.venv/bin/apex-forensic init --db ./apex.db
+```
+
+### CLI 예시
+
+```bash
+.venv/bin/apex-forensic --db ./apex.db case create \
+  --name "테스트 사건" \
+  --investigator "권태욱" \
+  --description "Phase 1 Test" \
+  --json
+
+.venv/bin/apex-forensic --db ./apex.db evidence add \
+  --case-id <case_id> \
+  --path ./sample.bin \
+  --json
+
+.venv/bin/apex-forensic --db ./apex.db evidence hash \
+  --evidence-id <evidence_id> \
+  --algorithm sha256 \
+  --json
+
+.venv/bin/apex-forensic --db ./apex.db evidence verify \
+  --evidence-id <evidence_id> \
+  --json
+
+.venv/bin/apex-forensic --db ./apex.db custody list \
+  --evidence-id <evidence_id> \
+  --json
+```
+
+### 현재 지원되는 Evidence 범위
+
+- 일반 File / Logical File byte stream 등록
+- E01, RAW, DD, IMG, VHD, VHDX 파일의 Metadata 등록과 byte stream hash
+- Directory Evidence Metadata 등록
+- MD5, SHA-1, SHA-256 Streaming Hash
+- 저장 Hash 재검증과 `HASH_VERIFIED` Custody Event
+
+### 현재 지원되지 않는 기능
+
+- E01 / RAW / VHD 내부 File System Parsing
+- Registry, Event Log, Prefetch, Browser, Media Artifact Parser
+- Progressive Indexing 전체 기능과 Full Text Index
+- GUI, Backend Web Server, MCP Server/Tool, LLM/Prompt/Agent Loop
+- OCR/STT, FFmpeg, YARA, PDF/HTML Renderer, 전자서명, Benchmark
+
+### 설계 검증 명령
+
+```bash
+python3 -X utf8 tools/validate_design_basic.py
+node tools/validate_design.mjs
+bash ./tools/validate_design.sh
+```
+
+Ajv CLI가 로컬에 설치되어 있지 않으면 Shell Wrapper는 Ajv Strict 검증을 생략하고 사유를
+출력합니다.
 
 ---
 

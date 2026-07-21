@@ -30,6 +30,15 @@ Phase는 Acceptance Gate 통과 후 다음 단계로 진행한다. MCP Server와
 - Directory Evidence Reader, Format Probe, SHA-256/MD5 Streaming Hash
 - Job State Machine, Case별 단일 Writer, Audit Event
 
+현재 구현 상태:
+
+- `src/apex_forensic` 기반 Python 패키지와 CLI Entry Point 구현
+- Case/Evidence/Hash/Verification/Custody/Job Phase 1 서비스 구현
+- Phase 1 SQLite Table, WAL/Foreign Key 설정, Custody Append-only Trigger 구현
+- MD5, SHA-1, SHA-256 Streaming Hash와 변경 감지, 취소, Progress 구현
+- Case/Evidence/Job/Custody JSON Schema 검증 테스트 구현
+- Phase 2 이후 File System Parsing, Artifact Parser, Progressive Indexing 전체 기능은 미구현
+
 Acceptance Gate:
 
 - Evidence를 쓰기 모드로 열지 않음을 Test로 검증

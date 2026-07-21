@@ -50,6 +50,26 @@
           "if": {
             "properties": {
               "algorithm": {
+                "const": "SHA1"
+              }
+            },
+            "required": [
+              "algorithm"
+            ]
+          },
+          "then": {
+            "properties": {
+              "digest_hex": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "algorithm": {
                 "const": "SHA512"
               }
             },
@@ -80,6 +100,7 @@
           "enum": [
             "SHA256",
             "MD5",
+            "SHA1",
             "SHA512"
           ]
         },

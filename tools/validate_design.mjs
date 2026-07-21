@@ -376,7 +376,7 @@ for (const [file, schema] of schemas) {
 
 check(fs.existsSync(path.join(root, "tools", "validate_design_basic.py")), "basic validation fallback is missing");
 
-for (const sourceDirectory of ["src", "mcp", "prompts"]) {
+for (const sourceDirectory of ["mcp", "prompts"]) {
   check(!fs.existsSync(path.join(root, sourceDirectory)), `forbidden implementation directory exists: ${sourceDirectory}`);
 }
 

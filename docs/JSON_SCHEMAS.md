@@ -33,6 +33,7 @@
 
 1. `schema_version`은 Semantic Version 문자열이며 API Envelope에 항상 포함한다.
 2. ID는 UUID, 시간은 UTC RFC 3339 `date-time`, Hash는 소문자 Hex로 표현한다.
+   Phase 1 실행 구현은 MD5, SHA-1, SHA-256을 지원한다.
 3. 큰 정수 Offset/Size는 JSON 정수로 정의한다. JavaScript Client는 Safe Integer 검사를 한다.
 4. Enum은 안정적 대문자 `SNAKE_CASE`를 사용한다.
 5. 알 수 없음과 값 없음은 `null`로 명시하며 빈 문자열로 대체하지 않는다.
@@ -227,7 +228,7 @@ Keyword Set Version 계약을 사용한다.
 - AI Keyword의 Reason/Citation 필수 계약 누락
 - Machine Candidate의 Confidence/Review/Locator 누락
 - Job/Search/Context의 Partial Result 계약 누락
-- `src`, `mcp`, `prompts` 또는 Python 실행 구현 추가
+- Phase 1 범위를 벗어난 `mcp`, `prompts` 또는 MCP/LLM/OCR/STT/PDF 실행 구현 추가
 - MCP/LLM/Prompt/OCR/STT/PDF 실행 의존성 추가
 
 Node/Ajv가 없는 환경에서는 Python 기본 검증으로 JSON Syntax, 파일, Markdown Link,

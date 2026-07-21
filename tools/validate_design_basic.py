@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standard-library fallback checks for the APEX design-only repository."""
+"""Standard-library fallback checks for the APEX design and Phase 1 repository."""
 
 from __future__ import annotations
 
@@ -141,8 +141,11 @@ api_keys = [f"{method} {endpoint}" for method, endpoint in api_rows]
 api_duplicates = sorted({item for item in api_keys if api_keys.count(item) > 1})
 check(not api_duplicates, "duplicate API endpoints: " + ", ".join(api_duplicates))
 
-for forbidden in ("src", "mcp", "prompts"):
-    check(not (ROOT / forbidden).exists(), f"forbidden implementation directory exists: {forbidden}")
+for forbidden in ("mcp", "prompts"):
+    check(
+        not (ROOT / forbidden).exists(),
+        f"forbidden implementation directory exists: {forbidden}",
+    )
 
 if errors:
     print(f"Basic design validation failed with {len(errors)} error(s):", file=sys.stderr)
