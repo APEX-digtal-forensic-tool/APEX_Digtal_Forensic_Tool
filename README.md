@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트는 **Phase 1 Core Foundation 구현 완료** 상태입니다.
-> Case·Evidence 관리, MD5·SHA-1·SHA-256 Streaming Hash와 무결성 검증, SQLite Repository, Append-only Chain of Custody, Job·Progress·Cancellation, JSON Schema 검증, CLI 및 Unit·Integration Test가 구현되었습니다.
+> 현재 프로젝트는 **Phase 2 Progressive File System & Indexing 구현 완료** 상태입니다.
+> Phase 1의 Case·Evidence·Hash·SQLite·Chain of Custody 기반 위에 Directory Evidence와 Logical File Evidence의 read-only metadata indexing, Quick Triage, Selected Scope, Full Analysis, Partial Result, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 CLI 조회 기능이 구현되었습니다.
 >
-> File System 내부 분석, Artifact Parser, Progressive Indexing 전체 기능, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Windows Artifact Parser, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
 
 ---
 
@@ -115,35 +115,31 @@ File Tree 및 Partial Result 표시
 Background Index 및 Artifact 분석
 ```
 
-지원 예정 Analysis Profile:
+현재 Directory Evidence와 Logical File Evidence에서 지원하는 Analysis Profile:
 
-| Profile | 목적 | 대표 범위 |
+| Profile | 목적 | 현재 구현 범위 |
 |---|---|---|
-| Quick Triage | File Tree와 최근 활동 후보를 빠르게 제공 | Partition, 경로, 이름, 크기, 형식, 기본 시간, 삭제 여부 |
-| Selected Scope | 사용자가 선택한 범위를 우선 분석 | 선택 Evidence, File, Artifact, Time Range |
-| Full Analysis | 전체 재현 가능한 분석 수행 | 전체 Hash, Metadata, Index, Artifact, Timeline, Media |
-| Custom Profile | Analyzer와 Option을 직접 구성 | Hash, Index, Artifact Enable/Disable, Worker 정책 |
+| Quick Triage | 첫 File Tree를 빠르게 제공 | Root와 제한된 Depth·Item Budget의 Metadata 우선 수집, Partial Result 표시 |
+| Selected Scope | 사용자가 선택한 Directory 또는 Node를 우선 처리 | 선택 Scope를 Background Queue보다 높은 우선순위로 처리 |
+| Full Analysis | 전체 Directory Metadata Tree를 완성 | Checkpoint를 재사용하여 전체 Node를 Index하고 Coverage를 COMPLETE로 변경 |
+| Custom Profile | 안전한 Option으로 Index 범위를 조정 | Max Depth, Item Budget, Batch Size, Include·Exclude Pattern, Link Policy |
 
-Index Job은 다음 기능을 지원하도록 설계합니다.
+현재 구현된 Index Job 기능:
 
-- Background Indexing
 - Priority Queue
-- Pause
-- Resume
-- Cancel
+- Selected Scope 우선 처리
+- Cooperative Pause·Resume·Cancel
 - Checkpoint 및 Resume
-- 처리 Item 수
-- 추정 전체 Item 수
-- 처리량
-- 경과 시간
-- 추정 잔여 시간
-- ETA Confidence
-- 현재 Analyzer
-- Worker 수
-- Cache Hit/Miss
-- Partial Result 조회
+- Partial Result와 Coverage 상태
+- 처리·발견·건너뜀 Item 수
+- Warning 및 Error 수
+- 현재 처리 경로
+- 경과 시간과 처리량
+- 근거가 충분한 경우의 ETA 및 ETA Confidence
+- SQLite Batch 저장
+- Opaque Stable Cursor Pagination
 
-ETA는 확정 시간이 아닌 추정치로 표시합니다.
+ETA는 확정 시간이 아닌 추정치로 표시하며, 계산 근거가 부족하면 `null` 또는 `UNKNOWN`으로 반환합니다.
 
 APEX는 현재 X-Ways 또는 Autopsy보다 빠르다고 단정하지 않습니다. 성능 결과는 동일한 Hardware, Evidence, 분석 범위, Cache 상태 및 Index 설정을 사용한 Benchmark 이후에만 문서화합니다.
 
@@ -445,6 +441,26 @@ Timezone 후보 출처:
 
 ---
 
+## 현재 구현 범위
+
+Phase 2는 Directory Evidence와 일반 Logical File Evidence를 대상으로 하는 Progressive File System & Indexing 기반을 구현했습니다. 구현된 범위는 read-only metadata index, Logical Directory Provider, provider capability contract, SQLite-backed priority queue/checkpoint/coverage, stable cursor pagination, CLI E2E 흐름, JSON Schema 계약 및 회귀 테스트다.
+
+지원 범위는 다음과 같다.
+
+- Directory Evidence는 `os.scandir()` 기반으로 원본 이름과 상대 경로를 손실 없이 보존하며 metadata만 수집한다.
+- 일반 logical file evidence는 하나의 root/file node로 표현한다.
+- Quick Triage는 기본 깊이 제한으로 빠른 partial tree를 제공하고, Full Analysis는 전체 directory metadata tree를 완료한다.
+- Selected Scope는 선택된 directory/node를 background scope보다 우선 queue에 배치한다.
+- item budget은 deterministic partial result와 checkpoint/resume 재현에 사용한다.
+- pause, resume, cancel은 batch/checkpoint 경계에서 cooperative 방식으로 동작하며 partial 결과를 보존한다.
+- symlink 및 reparse point는 기본적으로 따라가지 않고 entry 자체만 가능한 metadata로 기록한다.
+- metadata indexing 중 file body를 읽지 않고 automatic hash를 수행하지 않는다. Hash는 기존 Evidence Hash Service의 명시 호출에서만 수행한다.
+- File tree 조회는 opaque stable cursor를 사용하며 query option과 cursor fingerprint 불일치를 검증한다.
+
+Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, NTFS/FAT/exFAT/ext 직접 parser, deleted file recovery, slack/unallocated 분석, FTS5/full text search, artifact parser, timeline 통합, GUI, web server, MCP/LLM/OCR/STT/report renderer 실행 코드다. 해당 내부 탐색 요청은 `CAPABILITY_UNAVAILABLE`로 표현한다.
+
+---
+
 ## 주요 기능
 
 ### Case Management
@@ -459,7 +475,7 @@ Timezone 후보 출처:
 
 ### Evidence Management
 
-지원 예정 형식:
+등록 가능한 Evidence 형식:
 
 - E01
 - RAW
@@ -483,16 +499,34 @@ Timezone 후보 출처:
 
 ### File System Analysis
 
-- Directory Tree 탐색
-- File 및 Folder 목록 조회
-- File Metadata 분석
-- 생성·수정·접근 시간 확인
-- 삭제 File 탐색
-- File Type 분류
-- File 상세 정보
-- Lazy Loading
-- Cursor Pagination
-- Raw Locator
+현재 구현:
+
+- Directory Evidence read-only Metadata 탐색
+- Logical File Evidence를 단일 Root/File Node로 표현
+- `os.scandir()` 기반 순회
+- 원본 이름과 한글·Unicode 상대 경로 보존
+- Root / Parent / Child / Node 상세 조회
+- Quick Triage Partial File Tree
+- Selected Scope 우선 처리
+- Full Metadata Index
+- Priority Queue와 SQLite Batch 저장
+- Checkpoint / Resume
+- Cooperative Pause / Cancel
+- Partial Result 및 Coverage 상태
+- Opaque Stable Cursor Pagination
+- Symlink 및 Reparse Point 기본 미추적
+- 권한·변경 오류의 Warning 기록
+- 확장자 및 표준 `mimetypes` 기반 MIME Candidate
+- Metadata Index 중 File Body 미열람 및 자동 Hash 미실행
+
+현재 제한:
+
+- E01 / RAW / DD / IMG / VHD / VHDX 내부 탐색은 `CAPABILITY_UNAVAILABLE`
+- 삭제 File 탐색 및 복구 미지원
+- NTFS / FAT / exFAT / ext 직접 Parser 미지원
+- Unallocated / Slack Space 분석 미지원
+- File Content 기반 Magic Detection 미지원
+- Disk Image Raw Locator 미지원
 
 ### Windows Artifact Analysis
 
@@ -953,37 +987,41 @@ APEX는 다음 원칙에 따라 디지털 증거를 처리합니다.
 ```text
 APEX/
 ├── README.md
+├── pyproject.toml
 │
 ├── docs/
 │   ├── API_INTERFACE.md
 │   ├── ARCHITECTURE.md
 │   ├── DATABASE_SCHEMA.md
 │   ├── DIRECTORY_STRUCTURE.md
+│   ├── FORENSIC_ENGINE.md
+│   ├── IMPLEMENTATION_DECISIONS.md
 │   ├── IMPLEMENTATION_ROADMAP.md
 │   ├── JSON_SCHEMAS.md
 │   ├── MODULE_RESPONSIBILITIES.md
 │   └── REQUIREMENTS_TRACEABILITY.md
 │
+├── src/
+│   └── apex_forensic/
+│       ├── adapters/
+│       │   ├── filesystem/
+│       │   ├── hashing/
+│       │   ├── persistence/
+│       │   └── schema/
+│       ├── application/
+│       │   └── services/
+│       ├── cli/
+│       ├── config/
+│       ├── domain/
+│       ├── jobs/
+│       └── ports/
+│
 ├── schemas/
 │   └── v1/
-│       ├── ai-enrichment.schema.json
-│       ├── analysis-context.schema.json
-│       ├── analysis-profile.schema.json
-│       ├── api-response.schema.json
-│       ├── artifact.schema.json
-│       ├── case.schema.json
-│       ├── chain-of-custody.schema.json
-│       ├── citation.schema.json
-│       ├── common.schema.json
-│       ├── evidence.schema.json
-│       ├── file.schema.json
-│       ├── job.schema.json
-│       ├── keyword-recommendation.schema.json
-│       ├── machine-extraction.schema.json
-│       ├── report.schema.json
-│       ├── search.schema.json
-│       ├── timeline-event.schema.json
-│       └── ui-context.schema.json
+│
+├── tests/
+│   ├── integration/
+│   └── unit/
 │
 └── tools/
     ├── validate_design.mjs
@@ -998,6 +1036,8 @@ APEX/
 | 산출물 | 문서 |
 |---|---|
 | 전체 Architecture 및 품질 속성 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
+| Forensic Core Engine 구현 및 사용법 | [`docs/FORENSIC_ENGINE.md`](./docs/FORENSIC_ENGINE.md) |
+| 구현 결정 기록 | [`docs/IMPLEMENTATION_DECISIONS.md`](./docs/IMPLEMENTATION_DECISIONS.md) |
 | Directory Structure | [`docs/DIRECTORY_STRUCTURE.md`](./docs/DIRECTORY_STRUCTURE.md) |
 | Module 역할 및 의존성 | [`docs/MODULE_RESPONSIBILITIES.md`](./docs/MODULE_RESPONSIBILITIES.md) |
 | Database Schema | [`docs/DATABASE_SCHEMA.md`](./docs/DATABASE_SCHEMA.md) |
@@ -1027,33 +1067,50 @@ APEX/
 - [x] Provider-neutral AI 경계
 - [x] MCP Integration Boundary
 - [x] Progressive Indexing 및 Analysis Profile
-- [x] Timezone 탐지·정규화·Audit
-- [x] AI Keyword Recommendation
-- [x] Search Reproduction
-- [x] Append-only Chain of Custody
-- [x] Simple / Detailed / Raw View
-- [x] Browser Communications MVP
-- [x] Images / Videos MVP
+- [x] Timezone 탐지·정규화·Audit 설계
+- [x] AI Keyword Recommendation 계약
+- [x] Search Reproduction 설계
+- [x] Append-only Chain of Custody 설계
+- [x] Simple / Detailed / Raw View 설계
+- [x] Browser Communications MVP 설계
+- [x] Images / Videos MVP 설계
 - [x] OCR/STT Machine-extracted Candidate 계약
-- [x] Report Human Review 및 Approval
-- [x] 한국어 및 Localization
+- [x] Report Human Review 및 Approval 설계
+- [x] 한국어 및 Localization 설계
 - [x] 외부 전문가 검증 계획
 - [x] 설계 검증 도구
 
+### 구현 완료
+
+- [x] Phase 1 Core Foundation
+- [x] Project Skeleton 및 공통 Infrastructure
+- [x] Case / Evidence / Hash 관리
+- [x] SQLite Repository
+- [x] Chain of Custody Ledger 및 Hash Chain 검증
+- [x] Job / Progress / Cancellation 기본 구조
+- [x] CLI 및 JSON Schema 검증
+- [x] Unit / Integration Test
+- [x] Phase 2 Progressive File System 및 Indexing
+- [x] Logical Directory / Logical File Provider
+- [x] Quick Triage / Selected Scope / Full Analysis
+- [x] Partial Result 및 Coverage
+- [x] Priority Queue / Checkpoint / Resume
+- [x] Cooperative Pause / Cancel
+- [x] Stable Cursor Pagination
+- [x] 한글 및 Unicode Path Round Trip
+
 ### 구현 예정
 
-- [ ] Project Skeleton 및 공통 Infrastructure
-- [ ] Case / Evidence / Hash 관리
-- [ ] Chain of Custody Ledger 및 검증 Service
-- [ ] Progressive File System 및 Indexing
+- [ ] E01 / RAW / DD / IMG / VHD / VHDX 내부 File System Parsing
+- [ ] 삭제 File Recovery 및 Unallocated / Slack 분석
 - [ ] Registry / Event Log / Prefetch Analyzer
 - [ ] Timeline / Search / Keyword Set
-- [ ] Timezone Resolver 및 Timestamp Normalizer
+- [ ] Timezone Resolver 및 Timestamp Normalizer 확장
 - [ ] Browser Communications Analyzer
 - [ ] Images / Videos Analyzer
 - [ ] OCR/STT Provider 및 Candidate Review
-- [ ] GUI Context 및 Scope별 Analysis Context
-- [ ] Simple / Detailed / Raw View
+- [ ] GUI Context 및 Scope별 Analysis Context 실행 구현
+- [ ] Simple / Detailed / Raw View 실행 구현
 - [ ] MCP Adapter용 공개 Interface
 - [ ] AI Keyword Recommendation 및 Citation Workflow
 - [ ] Report Review / Approval / PDF·HTML Export
@@ -1084,26 +1141,34 @@ APEX/
 - OCR/STT Provider 기술 검토
 - External Validation Plan
 
-### Phase 1 — Core Foundation
+### Phase 1 — Core Foundation — 완료
 
-- Project Skeleton
-- Case Manager
-- Evidence Manager
-- Hash 및 무결성 검증
-- Custody 기본 Event
-- Timezone 기본 설정
+- [x] Project Skeleton
+- [x] Case Manager
+- [x] Evidence Manager
+- [x] Hash 및 무결성 검증
+- [x] Custody 기본 Event 및 Hash Chain
+- [x] Timezone 기본 설정
+- [x] Job / Progress / Cancellation 기본 구조
+- [x] JSON Schema 기반 출력 검증
+- [x] CLI Smoke Test Interface
+- [x] Unit / Integration Test
 
-### Phase 2 — Progressive File System
+### Phase 2 — Progressive File System — 완료
 
-- File System Analyzer
-- Quick Triage
-- File Tree 우선 표시
-- Background Index
-- Priority Queue
-- Pause / Resume / Cancel
-- Partial Result
-- Lazy Loading
-- Cursor Pagination
+- [x] File System Domain Model 및 Provider Port
+- [x] Logical Directory / Logical File Provider
+- [x] Quick Triage
+- [x] Selected Scope Priority
+- [x] Full Metadata Index
+- [x] Priority Queue
+- [x] Cooperative Pause / Resume / Cancel
+- [x] Partial Result 및 Coverage
+- [x] Checkpoint / Resume
+- [x] SQLite Batch Persistence
+- [x] Stable Cursor Pagination
+- [x] CLI 및 JSON Schema 확장
+- [x] Unit / Integration Test
 
 ### Phase 3 — Windows Artifact
 
