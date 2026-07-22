@@ -1286,3 +1286,21 @@ AI가 생성한 분석 결과와 Report는 분석 보조 자료이며, 최종 �
 - 분석 결과 재현 가능성 확보
 - Chain of Custody Event 불변성 유지
 - 검증되지 않은 성능 또는 법적 효력 주장 금지
+
+## Phase 2 구현 업데이트
+
+Phase 2는 Directory Evidence와 일반 Logical File Evidence를 대상으로 하는 Progressive File System & Indexing 기반을 구현한다. 구현된 범위는 read-only metadata index, Logical Directory Provider, provider capability contract, SQLite-backed priority queue/checkpoint/coverage, stable cursor pagination, CLI E2E 흐름, JSON Schema 계약 및 회귀 테스트다.
+
+지원 범위는 다음과 같다.
+
+- Directory Evidence는 `os.scandir()` 기반으로 원본 이름과 상대 경로를 손실 없이 보존하며 metadata만 수집한다.
+- 일반 logical file evidence는 하나의 root/file node로 표현한다.
+- Quick Triage는 기본 깊이 제한으로 빠른 partial tree를 제공하고, Full Analysis는 전체 directory metadata tree를 완료한다.
+- Selected Scope는 선택된 directory/node를 background scope보다 우선 queue에 배치한다.
+- item budget은 deterministic partial result와 checkpoint/resume 재현에 사용한다.
+- pause, resume, cancel은 batch/checkpoint 경계에서 cooperative 방식으로 동작하며 partial 결과를 보존한다.
+- symlink 및 reparse point는 기본적으로 따라가지 않고 entry 자체만 가능한 metadata로 기록한다.
+- metadata indexing 중 file body를 읽지 않고 automatic hash를 수행하지 않는다. Hash는 기존 Evidence Hash Service의 명시 호출에서만 수행한다.
+- File tree 조회는 opaque stable cursor를 사용하며 query option과 cursor fingerprint 불일치를 검증한다.
+
+Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, NTFS/FAT/exFAT/ext 직접 parser, deleted file recovery, slack/unallocated 분석, FTS5/full text search, artifact parser, timeline 통합, GUI, web server, MCP/LLM/OCR/STT/report renderer 실행 코드다. 해당 내부 탐색 요청은 `CAPABILITY_UNAVAILABLE`로 표현한다.

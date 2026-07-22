@@ -556,3 +556,22 @@ Hash/Index, Cache, Worker, Storage, Tool/Analyzer Version과 측정값을 기록
 | `422` | `TIMEZONE_AMBIGUOUS` | 확인이 필요한 DST/Timezone 해석 |
 | `422` | `CITATION_REQUIRED` | AI Candidate/Statement에 근거 누락 |
 | `501` | `MACHINE_EXTRACTION_ADAPTER_UNAVAILABLE` | OCR/STT Adapter 미설치 |
+
+## Phase 2 CLI/Application Interface
+
+Phase 2 exposes the implemented filesystem indexing workflow through the application service and CLI, not through a new web server.
+
+CLI-equivalent commands:
+
+```text
+apex-forensic evidence index --case-id <id> --evidence-id <id> --profile QUICK_TRIAGE|SELECTED_SCOPE|FULL_ANALYSIS|CUSTOM
+apex-forensic evidence index-status --job-id <id>
+apex-forensic evidence index-resume --job-id <id>
+apex-forensic evidence index-cancel --job-id <id>
+apex-forensic fs roots --evidence-id <id>
+apex-forensic fs list --evidence-id <id> [--parent-node-id <id>] [--cursor <opaque>] [--limit <n>]
+apex-forensic fs show --node-id <id>
+apex-forensic fs prioritize --job-id <id> --node-id <id>
+```
+
+All commands keep `--db` and `--json`. File tree pagination uses an opaque cursor containing a query fingerprint and last stable sort key; changing filter/scope options invalidates the cursor with a structured validation error. Disk image internal traversal returns `CAPABILITY_UNAVAILABLE` rather than a successful empty tree.

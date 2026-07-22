@@ -235,3 +235,14 @@ Node/Ajv가 없는 환경에서는 Python 기본 검증으로 JSON Syntax, 파�
 Requirement 중복과 로컬 `$ref` 파일을 검사한다. Node가 있으면 구조/순환 참조 검사를 추가하고,
 로컬 Ajv가 설치된 경우에만 Strict Compile을 실행한다. Ajv가 없으면 기본 검증 성공을 유지하고
 생략 이유를 출력한다.
+
+## Phase 2 Schema Contracts
+
+Phase 2 extends existing Draft 2020-12 schemas rather than weakening validation.
+
+- `file.schema.json` now accepts legacy `fileEntry`, Phase 2 `fileSystemNode`, and `fileTreePage` contracts.
+- `job.schema.json` includes `INDEX`, pause/resume statuses, job revision, index revision, and filesystem progress counters.
+- `evidence.schema.json` includes DD and IMG format metadata registration.
+- `analysis-profile.schema.json` accepts the Phase 2 `CUSTOM` profile spelling while preserving `CUSTOM_PROFILE` compatibility.
+
+Filesystem nodes explicitly require provider id/version, original path strings, comparison path, node type, metadata, raw timestamp values, UTC-normalized timestamps, raw locator, partial flag, and index revision. Unsupported provider capability is represented as an error response, not as a successful result.

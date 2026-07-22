@@ -228,3 +228,16 @@
 | Machine Candidate/Review | Media Extraction Candidate Store | Search/AI/Report는 상태 포함 조회 |
 | Raw Byte Range | Evidence Manager/Raw Locator | Frontend는 제한된 Chunk 표시 |
 | Benchmark/External Review | External Validation Plan | Backend는 공개·동의 정책 협의 |
+
+## Phase 2 Traceability Update
+
+Phase 2 implementation now maps the progressive indexing requirements to concrete artifacts:
+
+- Domain contract: `FileSystemNode`, `IndexCoverage`, provider capability DTOs, index/pause/resume/cancel job states.
+- Provider: Logical directory/file metadata provider with Unicode path preservation and no default symlink/reparse traversal.
+- Persistence: `fs_nodes`, provider metadata, index job metadata, queue/checkpoint, coverage, and scan event tables.
+- Interface: CLI commands for indexing, status, resume, cancel, root/list/show, and prioritization.
+- Schema: `file.schema.json`, `job.schema.json`, `evidence.schema.json`, and `analysis-profile.schema.json` extensions.
+- Verification: unit and integration coverage for partial/resume, selected scope priority, stable cursor pagination, unsupported disk images, schema validation, and Phase 1 regressions.
+
+Unsupported Phase 2 boundaries remain explicit and are not traced as completed: disk image internal parsing, native filesystem parsers, deleted file recovery, full text search, artifact/timeline integrations, GUI, MCP, LLM, OCR/STT, and report rendering.

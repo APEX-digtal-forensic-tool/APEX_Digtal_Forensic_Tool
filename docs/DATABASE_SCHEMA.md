@@ -1116,3 +1116,19 @@ Observed Fact가 아니며 Review 상태를 항상 함께 조회한다.
 
 Live Progress와 Live GUI Context는 Session Store를 우선한다. 재현, Audit, Recovery와 Report에
 필요한 Snapshot만 DB에 저장한다.
+
+## Phase 2 SQLite Tables
+
+The SQLite repository now applies an idempotent `phase2-progressive-filesystem-indexing` migration while preserving Phase 1 tables, WAL, foreign keys, and append-only custody triggers.
+
+Implemented tables:
+
+- `fs_providers`: provider id/version, capabilities, and metadata.
+- `fs_nodes`: provider-neutral filesystem nodes with original path strings, comparison path, metadata, raw/UTC timestamps, raw locator, partial flag, and index revision.
+- `fs_index_jobs`: filesystem-specific job metadata linked to the existing `jobs` table.
+- `fs_index_queue`: bounded priority queue/checkpoint state for resumable traversal.
+- `fs_index_checkpoints`: resumable progress snapshot for current path, pending count, processed count, and discovered count.
+- `fs_index_coverage`: NOT_STARTED/PARTIAL/COMPLETE/FAILED/CANCELLED coverage counters and ETA fields.
+- `fs_scan_events`: warnings/errors such as permission denied, file changed during scan, and callback errors.
+
+`fs_nodes` enforces uniqueness by case, evidence, provider, provider version, and original relative path to prevent duplicate node creation across resume or repeated indexing. The custody ledger remains append-only and evidence deletion/original modification is not added.
