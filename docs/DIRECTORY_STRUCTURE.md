@@ -228,3 +228,21 @@ tools/
 MCP Server, LLM API, Prompt, Agent Loop, OCR/STT Provider 실행 코드는 Core 트리에 만들지
 않는다. Live Progress와 Live UI Context는 Session Store 우선이며 재현·Audit·Report에 필요한
 Checkpoint와 Snapshot만 Case DB에 저장한다.
+
+## Phase 2 Source Layout
+
+Phase 2 adds these implementation areas under the existing package layout:
+
+```text
+src/apex_forensic/adapters/filesystem/
+  logical.py                    # Logical directory/file provider
+src/apex_forensic/application/services/file_system_index.py
+  # Progressive index coordinator and file tree query facade
+src/apex_forensic/domain/models/filesystem.py
+  # FileSystemNode, IndexCoverage, cursor page DTOs
+src/apex_forensic/ports/filesystem_provider.py
+src/apex_forensic/ports/file_system_repository.py
+  # Provider and persistence ports
+```
+
+The existing CLI, service factory, schema validator, SQLite repository, domain enums, and job/cancellation helpers are extended rather than duplicated.

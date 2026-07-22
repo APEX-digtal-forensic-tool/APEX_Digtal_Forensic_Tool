@@ -163,6 +163,8 @@
           "enum": [
             "DIRECTORY",
             "RAW",
+            "DD",
+            "IMG",
             "E01",
             "VHD",
             "VHDX"

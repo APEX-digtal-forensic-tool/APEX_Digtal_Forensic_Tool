@@ -2,7 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.apex-forensics.dev/v1/file.schema.json",
   "title": "APEX File Entry",
-  "$ref": "#/$defs/fileEntry",
   "$defs": {
     "nullableTimestamp": {
       "oneOf": [
@@ -178,6 +177,386 @@
           "type": "null"
         }
       ]
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "nullableUuid": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableInteger": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "timestampMap": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "common.schema.json#/$defs/timestamp"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "fileSystemNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "evidence_id",
+        "filesystem_provider",
+        "parent_node_id",
+        "original_name",
+        "original_relative_path",
+        "display_path",
+        "comparison_path",
+        "node_type",
+        "file_size",
+        "extension",
+        "mime_candidate",
+        "mime_confidence",
+        "fs_metadata",
+        "platform",
+        "timestamp_meanings",
+        "raw_timestamps",
+        "utc_timestamps",
+        "timestamp_sources",
+        "is_deleted",
+        "is_readable",
+        "is_link",
+        "is_traversed",
+        "raw_locator",
+        "provider_metadata",
+        "is_partial",
+        "index_revision",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "parent_node_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "original_name": {
+          "type": "string"
+        },
+        "original_relative_path": {
+          "type": "string"
+        },
+        "display_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "comparison_path": {
+          "type": "string"
+        },
+        "node_type": {
+          "enum": [
+            "ROOT",
+            "DIRECTORY",
+            "FILE",
+            "SYMLINK",
+            "REPARSE_POINT",
+            "OTHER"
+          ]
+        },
+        "file_size": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "extension": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_candidate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_confidence": {
+          "enum": [
+            "HIGH",
+            "MEDIUM",
+            "LOW",
+            "UNKNOWN"
+          ]
+        },
+        "fs_metadata": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestamp_meanings": {
+          "$ref": "#/$defs/stringMap"
+        },
+        "raw_timestamps": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "utc_timestamps": {
+          "$ref": "#/$defs/timestampMap"
+        },
+        "timestamp_sources": {
+          "$ref": "#/$defs/stringMap"
+        },
+        "is_deleted": {
+          "type": "boolean"
+        },
+        "is_readable": {
+          "type": "boolean"
+        },
+        "is_link": {
+          "type": "boolean"
+        },
+        "is_traversed": {
+          "type": "boolean"
+        },
+        "raw_locator": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "provider_metadata": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "index_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "filesystem_provider": {
+          "$ref": "#/$defs/provider"
+        }
+      }
+    },
+    "indexCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "evidence_id",
+        "filesystem_provider",
+        "profile_type",
+        "option_fingerprint",
+        "status",
+        "discovered_items",
+        "processed_items",
+        "skipped_items",
+        "warning_count",
+        "error_count",
+        "current_path",
+        "elapsed_seconds",
+        "throughput_items_per_second",
+        "estimated_remaining_seconds",
+        "eta_confidence",
+        "index_revision",
+        "job_id",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "profile_type": {
+          "enum": [
+            "QUICK_TRIAGE",
+            "SELECTED_SCOPE",
+            "FULL_ANALYSIS",
+            "CUSTOM"
+          ]
+        },
+        "option_fingerprint": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "status": {
+          "enum": [
+            "NOT_STARTED",
+            "PARTIAL",
+            "COMPLETE",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "discovered_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "processed_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "current_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "elapsed_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "throughput_items_per_second": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "estimated_remaining_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "eta_confidence": {
+          "enum": [
+            "HIGH",
+            "MEDIUM",
+            "LOW",
+            "UNKNOWN"
+          ]
+        },
+        "index_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "job_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "created_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filesystem_provider": {
+          "$ref": "#/$defs/provider"
+        }
+      }
+    },
+    "fileTreePage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "page",
+        "coverage"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fileSystemNode"
+          }
+        },
+        "page": {
+          "$ref": "common.schema.json#/$defs/pageInfo"
+        },
+        "coverage": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/indexCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/fileEntry"
+    },
+    {
+      "$ref": "#/$defs/fileSystemNode"
+    },
+    {
+      "$ref": "#/$defs/fileTreePage"
+    }
+  ]
 }

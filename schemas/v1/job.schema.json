@@ -33,7 +33,12 @@
         "cache_hits",
         "cache_misses",
         "partial_results_available",
-        "status"
+        "status",
+        "discovered_items",
+        "skipped_items",
+        "warning_count",
+        "error_count",
+        "current_path"
       ],
       "properties": {
         "current": {
@@ -144,6 +149,28 @@
           "minimum": 0,
           "maximum": 100,
           "description": "Estimated completion percentage; null when the total cannot be estimated."
+        },
+        "discovered_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "current_path": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -166,6 +193,8 @@
         "profile_id",
         "priority",
         "checkpoint_available",
+        "job_revision",
+        "index_revision",
         "result_completeness"
       ],
       "properties": {
@@ -188,6 +217,7 @@
         "job_type": {
           "enum": [
             "HASH",
+            "VERIFY",
             "FS_INGEST",
             "ARTIFACT",
             "TIMELINE",
@@ -262,6 +292,18 @@
         },
         "result_completeness": {
           "$ref": "common.schema.json#/$defs/partialResult"
+        },
+        "job_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "index_revision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Filesystem index revision for INDEX jobs; null for non-index jobs."
         }
       }
     }

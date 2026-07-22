@@ -88,7 +88,9 @@ class EvidenceManager:
             else "apex.logical_file_reader"
         )
         capabilities = (
-            ["METADATA"] if evidence_type is EvidenceFormat.DIRECTORY else ["READ_STREAM"]
+            ["METADATA", "FILESYSTEM_INDEX"]
+            if evidence_type is EvidenceFormat.DIRECTORY
+            else ["READ_STREAM", "FILESYSTEM_INDEX"]
         )
         fingerprint = None
         if evidence_type is not EvidenceFormat.DIRECTORY:
@@ -442,6 +444,10 @@ class EvidenceManager:
         suffix = path.suffix.lower()
         if suffix == ".e01":
             return EvidenceFormat.E01
+        if suffix == ".dd":
+            return EvidenceFormat.DD
+        if suffix == ".img":
+            return EvidenceFormat.IMG
         if suffix == ".vhdx":
             return EvidenceFormat.VHDX
         if suffix == ".vhd":

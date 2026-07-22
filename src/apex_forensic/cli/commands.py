@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from apex_forensic.config import build_services
-from apex_forensic.domain.enums import CaseStatus, CustodyEventType, HashAlgorithm
+from apex_forensic.domain.enums import (
+    AnalysisProfileType,
+    CaseStatus,
+    CustodyEventType,
+    HashAlgorithm,
+)
 from apex_forensic.domain.errors import ApexError, ValidationError
 
 from .parser import build_parser
@@ -49,6 +54,8 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _evidence(args, services)
     if args.command == "custody":
         return _custody(args, services)
+    if args.command == "fs":
+        return _fs(args, services)
     raise ValidationError("Unknown command.", target="command")
 
 
@@ -100,7 +107,56 @@ def _evidence(args: Namespace, services: Any) -> Any:
             chunk_size=args.chunk_size,
         )
         return {"verification": verification.to_schema_dict(), "job": job.to_schema_dict()}
+    if args.evidence_command == "index":
+        job, coverage = services.fs.index_evidence(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_type=AnalysisProfileType(args.profile),
+            max_depth=args.max_depth,
+            item_budget=args.item_budget,
+            batch_size=args.batch_size,
+            selected_paths=args.selected_path,
+            selected_node_ids=args.selected_node_id,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+            max_queue_size=args.max_queue_size,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.evidence_command == "index-status":
+        return services.fs.index_status(args.job_id)
+    if args.evidence_command == "index-resume":
+        job, coverage = services.fs.resume_index_job(args.job_id, item_budget=args.item_budget)
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.evidence_command == "index-cancel":
+        return services.fs.cancel_index_job(args.job_id).to_schema_dict()
     raise ValidationError("Unknown evidence command.", target="evidence_command")
+
+
+def _fs(args: Namespace, services: Any) -> Any:
+    if args.fs_command == "roots":
+        return [node.to_schema_dict() for node in services.fs.get_root_nodes(args.evidence_id)]
+    if args.fs_command == "list":
+        page = services.fs.list_nodes(
+            evidence_id=args.evidence_id,
+            parent_node_id=args.parent_node_id,
+            all_nodes=args.all_nodes,
+            directories_only=args.directories_only,
+            files_only=args.files_only,
+            extension=args.extension,
+            name_or_path=args.filter,
+            cursor=args.cursor,
+            limit=args.limit,
+        )
+        return page.to_schema_dict()
+    if args.fs_command == "show":
+        return services.fs.get_node(args.node_id).to_schema_dict()
+    if args.fs_command == "prioritize":
+        return services.fs.prioritize_node(
+            args.job_id,
+            args.node_id,
+            priority=args.priority,
+        ).to_schema_dict()
+    raise ValidationError("Unknown filesystem command.", target="fs_command")
 
 
 def _custody(args: Namespace, services: Any) -> Any:
@@ -179,5 +235,9 @@ def _human_line(value: Any) -> str:
             return f"{value['hash']['algorithm']}  {value['hash']['digest']}"
         if "verification" in value:
             return f"{value['verification']['algorithm']}  {value['verification']['status']}"
+        if "node_type" in value and "display_path" in value:
+            return f"{value['node_type']}  {value['display_path']}"
+        if "items" in value and "page" in value:
+            return json.dumps(value, ensure_ascii=False)
         return json.dumps(value, ensure_ascii=False)
     return str(value)

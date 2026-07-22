@@ -73,6 +73,67 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_verify.add_argument("--chunk-size", type=int, default=1024 * 1024)
     evidence_verify.add_argument("--json", action="store_true")
 
+    evidence_index = evidence_commands.add_parser("index", help="Index filesystem metadata")
+    evidence_index.add_argument("--case-id", required=True)
+    evidence_index.add_argument("--evidence-id", required=True)
+    evidence_index.add_argument(
+        "--profile",
+        default="QUICK_TRIAGE",
+        choices=["QUICK_TRIAGE", "SELECTED_SCOPE", "FULL_ANALYSIS", "CUSTOM"],
+    )
+    evidence_index.add_argument("--max-depth", type=int)
+    evidence_index.add_argument("--item-budget", type=int)
+    evidence_index.add_argument("--batch-size", type=int, default=100)
+    evidence_index.add_argument("--max-queue-size", type=int, default=100_000)
+    evidence_index.add_argument("--selected-path", action="append", default=[])
+    evidence_index.add_argument("--selected-node-id", action="append", default=[])
+    evidence_index.add_argument("--include", action="append", default=[])
+    evidence_index.add_argument("--exclude", action="append", default=[])
+    evidence_index.add_argument("--json", action="store_true")
+
+    evidence_index_status = evidence_commands.add_parser(
+        "index-status", help="Show index job status"
+    )
+    evidence_index_status.add_argument("--job-id", required=True)
+    evidence_index_status.add_argument("--json", action="store_true")
+
+    evidence_index_resume = evidence_commands.add_parser("index-resume", help="Resume an index job")
+    evidence_index_resume.add_argument("--job-id", required=True)
+    evidence_index_resume.add_argument("--item-budget", type=int)
+    evidence_index_resume.add_argument("--json", action="store_true")
+
+    evidence_index_cancel = evidence_commands.add_parser("index-cancel", help="Cancel an index job")
+    evidence_index_cancel.add_argument("--job-id", required=True)
+    evidence_index_cancel.add_argument("--json", action="store_true")
+
+    fs_parser = subcommands.add_parser("fs", help="Filesystem tree commands")
+    fs_commands = fs_parser.add_subparsers(dest="fs_command", required=True)
+    fs_roots = fs_commands.add_parser("roots", help="List indexed root nodes")
+    fs_roots.add_argument("--evidence-id", required=True)
+    fs_roots.add_argument("--json", action="store_true")
+
+    fs_list = fs_commands.add_parser("list", help="List filesystem nodes")
+    fs_list.add_argument("--evidence-id", required=True)
+    fs_list.add_argument("--parent-node-id")
+    fs_list.add_argument("--all", action="store_true", dest="all_nodes")
+    fs_list.add_argument("--directories-only", action="store_true")
+    fs_list.add_argument("--files-only", action="store_true")
+    fs_list.add_argument("--extension")
+    fs_list.add_argument("--filter")
+    fs_list.add_argument("--cursor")
+    fs_list.add_argument("--limit", type=int, default=100)
+    fs_list.add_argument("--json", action="store_true")
+
+    fs_show = fs_commands.add_parser("show", help="Show one filesystem node")
+    fs_show.add_argument("--node-id", required=True)
+    fs_show.add_argument("--json", action="store_true")
+
+    fs_prioritize = fs_commands.add_parser("prioritize", help="Prioritize a directory node")
+    fs_prioritize.add_argument("--job-id", required=True)
+    fs_prioritize.add_argument("--node-id", required=True)
+    fs_prioritize.add_argument("--priority", type=int, default=0)
+    fs_prioritize.add_argument("--json", action="store_true")
+
     custody_parser = subcommands.add_parser("custody", help="Custody commands")
     custody_commands = custody_parser.add_subparsers(dest="custody_command", required=True)
     custody_list = custody_commands.add_parser("list", help="List custody events")

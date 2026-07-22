@@ -583,3 +583,20 @@ Workflow 적합성을 포함한다. 동일 조건이 아니면 제품 간 비교
 | MCP/AI | Keyword Candidate 생성, Scope 요약, AI Draft/Inference/Recommendation | 자동 Keyword 실행, Fact 확정, Scope 외 데이터 사용 |
 | Frontend | Profile/Progress, Timezone 확인, Keyword 승인, 세 View, Custody 입력, Candidate 검토 | 원본 수정, Engine 상태 우회 |
 | Backend | Session, Actor Identity, User/Role, Approval, Billing, 외부 검증 결과 관리 협의 | 포렌식 Parser와 AI 결론 생성 |
+
+## Phase 2 Runtime Architecture
+
+Phase 2 keeps the Phase 1 layered boundary. The application coordinator owns traversal order, checkpointing, progress state, and the single SQLite writer boundary. File System Provider implementations expose provider-neutral nodes and issues only; provider-specific `os.scandir()` details do not leak into domain consumers.
+
+The implemented runtime path is:
+
+```text
+EvidenceManager registered evidence
+    -> FileSystemIndexService
+    -> FileSystemProvider port
+    -> LogicalDirectoryFileSystemProvider
+    -> SQLiteRepository fs_nodes/fs_index_queue/fs_index_coverage
+    -> CLI or application query facade
+```
+
+Directory Evidence is read-only and metadata-only. The provider does not read file bodies, does not hash during indexing, and does not traverse symlinks or reparse points by default. Future native providers can implement the same provider port for disk images; Phase 2 returns `CAPABILITY_UNAVAILABLE` for E01/RAW/DD/IMG/VHD/VHDX internal traversal.

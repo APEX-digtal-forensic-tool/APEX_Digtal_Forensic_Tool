@@ -136,7 +136,8 @@
             "QUICK_TRIAGE",
             "SELECTED_SCOPE",
             "FULL_ANALYSIS",
-            "CUSTOM_PROFILE"
+            "CUSTOM_PROFILE",
+            "CUSTOM"
           ]
         },
         "revision": {

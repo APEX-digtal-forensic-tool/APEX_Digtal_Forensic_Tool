@@ -330,3 +330,11 @@ Report Module은 Profile/Partial/Timezone/Keyword/Custody/Raw/Machine Candidate 
 승인 Version에 고정한다. AI Draft는 다섯 분류를 유지하고 사람 검토 없이 승인될 수 없다.
 External Validation Plan은 공개/Synthetic Dataset과 동일 비교 조건을 기록하며 상태는
 `PLANNED`다. 외부 전문가 Identity 공개와 결과 관리는 별도 동의 및 Backend 합의가 필요하다.
+
+## Phase 2 Module Responsibilities
+
+- `FileSystemIndexService`: validates case/evidence state, creates INDEX jobs, schedules quick/full/selected/custom scopes, persists checkpoint/coverage, handles cooperative pause/cancel/resume, and exposes stable cursor queries.
+- `FileSystemProvider` port: defines capability lookup, evidence support, root lookup, directory entry traversal, metadata lookup, child lookup, raw locator creation, and provider version access.
+- `LogicalDirectoryFileSystemProvider`: implements read-only directory and logical file metadata collection with `os.scandir()`, deterministic sorting, Unicode-preserving path handling, and no default link traversal.
+- `SQLiteRepository`: remains the single writer for nodes, queue/checkpoints, coverage, provider metadata, scan events, and job state.
+- CLI: provides `evidence index`, `index-status`, `index-resume`, `index-cancel`, and `fs roots/list/show/prioritize` commands.

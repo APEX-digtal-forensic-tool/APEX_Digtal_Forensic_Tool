@@ -55,6 +55,16 @@ class JsonSchemaValidator:
 
         self.validate("evidence.schema.json", instance)
 
+    def validate_file_system_node(self, instance: Any) -> None:
+        """Validate a filesystem node DTO."""
+
+        self.validate("file.schema.json", instance)
+
+    def validate_file_tree_page(self, instance: Any) -> None:
+        """Validate a filesystem page DTO."""
+
+        self.validate("file.schema.json", instance)
+
     def validate_job(self, instance: Any) -> None:
         """Validate a Job DTO."""
 

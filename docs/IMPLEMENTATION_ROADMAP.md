@@ -305,3 +305,9 @@ AI Citation·한계 표시와 실제 조사 Workflow 적합성을 측정한다.
 Storage에서만 수행한다. 외부 검증은 공개 DFIR Dataset, Synthetic Evidence와 법적으로 사용
 가능한 Test Image만 사용하며 비공개 작전 자료, 개인정보와 기밀정보를 사용하지 않는다.
 외부 전문가 검증 상태는 구현·평가가 끝날 때까지 `PLANNED`다.
+
+## Phase 2 Completion Note
+
+Phase 2 Progressive File System & Indexing is implemented for Directory Evidence and ordinary Logical File Evidence. It includes the provider port, logical directory provider, progressive coordinator, SQLite persistence, partial/checkpoint/resume, cooperative pause/cancel, stable cursor queries, CLI commands, schemas, and tests.
+
+The next phase should connect native/disk-image providers through the existing provider port and add artifact/timeline/search integrations. E01/RAW/DD/IMG/VHD/VHDX internal parsing, deleted file recovery, FTS/full text search, and artifact parser execution remain intentionally out of scope.
