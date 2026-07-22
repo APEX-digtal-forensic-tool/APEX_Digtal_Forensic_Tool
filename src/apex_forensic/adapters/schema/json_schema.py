@@ -70,6 +70,11 @@ class JsonSchemaValidator:
 
         self.validate("job.schema.json", instance)
 
+    def validate_artifact(self, instance: Any) -> None:
+        """Validate an Artifact DTO."""
+
+        self.validate("artifact.schema.json", instance)
+
     def validate_custody_event(self, instance: Any) -> None:
         """Validate a custody event DTO."""
 

@@ -246,3 +246,23 @@ src/apex_forensic/ports/file_system_repository.py
 ```
 
 The existing CLI, service factory, schema validator, SQLite repository, domain enums, and job/cancellation helpers are extended rather than duplicated.
+
+## Phase 3 Source Layout
+
+Phase 3 keeps the `src/apex_forensic` package shape and adds artifact-specific code without adding
+GUI, MCP, OCR/STT, or LLM execution directories.
+
+```text
+src/apex_forensic/domain/models/artifact.py
+src/apex_forensic/ports/artifact_analyzer.py
+src/apex_forensic/ports/artifact_repository.py
+src/apex_forensic/application/services/artifact_analysis.py
+src/apex_forensic/adapters/artifacts/windows/registry.py
+src/apex_forensic/adapters/artifacts/windows/eventlog.py
+src/apex_forensic/adapters/artifacts/windows/prefetch.py
+```
+
+The existing `SQLiteRepository`, CLI parser/commands, service factory, JSON Schema validator, and
+domain enum module are extended in place. Tests use synthetic Registry export, Event XML, and Prefetch
+fixtures; optional binary hive/EVTX dependency tests may be skipped when the parser dependency is not
+installed.

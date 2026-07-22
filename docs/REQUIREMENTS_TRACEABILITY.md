@@ -241,3 +241,26 @@ Phase 2 implementation now maps the progressive indexing requirements to concret
 - Verification: unit and integration coverage for partial/resume, selected scope priority, stable cursor pagination, unsupported disk images, schema validation, and Phase 1 regressions.
 
 Unsupported Phase 2 boundaries remain explicit and are not traced as completed: disk image internal parsing, native filesystem parsers, deleted file recovery, full text search, artifact/timeline integrations, GUI, MCP, LLM, OCR/STT, and report rendering.
+
+## Phase 3 Traceability Update
+
+- Requirement scope: CORE-004 and VIEW-002 now have runtime coverage for Windows Registry, Event Log,
+  Prefetch, raw locators, citations, artifact persistence, and cursor queries.
+- Implementation: `ArtifactAnalysisService`, `ArtifactAnalyzer`/`ArtifactRepository` ports,
+  `WindowsRegistryAnalyzer`, `WindowsEventLogAnalyzer`, `WindowsPrefetchAnalyzer`, and
+  `SQLiteRepository` Phase 3 tables.
+- Interface: CLI commands for artifact discover/analyze/status/resume/cancel/list/show/warnings and
+  registry/eventlog/prefetch helper queries.
+- Schema: `artifact.schema.json` and `citation.schema.json` now validate Phase 3 artifact facts and
+  logical/byte raw locators.
+- Verification: unit and integration coverage for `.reg` encoding, autorun, USB, timezone,
+  UserAssist ROT13/safe counters, Event XML namespace fields, event subtype mapping, corrupt XML,
+  Prefetch bounds/unsupported/MAM handling, discovery from `fs_nodes`, SQLite reopen/resume, stable
+  cursor mismatch rejection, duplicate prevention, CLI E2E, and schema validation.
+
+Unsupported Phase 3 boundaries remain explicit and are not traced as completed: live Windows
+acquisition, remote Registry, credential/secret extraction, Registry transaction log recovery,
+deleted key recovery, Event Message DLL rendering, full EVTX fixture coverage when `python-evtx` is
+absent, full binary hive fixture coverage when `python-registry` is absent, Prefetch MAM
+decompression, timeline integration, FTS/search engine, GUI, MCP, LLM, OCR/STT, browser/media
+analyzers, and report rendering.

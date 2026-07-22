@@ -310,4 +310,25 @@ Storage에서만 수행한다. 외부 검증은 공개 DFIR Dataset, Synthetic E
 
 Phase 2 Progressive File System & Indexing is implemented for Directory Evidence and ordinary Logical File Evidence. It includes the provider port, logical directory provider, progressive coordinator, SQLite persistence, partial/checkpoint/resume, cooperative pause/cancel, stable cursor queries, CLI commands, schemas, and tests.
 
+## Phase 3 Completion Note
+
+Phase 3 Windows Artifact Analysis MVP is implemented for offline sources represented by the Phase 2
+filesystem index.
+
+- Registry: `.reg` parsing, key/value artifacts, autorun, USBSTOR, timezone, safe UserAssist parsing,
+  and optional `python-registry` binary hive capability reporting.
+- Event Log: exported Event XML parsing, namespace-safe field extraction, raw XML preservation,
+  subtype/title candidates for common Security/System/Sysmon IDs, and optional `python-evtx` EVTX
+  capability reporting.
+- Prefetch: minimal `.pf` metadata parser for versions 17/23/26/30, unsupported version separation,
+  and MAM compression detection without decompression.
+- Coordinator: discovery from `fs_nodes`, selected scope/include/exclude filters, item budget at
+  source boundaries, batch persistence, checkpoint/resume, cooperative pause/cancel, partial coverage,
+  duplicate source/analyzer/options prevention, and stable cursor queries.
+- SQLite/Schema/CLI/Tests/Docs: Phase 3 tables, JSON Schema updates, artifact CLI commands, synthetic
+  fixtures, SQLite reopen/resume coverage, and design validation support.
+
+Deferred to later phases: timeline integration, FTS/search engine, parallel workers/cache, raw byte
+view API, GUI, MCP, OCR/STT, LLM/AI flows, browser/media analyzers, and report rendering.
+
 The next phase should connect native/disk-image providers through the existing provider port and add artifact/timeline/search integrations. E01/RAW/DD/IMG/VHD/VHDX internal parsing, deleted file recovery, FTS/full text search, and artifact parser execution remain intentionally out of scope.

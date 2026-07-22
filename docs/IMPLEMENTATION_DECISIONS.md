@@ -27,3 +27,15 @@ Foundation. The implementation keeps Phase 2+ behavior out of runtime code.
 - Used separate `comparison_path` and cursor fingerprints for search/pagination while preserving original names and relative paths unchanged.
 - Returned `CAPABILITY_UNAVAILABLE` for disk image internal traversal until native providers are implemented.
 - ETA remains `null` with `UNKNOWN` confidence when there is insufficient total-work evidence.
+
+## Phase 3 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| Artifact model uses explicit Phase 3 fields plus compatibility aliases | The goal requires `artifact_id`, `source_file_node_id`, parser backend/version, parse status, raw locator, citations, and partial state, while earlier docs referenced `id`/`payload`/`provenance`. | `ArtifactRecord.to_schema_dict()` emits required Phase 3 fields and compatibility aliases without weakening validation. |
+| `.reg`, Event XML, and minimal Prefetch parsers are local adapters | These formats can be handled safely with bounded standard-library parsing and synthetic fixtures. | Core tests do not require optional binary parser packages or external fixtures. |
+| Binary Registry/EVTX support is capability-first | Full binary parsers should use maintained libraries and stay isolated in adapters. | `python-registry` and `python-evtx` are optional dependencies; absence returns `CAPABILITY_UNAVAILABLE`/`UNSUPPORTED`. |
+| Artifact discovery reuses `fs_nodes` only | Phase 3 must not rescan directories or access paths not represented by the Phase 2 index. | `ArtifactAnalysisService` discovers candidates from stored nodes and validates local paths under the evidence root before parsing. |
+| Item budget is applied at source boundaries | The MVP does not implement source-internal parser cursors for `.reg` sections or EVTX record offsets. | Resume remains deterministic; a single source may emit more artifacts than the requested budget, then the job pauses before the next source. |
+| Logical raw locators may have null byte offsets | Registry keys/values and XML records often have logical provenance without parser-exposed byte offsets. | `citation.schema.json` allows `offset`/`length` to be null and records `locator_type`, `limitations`, and details. |
+| New Windows artifact schema stays in `artifact.schema.json` | The common artifact contract is shared by Registry, Event Log, and Prefetch records. | No additional Windows-only schema file was needed for Phase 3. |

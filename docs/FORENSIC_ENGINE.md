@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고합니다.
 
 단, Autopsy의 Java 코드나 NetBeans 애플리케이션 구조를 기반으로 구현하지 않습니다. APEX의 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독자적인 구조를 사용합니다.
 
-> 현재 Forensic Core Engine은 **Phase 1 Core Foundation 구현 완료** 상태입니다.
-> Case·Evidence 관리, Streaming Hash와 무결성 검증, SQLite Repository, Append-only Chain of Custody, Job·Progress·Cancellation, JSON Schema 검증, CLI 및 Unit·Integration Test가 구현되었습니다.
+> 현재 Forensic Core Engine은 **Phase 3 Windows Artifact Analysis MVP 구현 완료** 상태입니다.
+> Case·Evidence 관리, Streaming Hash와 무결성 검증, SQLite Repository, Append-only Chain of Custody, Job·Progress·Cancellation, Logical File System Indexing, Windows Registry `.reg`, exported Event XML, minimal Prefetch metadata, Artifact Query, JSON Schema 검증, CLI 및 Unit·Integration Test가 구현되었습니다.
 >
-> File System 내부 분석, Artifact Parser, Progressive Indexing 전체 기능, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> Disk image 내부 File System parsing, live Windows 수집, credential/secret 추출, Event Message DLL rendering, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
 
 ---
 
@@ -1083,6 +1083,41 @@ tests/
 - Event Log
 - Prefetch
 - Raw Locator
+
+### Phase 3 — Windows Artifact Analysis MVP — 구현 완료
+
+Phase 3 implements offline, read-only analysis of Windows artifacts already represented by the Phase
+2 file system index. The engine does not collect from a live Windows host and does not apply Registry
+exports to the host system.
+
+Supported Registry behavior:
+
+- `.reg` export text with UTF-16LE/UTF-8 BOM detection.
+- Key/value artifacts for string, expand string, DWORD, QWORD, binary, and safe multi-string values.
+- Autorun candidates from Run/RunOnce keys with machine/user scope and 32-bit view candidates.
+- USBSTOR device candidates with vendor/product/serial fields and confidence warnings when
+  observation times cannot be correlated.
+- TimeZoneInformation values with optional Windows-to-IANA mapping candidates.
+- UserAssist ROT13 names and safe counter ranges only.
+
+Supported Event Log behavior:
+
+- Exported Event XML with namespace-safe extraction of System, EventData, UserData, raw XML, and
+  normalized UTC SystemTime.
+- Optional EVTX parsing through `python-evtx` when installed; otherwise
+  `CAPABILITY_UNAVAILABLE`/`UNSUPPORTED` is reported.
+- No Message DLL rendering and no automatic maliciousness conclusion.
+
+Supported Prefetch behavior:
+
+- Minimal `.pf` metadata for tested versions 17, 23, 26, and 30.
+- Executable name, Prefetch hash, file size, run count, and safe last-run FILETIME extraction.
+- Unknown versions and MAM compression are explicit unsupported parse states.
+
+Raw locators and citations are attached to every emitted artifact. Logical Registry/Event locators use
+null byte offsets with limitations; Prefetch header fields use bounded byte ranges. Artifact query
+supports type/subtype, analyzer, source node, event ID, registry path, executable name, time range,
+parse status, warning flag, and opaque stable cursors.
 
 ### Phase 4 — Search 및 Timeline
 

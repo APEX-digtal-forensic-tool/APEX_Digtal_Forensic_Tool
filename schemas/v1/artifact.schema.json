@@ -1,9 +1,92 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.apex-forensics.dev/v1/artifact.schema.json",
-  "title": "APEX Artifact",
+  "title": "APEX Windows Artifact",
   "$ref": "#/$defs/artifact",
   "$defs": {
+    "nullableUuid": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableTimestamp": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "artifactType": {
+      "enum": [
+        "REGISTRY_KEY",
+        "REGISTRY_VALUE",
+        "REGISTRY_AUTORUN",
+        "REGISTRY_USB_DEVICE",
+        "REGISTRY_TIMEZONE",
+        "REGISTRY_USERASSIST",
+        "EVENT_LOG_RECORD",
+        "PREFETCH_EXECUTION",
+        "UNKNOWN_WINDOWS_ARTIFACT"
+      ]
+    },
+    "sourceKind": {
+      "enum": [
+        "REGISTRY_HIVE",
+        "REGISTRY_EXPORT",
+        "EVENT_LOG_EVTX",
+        "EVENT_LOG_XML",
+        "PREFETCH_FILE",
+        "UNKNOWN_WINDOWS_ARTIFACT"
+      ]
+    },
+    "parseStatus": {
+      "enum": [
+        "SUCCESS",
+        "PARTIAL",
+        "UNSUPPORTED",
+        "CORRUPT",
+        "FAILED"
+      ]
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "code",
+        "message_key",
+        "developer_message"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "WARNING",
+            "ERROR"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message_key": {
+          "$ref": "common.schema.json#/$defs/resourceKey"
+        },
+        "developer_message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
@@ -23,14 +106,7 @@
           "$ref": "common.schema.json#/$defs/uuid"
         },
         "source_object_id": {
-          "oneOf": [
-            {
-              "$ref": "common.schema.json#/$defs/uuid"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "$ref": "#/$defs/nullableUuid"
         },
         "source_path": {
           "type": [
@@ -53,7 +129,8 @@
           "minimum": 0
         },
         "analyzer_run_id": {
-          "$ref": "common.schema.json#/$defs/uuid"
+          "type": "string",
+          "minLength": 1
         },
         "analyzer_id": {
           "type": "string",
@@ -64,14 +141,7 @@
           "minLength": 1
         },
         "raw_locator": {
-          "oneOf": [
-            {
-              "$ref": "citation.schema.json#/$defs/rawLocator"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "$ref": "citation.schema.json#/$defs/rawLocator"
         }
       }
     },
@@ -80,28 +150,68 @@
       "additionalProperties": false,
       "required": [
         "id",
+        "artifact_id",
         "case_id",
+        "evidence_id",
+        "source_file_node_id",
+        "source_object_id",
         "artifact_type",
+        "artifact_subtype",
         "schema_version",
         "display_name_key",
         "description_key",
+        "analyzer_id",
+        "analyzer_version",
+        "parser_backend",
+        "parser_backend_version",
+        "source_path",
+        "source_kind",
+        "observed_at_raw",
+        "observed_at_utc",
+        "timezone_source",
+        "timezone_confidence",
         "title",
+        "summary",
+        "fields",
         "payload",
+        "raw_locator",
+        "citations",
+        "warnings",
+        "parse_status",
         "confidence",
+        "is_partial",
+        "index_revision",
         "created_at",
-        "provenance",
-        "timestamp_interpretations"
+        "updated_at",
+        "dedup_key",
+        "timestamp_interpretations",
+        "provenance"
       ],
       "properties": {
         "id": {
           "$ref": "common.schema.json#/$defs/uuid"
         },
+        "artifact_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
         "case_id": {
           "$ref": "common.schema.json#/$defs/uuid"
         },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_file_node_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_object_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
         "artifact_type": {
+          "$ref": "#/$defs/artifactType"
+        },
+        "artifact_subtype": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)+$"
+          "minLength": 1
         },
         "schema_version": {
           "type": "string",
@@ -113,30 +223,113 @@
         "description_key": {
           "$ref": "common.schema.json#/$defs/resourceKey"
         },
+        "analyzer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "analyzer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parser_backend": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parser_backend_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "source_kind": {
+          "$ref": "#/$defs/sourceKind"
+        },
+        "observed_at_raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observed_at_utc": {
+          "$ref": "#/$defs/nullableTimestamp"
+        },
+        "timezone_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timezone_confidence": {
+          "enum": [
+            "HIGH",
+            "MEDIUM",
+            "LOW",
+            "UNKNOWN"
+          ]
+        },
         "title": {
           "type": "string",
           "minLength": 1
         },
+        "summary": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "payload": {
           "type": "object",
           "additionalProperties": true
+        },
+        "raw_locator": {
+          "$ref": "citation.schema.json#/$defs/rawLocator"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          }
+        },
+        "parse_status": {
+          "$ref": "#/$defs/parseStatus"
         },
         "confidence": {
           "type": "number",
           "minimum": 0,
           "maximum": 1
         },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "index_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
         "created_at": {
           "$ref": "common.schema.json#/$defs/timestamp"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "dedup_key": {
+          "$ref": "common.schema.json#/$defs/sha256"
         },
         "timestamp_interpretations": {
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/timestampInterpretation"
           }
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
         }
       }
     }

@@ -118,7 +118,12 @@ class Job:
         }
 
     def _result_completeness(self, as_of: datetime) -> dict[str, Any]:
-        scope = "FILESYSTEM" if self.job_type is JobType.INDEX else "EVIDENCE"
+        if self.job_type is JobType.INDEX:
+            scope = "FILESYSTEM"
+        elif self.job_type is JobType.ARTIFACT:
+            scope = "ARTIFACT"
+        else:
+            scope = "EVIDENCE"
         is_partial = (
             self.status
             in {

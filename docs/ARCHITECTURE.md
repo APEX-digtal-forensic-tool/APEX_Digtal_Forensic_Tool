@@ -600,3 +600,29 @@ EvidenceManager registered evidence
 ```
 
 Directory Evidence is read-only and metadata-only. The provider does not read file bodies, does not hash during indexing, and does not traverse symlinks or reparse points by default. Future native providers can implement the same provider port for disk images; Phase 2 returns `CAPABILITY_UNAVAILABLE` for E01/RAW/DD/IMG/VHD/VHDX internal traversal.
+
+## Phase 3 Runtime Architecture
+
+Phase 3 adds a read-only Windows artifact plane above the Phase 2 filesystem index:
+
+```text
+Case/Evidence -> fs_nodes -> ArtifactAnalysisService -> ArtifactAnalyzer
+    -> SQLiteRepository artifacts/artifact_sources/artifact_coverage
+    -> CLI or application query facade
+```
+
+The application service owns discovery scope, option fingerprints, job state, checkpoint/resume,
+batch persistence, and stable artifact query cursors. Analyzer adapters only receive an already
+indexed file node and a validated local read path for that node; they do not enumerate evidence roots
+or mutate evidence.
+
+Implemented analyzers:
+
+- `windows.registry`: `.reg` parser plus optional `python-registry` binary hive capability.
+- `windows.eventlog`: exported Event XML parser plus optional `python-evtx` EVTX capability.
+- `windows.prefetch`: minimal `.pf` header parser for versions 17, 23, 26, and 30.
+
+Raw locators distinguish logical Registry/Event references from Prefetch byte field ranges. When a
+parser does not expose an offset, the locator records `offset: null`, `length: null`, and a limitation
+instead of fabricating a byte range. Event records preserve raw XML and EventData/UserData facts but
+do not render messages through Windows DLLs or assert maliciousness.

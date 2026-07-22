@@ -153,11 +153,14 @@
         "source_id",
         "source_path",
         "source_reference",
+        "locator_type",
         "offset",
         "length",
         "encoding",
         "view_types",
-        "content_sha256"
+        "content_sha256",
+        "limitations",
+        "details"
       ],
       "properties": {
         "evidence_id": {
@@ -187,13 +190,28 @@
           ]
         },
         "offset": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0
         },
         "length": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1,
           "maximum": 1048576
+        },
+        "locator_type": {
+          "enum": [
+            "BYTE_RANGE",
+            "LOGICAL_PATH",
+            "LOGICAL_REGISTRY",
+            "LOGICAL_EVENT_RECORD",
+            "PREFETCH_FIELD"
+          ]
         },
         "encoding": {
           "type": [
@@ -221,6 +239,16 @@
               "type": "null"
             }
           ]
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
         }
       }
     }

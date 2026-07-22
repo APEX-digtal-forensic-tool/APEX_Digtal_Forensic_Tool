@@ -246,3 +246,32 @@ Phase 2 extends existing Draft 2020-12 schemas rather than weakening validation.
 - `analysis-profile.schema.json` accepts the Phase 2 `CUSTOM` profile spelling while preserving `CUSTOM_PROFILE` compatibility.
 
 Filesystem nodes explicitly require provider id/version, original path strings, comparison path, node type, metadata, raw timestamp values, UTC-normalized timestamps, raw locator, partial flag, and index revision. Unsupported provider capability is represented as an error response, not as a successful result.
+
+## Phase 3 Schema Contracts
+
+`artifact.schema.json` now defines the concrete Phase 3 Windows artifact DTO. It requires
+`artifact_id`, `case_id`, `evidence_id`, `source_file_node_id`, artifact type/subtype,
+analyzer/backend IDs and versions, raw and UTC observed timestamps, timezone source/confidence,
+fields, raw locator, citations, warnings, parse status, confidence, partial flag, index revision,
+created/updated timestamps, and dedup key.
+
+Artifact type enum values are:
+
+- `REGISTRY_KEY`
+- `REGISTRY_VALUE`
+- `REGISTRY_AUTORUN`
+- `REGISTRY_USB_DEVICE`
+- `REGISTRY_TIMEZONE`
+- `REGISTRY_USERASSIST`
+- `EVENT_LOG_RECORD`
+- `PREFETCH_EXECUTION`
+- `UNKNOWN_WINDOWS_ARTIFACT`
+
+Parse status enum values are `SUCCESS`, `PARTIAL`, `UNSUPPORTED`, `CORRUPT`, and `FAILED`. Unsupported
+binary parser dependencies, Prefetch versions, and MAM compression are not represented as successful
+facts.
+
+`citation.schema.json` raw locators now allow logical locators with `offset: null` and `length: null`.
+The `locator_type`, `limitations`, and `details` fields make the difference between logical
+Registry/Event provenance and actual byte ranges explicit. This prevents non-existent byte offsets
+from being fabricated while preserving raw/source references for future raw views.

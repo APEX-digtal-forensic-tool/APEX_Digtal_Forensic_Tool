@@ -12,11 +12,14 @@ from typing import Any
 from apex_forensic.config import build_services
 from apex_forensic.domain.enums import (
     AnalysisProfileType,
+    ArtifactParseStatus,
+    ArtifactType,
     CaseStatus,
     CustodyEventType,
     HashAlgorithm,
 )
 from apex_forensic.domain.errors import ApexError, ValidationError
+from apex_forensic.domain.models import ArtifactQuery
 
 from .parser import build_parser
 
@@ -56,6 +59,8 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _custody(args, services)
     if args.command == "fs":
         return _fs(args, services)
+    if args.command == "artifact":
+        return _artifact(args, services)
     raise ValidationError("Unknown command.", target="command")
 
 
@@ -159,6 +164,84 @@ def _fs(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown filesystem command.", target="fs_command")
 
 
+def _artifact(args: Namespace, services: Any) -> Any:
+    if args.artifact_command == "discover":
+        return services.artifacts.discover_sources(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_type=AnalysisProfileType(args.profile),
+            analyzers=args.analyzer,
+            artifact_types=_parse_artifact_types(args.artifact_type),
+            selected_paths=args.selected_path,
+            selected_node_ids=args.selected_node_id,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+            batch_size=args.batch_size,
+        )
+    if args.artifact_command == "analyze":
+        job, coverage = services.artifacts.analyze_evidence(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_type=AnalysisProfileType(args.profile),
+            item_budget=args.item_budget,
+            batch_size=args.batch_size,
+            analyzers=args.analyzer,
+            artifact_types=_parse_artifact_types(args.artifact_type),
+            selected_paths=args.selected_path,
+            selected_node_ids=args.selected_node_id,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.artifact_command == "status":
+        return services.artifacts.artifact_status(args.job_id)
+    if args.artifact_command == "resume":
+        job, coverage = services.artifacts.resume_artifact_job(
+            args.job_id,
+            item_budget=args.item_budget,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.artifact_command == "cancel":
+        return services.artifacts.cancel_artifact_job(args.job_id).to_schema_dict()
+    if args.artifact_command == "list":
+        return services.artifacts.list_artifacts(_artifact_query(args)).to_schema_dict()
+    if args.artifact_command == "show":
+        return services.artifacts.get_artifact(args.artifact_id).to_schema_dict()
+    if args.artifact_command == "warnings":
+        return services.artifacts.list_warnings(
+            job_id=args.job_id,
+            artifact_id=args.artifact_id,
+            evidence_id=args.evidence_id,
+        )
+    if args.artifact_command == "registry":
+        query = _artifact_query(args)
+        type_by_command = {
+            "autoruns": ArtifactType.REGISTRY_AUTORUN,
+            "usb": ArtifactType.REGISTRY_USB_DEVICE,
+            "timezone": ArtifactType.REGISTRY_TIMEZONE,
+            "userassist": ArtifactType.REGISTRY_USERASSIST,
+        }
+        query = _replace_query_artifact_type(query, type_by_command[args.registry_command])
+        return services.artifacts.list_artifacts(query).to_schema_dict()
+    if args.artifact_command == "eventlog":
+        if args.eventlog_command == "show":
+            return services.artifacts.get_artifact(args.artifact_id).to_schema_dict()
+        query = _replace_query_artifact_type(
+            _artifact_query(args),
+            ArtifactType.EVENT_LOG_RECORD,
+        )
+        return services.artifacts.list_artifacts(query).to_schema_dict()
+    if args.artifact_command == "prefetch":
+        if args.prefetch_command == "show":
+            return services.artifacts.get_artifact(args.artifact_id).to_schema_dict()
+        query = _replace_query_artifact_type(
+            _artifact_query(args),
+            ArtifactType.PREFETCH_EXECUTION,
+        )
+        return services.artifacts.list_artifacts(query).to_schema_dict()
+    raise ValidationError("Unknown artifact command.", target="artifact_command")
+
+
 def _custody(args: Namespace, services: Any) -> Any:
     if args.custody_command == "list":
         return [event.to_schema_dict() for event in services.custody.list_events(args.evidence_id)]
@@ -208,6 +291,89 @@ def _parse_algorithm(value: str) -> HashAlgorithm:
         raise ValidationError("Unsupported hash algorithm.", target="algorithm") from error
 
 
+def _parse_artifact_types(values: list[str]) -> list[ArtifactType]:
+    artifact_types: list[ArtifactType] = []
+    for value in values:
+        parsed = _parse_artifact_type(value)
+        if parsed is not None:
+            artifact_types.append(parsed)
+    return artifact_types
+
+
+def _parse_artifact_type(value: str | None) -> ArtifactType | None:
+    if value is None:
+        return None
+    normalized = value.replace(".", "_").replace("-", "_").upper()
+    try:
+        return ArtifactType(normalized)
+    except ValueError as error:
+        raise ValidationError("Unsupported artifact type.", target="artifact_type") from error
+
+
+def _parse_parse_status(value: str | None) -> ArtifactParseStatus | None:
+    if value is None:
+        return None
+    try:
+        return ArtifactParseStatus(value.upper())
+    except ValueError as error:
+        raise ValidationError(
+            "Unsupported artifact parse status.", target="parse_status"
+        ) from error
+
+
+def _parse_timestamp_arg(value: str | None, target: str) -> Any:
+    if value is None:
+        return None
+    try:
+        from apex_forensic._time import parse_timestamp
+
+        return parse_timestamp(value)
+    except ValueError as error:
+        raise ValidationError("Invalid timestamp.", target=target) from error
+
+
+def _artifact_query(args: Namespace) -> ArtifactQuery:
+    return ArtifactQuery(
+        case_id=args.case_id,
+        evidence_id=getattr(args, "evidence_id", None),
+        source_file_node_id=getattr(args, "source_node_id", None),
+        artifact_type=_parse_artifact_type(getattr(args, "artifact_type", None)),
+        artifact_subtype=getattr(args, "artifact_subtype", None),
+        analyzer_id=getattr(args, "analyzer", None),
+        event_id=getattr(args, "event_id", None),
+        registry_path=getattr(args, "registry_path", None),
+        executable_name=getattr(args, "executable_name", None),
+        observed_from=_parse_timestamp_arg(getattr(args, "observed_from", None), "observed_from"),
+        observed_to=_parse_timestamp_arg(getattr(args, "observed_to", None), "observed_to"),
+        parse_status=_parse_parse_status(getattr(args, "parse_status", None)),
+        has_warnings=True if getattr(args, "has_warnings", False) else None,
+        cursor=getattr(args, "cursor", None),
+        limit=getattr(args, "limit", 100),
+    )
+
+
+def _replace_query_artifact_type(
+    query: ArtifactQuery, artifact_type: ArtifactType
+) -> ArtifactQuery:
+    return ArtifactQuery(
+        case_id=query.case_id,
+        evidence_id=query.evidence_id,
+        source_file_node_id=query.source_file_node_id,
+        artifact_type=artifact_type,
+        artifact_subtype=query.artifact_subtype,
+        analyzer_id=query.analyzer_id,
+        event_id=query.event_id,
+        registry_path=query.registry_path,
+        executable_name=query.executable_name,
+        observed_from=query.observed_from,
+        observed_to=query.observed_to,
+        parse_status=query.parse_status,
+        has_warnings=query.has_warnings,
+        limit=query.limit,
+        cursor=query.cursor,
+    )
+
+
 def _json_requested(args: Namespace) -> bool:
     return bool(getattr(args, "json", False))
 
@@ -239,5 +405,7 @@ def _human_line(value: Any) -> str:
             return f"{value['node_type']}  {value['display_path']}"
         if "items" in value and "page" in value:
             return json.dumps(value, ensure_ascii=False)
+        if "artifact_id" in value and "artifact_type" in value:
+            return f"{value['artifact_type']}  {value['title']}"
         return json.dumps(value, ensure_ascii=False)
     return str(value)

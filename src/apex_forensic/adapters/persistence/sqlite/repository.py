@@ -11,6 +11,10 @@ from uuid import uuid4
 from apex_forensic._time import parse_timestamp, to_json_timestamp, utc_now
 from apex_forensic.domain.enums import (
     AnalysisProfileType,
+    ArtifactCoverageStatus,
+    ArtifactParseStatus,
+    ArtifactSourceKind,
+    ArtifactType,
     CaseStatus,
     EvidenceFormat,
     EvidenceStatus,
@@ -22,6 +26,11 @@ from apex_forensic.domain.enums import (
     ProgressUnit,
 )
 from apex_forensic.domain.models import (
+    ArtifactCapability,
+    ArtifactCoverage,
+    ArtifactQuery,
+    ArtifactRecord,
+    ArtifactSource,
     Case,
     CustodyEvent,
     Evidence,
@@ -309,6 +318,187 @@ class SQLiteRepository:
                 CREATE INDEX IF NOT EXISTS idx_fs_scan_events_job
                     ON fs_scan_events(job_id, created_at);
 
+                CREATE TABLE IF NOT EXISTS artifact_analyzers (
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    parser_backend TEXT NOT NULL,
+                    parser_backend_version TEXT NOT NULL,
+                    capabilities_json TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    registered_at TEXT NOT NULL,
+                    PRIMARY KEY (analyzer_id, analyzer_version)
+                );
+
+                CREATE TABLE IF NOT EXISTS analyzer_option_fingerprints (
+                    option_fingerprint TEXT NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    options_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (option_fingerprint, analyzer_id, analyzer_version)
+                );
+
+                CREATE TABLE IF NOT EXISTS artifact_analysis_jobs (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    profile_type TEXT NOT NULL,
+                    options_json TEXT NOT NULL,
+                    option_fingerprint TEXT NOT NULL,
+                    index_revision INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    pause_requested INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_artifact_analysis_jobs_evidence
+                    ON artifact_analysis_jobs(evidence_id, status, created_at);
+
+                CREATE TABLE IF NOT EXISTS artifact_sources (
+                    source_id TEXT PRIMARY KEY,
+                    job_id TEXT REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_file_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_path TEXT NOT NULL,
+                    source_kind TEXT NOT NULL,
+                    comparison_key TEXT NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    parser_backend TEXT NOT NULL,
+                    parser_backend_version TEXT NOT NULL,
+                    option_fingerprint TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    priority INTEGER NOT NULL,
+                    source_order INTEGER NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    warning_count INTEGER NOT NULL,
+                    error_count INTEGER NOT NULL,
+                    artifact_count INTEGER NOT NULL,
+                    parse_status TEXT,
+                    last_error_json TEXT,
+                    discovered_at TEXT NOT NULL,
+                    analyzed_at TEXT,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_artifact_sources_job_pick
+                    ON artifact_sources(job_id, status, priority, source_order, source_id);
+                CREATE INDEX IF NOT EXISTS idx_artifact_sources_duplicate
+                    ON artifact_sources(
+                        evidence_id, source_file_node_id, analyzer_id,
+                        analyzer_version, option_fingerprint, status
+                    );
+
+                CREATE TABLE IF NOT EXISTS artifacts (
+                    artifact_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_file_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    artifact_type TEXT NOT NULL,
+                    artifact_subtype TEXT NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    parser_backend TEXT NOT NULL,
+                    parser_backend_version TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    source_kind TEXT NOT NULL,
+                    observed_at_raw TEXT,
+                    observed_at_utc TEXT,
+                    sort_timestamp TEXT NOT NULL,
+                    timezone_source TEXT,
+                    timezone_confidence TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    fields_json TEXT NOT NULL,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    parse_status TEXT NOT NULL,
+                    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+                    is_partial INTEGER NOT NULL,
+                    index_revision INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    dedup_key TEXT NOT NULL UNIQUE,
+                    schema_version TEXT NOT NULL,
+                    event_id INTEGER,
+                    registry_path TEXT,
+                    registry_path_key TEXT,
+                    executable_name TEXT,
+                    executable_name_key TEXT,
+                    has_warnings INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_artifacts_case_sort
+                    ON artifacts(case_id, sort_timestamp, artifact_id);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_evidence_type
+                    ON artifacts(evidence_id, artifact_type, sort_timestamp, artifact_id);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_source
+                    ON artifacts(source_file_node_id, sort_timestamp, artifact_id);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_event_id
+                    ON artifacts(event_id, sort_timestamp, artifact_id);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_registry_path
+                    ON artifacts(registry_path_key, sort_timestamp, artifact_id);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_executable
+                    ON artifacts(executable_name_key, sort_timestamp, artifact_id);
+
+                CREATE TABLE IF NOT EXISTS artifact_warnings (
+                    warning_id TEXT PRIMARY KEY,
+                    job_id TEXT REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_id TEXT REFERENCES artifact_sources(source_id),
+                    source_file_node_id TEXT REFERENCES fs_nodes(node_id),
+                    artifact_id TEXT REFERENCES artifacts(artifact_id),
+                    severity TEXT NOT NULL,
+                    code TEXT NOT NULL,
+                    message_key TEXT NOT NULL,
+                    developer_message TEXT NOT NULL,
+                    source_path TEXT,
+                    details_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_artifact_warnings_job
+                    ON artifact_warnings(job_id, created_at, warning_id);
+                CREATE INDEX IF NOT EXISTS idx_artifact_warnings_artifact
+                    ON artifact_warnings(artifact_id, created_at, warning_id);
+
+                CREATE TABLE IF NOT EXISTS artifact_checkpoints (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    current_source_id TEXT REFERENCES artifact_sources(source_id),
+                    current_source_path TEXT,
+                    pending_source_count INTEGER NOT NULL,
+                    processed_sources INTEGER NOT NULL,
+                    artifact_count INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS artifact_coverage (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    profile_type TEXT NOT NULL,
+                    option_fingerprint TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    source_count INTEGER NOT NULL,
+                    processed_sources INTEGER NOT NULL,
+                    skipped_sources INTEGER NOT NULL,
+                    artifact_count INTEGER NOT NULL,
+                    warning_count INTEGER NOT NULL,
+                    error_count INTEGER NOT NULL,
+                    current_analyzer TEXT,
+                    current_source_path TEXT,
+                    elapsed_seconds REAL NOT NULL,
+                    throughput_items_per_second REAL,
+                    estimated_remaining_seconds REAL,
+                    eta_confidence TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    index_revision INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_artifact_coverage_evidence
+                    ON artifact_coverage(evidence_id, updated_at, job_id);
+
                 CREATE TRIGGER IF NOT EXISTS custody_events_no_update
                 BEFORE UPDATE ON custody_events
                 BEGIN
@@ -337,6 +527,13 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("phase2-progressive-filesystem-indexing", to_json_timestamp(utc_now())),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("phase3-windows-artifact-analysis", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -1231,6 +1428,603 @@ class SQLiteRepository:
         rows = self.connection.execute(sql, tuple(params)).fetchall()
         return [self._row_to_fs_node(row) for row in rows]
 
+    def save_artifact_analyzer(self, capability: ArtifactCapability) -> None:
+        """Persist an artifact analyzer capability statement."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO artifact_analyzers (
+                    analyzer_id, analyzer_version, parser_backend, parser_backend_version,
+                    capabilities_json, metadata_json, registered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(analyzer_id, analyzer_version) DO UPDATE SET
+                    parser_backend = excluded.parser_backend,
+                    parser_backend_version = excluded.parser_backend_version,
+                    capabilities_json = excluded.capabilities_json,
+                    metadata_json = excluded.metadata_json,
+                    registered_at = excluded.registered_at
+                """,
+                (
+                    capability.analyzer_id,
+                    capability.analyzer_version,
+                    capability.parser_backend,
+                    capability.parser_backend_version,
+                    self._json(capability.to_schema_dict()),
+                    self._json(capability.metadata),
+                    to_json_timestamp(utc_now()),
+                ),
+            )
+
+    def save_analyzer_option_fingerprint(
+        self,
+        *,
+        option_fingerprint: str,
+        analyzer_id: str,
+        analyzer_version: str,
+        options: dict[str, Any],
+        created_at: str,
+    ) -> None:
+        """Persist the options represented by an analyzer option fingerprint."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO analyzer_option_fingerprints (
+                    option_fingerprint, analyzer_id, analyzer_version, options_json, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(option_fingerprint, analyzer_id, analyzer_version) DO UPDATE SET
+                    options_json = excluded.options_json
+                """,
+                (
+                    option_fingerprint,
+                    analyzer_id,
+                    analyzer_version,
+                    self._json(options),
+                    created_at,
+                ),
+            )
+
+    def next_artifact_index_revision(self, evidence_id: str) -> int:
+        """Return the next monotonic artifact index revision for an evidence source."""
+
+        row = self.connection.execute(
+            """
+            SELECT COALESCE(MAX(index_revision), 0) AS latest
+            FROM artifacts
+            WHERE evidence_id = ?
+            """,
+            (evidence_id,),
+        ).fetchone()
+        return int(row["latest"]) + 1
+
+    def create_artifact_analysis_job(
+        self,
+        *,
+        job_id: str,
+        case_id: str,
+        evidence_id: str,
+        profile_type: str,
+        options: dict[str, Any],
+        option_fingerprint: str,
+        index_revision: int,
+        status: str,
+        created_at: str,
+    ) -> None:
+        """Persist Phase 3 artifact analysis job metadata."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO artifact_analysis_jobs (
+                    job_id, case_id, evidence_id, profile_type, options_json,
+                    option_fingerprint, index_revision, status, pause_requested,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                """,
+                (
+                    job_id,
+                    case_id,
+                    evidence_id,
+                    profile_type,
+                    self._json(options),
+                    option_fingerprint,
+                    index_revision,
+                    status,
+                    created_at,
+                    created_at,
+                ),
+            )
+
+    def update_artifact_analysis_job_status(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        pause_requested: bool | None = None,
+    ) -> None:
+        """Update artifact job metadata status."""
+
+        assignments = ["status = ?", "updated_at = ?"]
+        params: list[Any] = [status, to_json_timestamp(utc_now())]
+        if pause_requested is not None:
+            assignments.append("pause_requested = ?")
+            params.append(int(pause_requested))
+        params.append(job_id)
+        with self.connection:
+            self.connection.execute(
+                f"UPDATE artifact_analysis_jobs SET {', '.join(assignments)} WHERE job_id = ?",
+                tuple(params),
+            )
+
+    def get_artifact_analysis_job(self, job_id: str) -> dict[str, Any] | None:
+        """Return artifact analysis job metadata."""
+
+        row = self.connection.execute(
+            "SELECT * FROM artifact_analysis_jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["options"] = json.loads(str(data.pop("options_json")))
+        return data
+
+    def save_artifact_sources(self, sources: list[ArtifactSource]) -> None:
+        """Batch insert artifact source queue rows."""
+
+        with self.connection:
+            self.connection.executemany(
+                """
+                INSERT INTO artifact_sources (
+                    source_id, job_id, case_id, evidence_id, source_file_node_id,
+                    source_path, source_kind, comparison_key, analyzer_id, analyzer_version,
+                    parser_backend, parser_backend_version, option_fingerprint, status,
+                    priority, source_order, is_partial, warning_count, error_count,
+                    artifact_count, parse_status, last_error_json, discovered_at,
+                    analyzed_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?
+                )
+                ON CONFLICT(source_id) DO UPDATE SET
+                    job_id = excluded.job_id,
+                    status = excluded.status,
+                    priority = excluded.priority,
+                    source_order = excluded.source_order,
+                    is_partial = excluded.is_partial,
+                    updated_at = excluded.updated_at
+                """,
+                [self._artifact_source_values(source) for source in sources],
+            )
+
+    def next_artifact_source(self, job_id: str) -> ArtifactSource | None:
+        """Claim the next queued artifact source."""
+
+        with self.connection:
+            row = self.connection.execute(
+                """
+                SELECT * FROM artifact_sources
+                WHERE job_id = ? AND status = 'QUEUED'
+                ORDER BY priority, source_order, source_id
+                LIMIT 1
+                """,
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            self.connection.execute(
+                """
+                UPDATE artifact_sources
+                SET status = 'PROCESSING', updated_at = ?
+                WHERE source_id = ?
+                """,
+                (to_json_timestamp(utc_now()), row["source_id"]),
+            )
+        data = dict(row)
+        data["status"] = "PROCESSING"
+        return self._row_dict_to_artifact_source(data)
+
+    def reset_interrupted_artifact_sources(self, job_id: str) -> None:
+        """Return interrupted artifact sources to queued state for resume."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE artifact_sources
+                SET status = 'QUEUED', updated_at = ?
+                WHERE job_id = ? AND status = 'PROCESSING'
+                """,
+                (to_json_timestamp(utc_now()), job_id),
+            )
+
+    def mark_artifact_source_done(
+        self,
+        source_id: str,
+        *,
+        status: str,
+        parse_status: str | None,
+        warning_count: int,
+        error_count: int,
+        artifact_count: int,
+        last_error: dict[str, Any] | None,
+        analyzed_at: str | None,
+    ) -> None:
+        """Persist final source queue state."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE artifact_sources
+                SET status = ?, parse_status = ?, warning_count = ?, error_count = ?,
+                    artifact_count = ?, last_error_json = ?, analyzed_at = ?, updated_at = ?
+                WHERE source_id = ?
+                """,
+                (
+                    status,
+                    parse_status,
+                    warning_count,
+                    error_count,
+                    artifact_count,
+                    self._json(last_error) if last_error is not None else None,
+                    analyzed_at,
+                    to_json_timestamp(utc_now()),
+                    source_id,
+                ),
+            )
+
+    def count_pending_artifact_sources(self, job_id: str) -> int:
+        """Return remaining queued or processing sources for an artifact job."""
+
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM artifact_sources
+            WHERE job_id = ? AND status IN ('QUEUED', 'PROCESSING')
+            """,
+            (job_id,),
+        ).fetchone()
+        return int(row["count"])
+
+    def has_completed_artifact_source(
+        self,
+        *,
+        evidence_id: str,
+        source_file_node_id: str,
+        analyzer_id: str,
+        analyzer_version: str,
+        option_fingerprint: str,
+    ) -> bool:
+        """Return whether the same source/analyzer/options already completed."""
+
+        row = self.connection.execute(
+            """
+            SELECT 1
+            FROM artifact_sources
+            WHERE evidence_id = ?
+              AND source_file_node_id = ?
+              AND analyzer_id = ?
+              AND analyzer_version = ?
+              AND option_fingerprint = ?
+              AND status IN ('SUCCEEDED', 'PARTIAL')
+            LIMIT 1
+            """,
+            (
+                evidence_id,
+                source_file_node_id,
+                analyzer_id,
+                analyzer_version,
+                option_fingerprint,
+            ),
+        ).fetchone()
+        return row is not None
+
+    def save_artifacts(self, artifacts: list[ArtifactRecord]) -> int:
+        """Batch insert immutable artifacts and ignore exact duplicates."""
+
+        inserted = 0
+        with self.connection:
+            for artifact in artifacts:
+                cursor = self.connection.execute(
+                    """
+                    INSERT OR IGNORE INTO artifacts (
+                        artifact_id, case_id, evidence_id, source_file_node_id,
+                        artifact_type, artifact_subtype, analyzer_id, analyzer_version,
+                        parser_backend, parser_backend_version, source_path, source_kind,
+                        observed_at_raw, observed_at_utc, sort_timestamp, timezone_source,
+                        timezone_confidence, title, summary, fields_json,
+                        raw_locator_json, citations_json, warnings_json, parse_status,
+                        confidence, is_partial, index_revision, created_at, updated_at,
+                        dedup_key, schema_version, event_id, registry_path,
+                        registry_path_key, executable_name, executable_name_key, has_warnings
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )
+                    """,
+                    self._artifact_values(artifact),
+                )
+                inserted += cursor.rowcount
+        return inserted
+
+    def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
+        """Return one artifact by ID."""
+
+        row = self.connection.execute(
+            "SELECT * FROM artifacts WHERE artifact_id = ?",
+            (artifact_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_artifact(row)
+
+    def query_artifacts(
+        self,
+        *,
+        query: ArtifactQuery,
+        after: tuple[str, str] | None,
+        limit: int,
+    ) -> list[ArtifactRecord]:
+        """Query artifacts by typed filters with stable cursor ordering."""
+
+        clauses = ["case_id = ?"]
+        params: list[Any] = [query.case_id]
+        if query.evidence_id is not None:
+            clauses.append("evidence_id = ?")
+            params.append(query.evidence_id)
+        if query.source_file_node_id is not None:
+            clauses.append("source_file_node_id = ?")
+            params.append(query.source_file_node_id)
+        if query.artifact_type is not None:
+            clauses.append("artifact_type = ?")
+            params.append(query.artifact_type.value)
+        if query.artifact_subtype is not None:
+            clauses.append("artifact_subtype = ?")
+            params.append(query.artifact_subtype)
+        if query.analyzer_id is not None:
+            clauses.append("analyzer_id = ?")
+            params.append(query.analyzer_id)
+        if query.event_id is not None:
+            clauses.append("event_id = ?")
+            params.append(query.event_id)
+        if query.registry_path is not None:
+            clauses.append("registry_path_key LIKE ?")
+            params.append(f"%{query.registry_path.casefold()}%")
+        if query.executable_name is not None:
+            clauses.append("executable_name_key LIKE ?")
+            params.append(f"%{query.executable_name.casefold()}%")
+        if query.observed_from is not None:
+            clauses.append("sort_timestamp >= ?")
+            params.append(to_json_timestamp(query.observed_from))
+        if query.observed_to is not None:
+            clauses.append("sort_timestamp <= ?")
+            params.append(to_json_timestamp(query.observed_to))
+        if query.parse_status is not None:
+            clauses.append("parse_status = ?")
+            params.append(query.parse_status.value)
+        if query.has_warnings is not None:
+            clauses.append("has_warnings = ?")
+            params.append(int(query.has_warnings))
+        if after is not None:
+            clauses.append("(sort_timestamp > ? OR (sort_timestamp = ? AND artifact_id > ?))")
+            params.extend([after[0], after[0], after[1]])
+        sql = f"""
+            SELECT * FROM artifacts
+            WHERE {" AND ".join(clauses)}
+            ORDER BY sort_timestamp, artifact_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._row_to_artifact(row) for row in rows]
+
+    def save_artifact_warning(
+        self,
+        warning_id: str,
+        *,
+        job_id: str | None,
+        case_id: str,
+        evidence_id: str,
+        source_id: str | None,
+        source_file_node_id: str | None,
+        artifact_id: str | None,
+        severity: str,
+        code: str,
+        message_key: str,
+        developer_message: str,
+        source_path: str | None,
+        details: dict[str, Any],
+        created_at: str,
+    ) -> None:
+        """Persist an artifact analysis warning or parse error."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO artifact_warnings (
+                    warning_id, job_id, case_id, evidence_id, source_id,
+                    source_file_node_id, artifact_id, severity, code, message_key,
+                    developer_message, source_path, details_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    warning_id,
+                    job_id,
+                    case_id,
+                    evidence_id,
+                    source_id,
+                    source_file_node_id,
+                    artifact_id,
+                    severity,
+                    code,
+                    message_key,
+                    developer_message,
+                    source_path,
+                    self._json(details),
+                    created_at,
+                ),
+            )
+
+    def list_artifact_warnings(
+        self,
+        *,
+        job_id: str | None = None,
+        artifact_id: str | None = None,
+        evidence_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return stored artifact warnings and parse errors."""
+
+        clauses: list[str] = []
+        params: list[Any] = []
+        if job_id is not None:
+            clauses.append("job_id = ?")
+            params.append(job_id)
+        if artifact_id is not None:
+            clauses.append("artifact_id = ?")
+            params.append(artifact_id)
+        if evidence_id is not None:
+            clauses.append("evidence_id = ?")
+            params.append(evidence_id)
+        where = "" if not clauses else "WHERE " + " AND ".join(clauses)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM artifact_warnings
+            {where}
+            ORDER BY created_at, warning_id
+            """,
+            tuple(params),
+        ).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            data = dict(row)
+            data["details"] = json.loads(str(data.pop("details_json")))
+            result.append(data)
+        return result
+
+    def upsert_artifact_coverage(self, coverage: ArtifactCoverage) -> ArtifactCoverage:
+        """Insert or update artifact coverage counters."""
+
+        now = utc_now()
+        created_at = coverage.created_at or now
+        updated_at = coverage.updated_at or now
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO artifact_coverage (
+                    job_id, case_id, evidence_id, profile_type, option_fingerprint,
+                    status, source_count, processed_sources, skipped_sources,
+                    artifact_count, warning_count, error_count, current_analyzer,
+                    current_source_path, elapsed_seconds, throughput_items_per_second,
+                    estimated_remaining_seconds, eta_confidence, is_partial,
+                    index_revision, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    status = excluded.status,
+                    source_count = excluded.source_count,
+                    processed_sources = excluded.processed_sources,
+                    skipped_sources = excluded.skipped_sources,
+                    artifact_count = excluded.artifact_count,
+                    warning_count = excluded.warning_count,
+                    error_count = excluded.error_count,
+                    current_analyzer = excluded.current_analyzer,
+                    current_source_path = excluded.current_source_path,
+                    elapsed_seconds = excluded.elapsed_seconds,
+                    throughput_items_per_second = excluded.throughput_items_per_second,
+                    estimated_remaining_seconds = excluded.estimated_remaining_seconds,
+                    eta_confidence = excluded.eta_confidence,
+                    is_partial = excluded.is_partial,
+                    index_revision = excluded.index_revision,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    coverage.job_id,
+                    coverage.case_id,
+                    coverage.evidence_id,
+                    coverage.profile_type.value,
+                    coverage.option_fingerprint,
+                    coverage.status.value,
+                    coverage.source_count,
+                    coverage.processed_sources,
+                    coverage.skipped_sources,
+                    coverage.artifact_count,
+                    coverage.warning_count,
+                    coverage.error_count,
+                    coverage.current_analyzer,
+                    coverage.current_source_path,
+                    coverage.elapsed_seconds,
+                    coverage.throughput_items_per_second,
+                    coverage.estimated_remaining_seconds,
+                    coverage.eta_confidence,
+                    int(coverage.is_partial),
+                    coverage.index_revision,
+                    to_json_timestamp(created_at),
+                    to_json_timestamp(updated_at),
+                ),
+            )
+        coverage.created_at = created_at
+        coverage.updated_at = updated_at
+        return coverage
+
+    def get_artifact_coverage(self, job_id: str) -> ArtifactCoverage | None:
+        """Return coverage for one artifact job."""
+
+        row = self.connection.execute(
+            "SELECT * FROM artifact_coverage WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_artifact_coverage(row)
+
+    def latest_artifact_coverage(self, evidence_id: str) -> ArtifactCoverage | None:
+        """Return latest artifact coverage for evidence."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM artifact_coverage
+            WHERE evidence_id = ?
+            ORDER BY updated_at DESC, job_id DESC
+            LIMIT 1
+            """,
+            (evidence_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_artifact_coverage(row)
+
+    def save_artifact_checkpoint(
+        self,
+        *,
+        job_id: str,
+        current_source_id: str | None,
+        current_source_path: str | None,
+        pending_source_count: int,
+        processed_sources: int,
+        artifact_count: int,
+    ) -> None:
+        """Persist resumable artifact analysis checkpoint state."""
+
+        now = to_json_timestamp(utc_now())
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO artifact_checkpoints (
+                    job_id, current_source_id, current_source_path, pending_source_count,
+                    processed_sources, artifact_count, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    current_source_id = excluded.current_source_id,
+                    current_source_path = excluded.current_source_path,
+                    pending_source_count = excluded.pending_source_count,
+                    processed_sources = excluded.processed_sources,
+                    artifact_count = excluded.artifact_count,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    job_id,
+                    current_source_id,
+                    current_source_path,
+                    pending_source_count,
+                    processed_sources,
+                    artifact_count,
+                    now,
+                ),
+            )
+
     def _configure_connection(self) -> None:
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.execute("PRAGMA journal_mode = WAL")
@@ -1299,6 +2093,102 @@ class SQLiteRepository:
             to_json_timestamp(node.updated_at),
         )
 
+    def _artifact_source_values(self, source: ArtifactSource) -> tuple[Any, ...]:
+        return (
+            source.source_id,
+            source.job_id,
+            source.case_id,
+            source.evidence_id,
+            source.source_file_node_id,
+            source.source_path,
+            source.source_kind.value,
+            source.comparison_key,
+            source.analyzer_id,
+            source.analyzer_version,
+            source.parser_backend,
+            source.parser_backend_version,
+            source.option_fingerprint,
+            source.status,
+            source.priority,
+            source.source_order,
+            int(source.is_partial),
+            source.warning_count,
+            source.error_count,
+            source.artifact_count,
+            None if source.parse_status is None else source.parse_status.value,
+            self._json(source.last_error) if source.last_error is not None else None,
+            to_json_timestamp(source.discovered_at),
+            self._nullable_timestamp(source.analyzed_at),
+            to_json_timestamp(source.updated_at),
+        )
+
+    def _artifact_values(self, artifact: ArtifactRecord) -> tuple[Any, ...]:
+        event_id = self._artifact_event_id(artifact)
+        registry_path = self._artifact_registry_path(artifact)
+        executable_name = self._artifact_executable_name(artifact)
+        sort_timestamp = artifact.observed_at_utc or artifact.created_at
+        return (
+            artifact.artifact_id,
+            artifact.case_id,
+            artifact.evidence_id,
+            artifact.source_file_node_id,
+            artifact.artifact_type.value,
+            artifact.artifact_subtype,
+            artifact.analyzer_id,
+            artifact.analyzer_version,
+            artifact.parser_backend,
+            artifact.parser_backend_version,
+            artifact.source_path,
+            artifact.source_kind.value,
+            artifact.observed_at_raw,
+            self._nullable_timestamp(artifact.observed_at_utc),
+            to_json_timestamp(sort_timestamp),
+            artifact.timezone_source,
+            artifact.timezone_confidence,
+            artifact.title,
+            artifact.summary,
+            self._json(artifact.fields),
+            self._json(artifact.raw_locator),
+            self._json(artifact.citations),
+            self._json(artifact.warnings),
+            artifact.parse_status.value,
+            artifact.confidence,
+            int(artifact.is_partial),
+            artifact.index_revision,
+            to_json_timestamp(artifact.created_at),
+            to_json_timestamp(artifact.updated_at),
+            artifact.dedup_key,
+            artifact.schema_version,
+            event_id,
+            registry_path,
+            None if registry_path is None else registry_path.casefold(),
+            executable_name,
+            None if executable_name is None else executable_name.casefold(),
+            int(bool(artifact.warnings)),
+        )
+
+    @staticmethod
+    def _artifact_event_id(artifact: ArtifactRecord) -> int | None:
+        value = artifact.fields.get("event_id")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _artifact_registry_path(artifact: ArtifactRecord) -> str | None:
+        value = artifact.fields.get("registry_path")
+        return None if value is None else str(value)
+
+    @staticmethod
+    def _artifact_executable_name(artifact: ArtifactRecord) -> str | None:
+        value = artifact.fields.get("executable_name")
+        if value is None:
+            value = artifact.fields.get("executable_candidate")
+        return None if value is None else str(value)
+
     @staticmethod
     def _timestamp_dict(data: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -1335,6 +2225,104 @@ class SQLiteRepository:
             is_traversed=bool(row["is_traversed"]),
             raw_locator=json.loads(str(row["raw_locator_json"])),
             provider_metadata=json.loads(str(row["provider_metadata_json"])),
+            is_partial=bool(row["is_partial"]),
+            index_revision=int(row["index_revision"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+            updated_at=parse_timestamp(str(row["updated_at"])),
+        )
+
+    def _row_dict_to_artifact_source(self, row: dict[str, Any]) -> ArtifactSource:
+        parse_status = row.get("parse_status")
+        return ArtifactSource(
+            source_id=str(row["source_id"]),
+            job_id=row["job_id"],
+            case_id=str(row["case_id"]),
+            evidence_id=str(row["evidence_id"]),
+            source_file_node_id=str(row["source_file_node_id"]),
+            source_path=str(row["source_path"]),
+            source_kind=ArtifactSourceKind(str(row["source_kind"])),
+            comparison_key=str(row["comparison_key"]),
+            analyzer_id=str(row["analyzer_id"]),
+            analyzer_version=str(row["analyzer_version"]),
+            parser_backend=str(row["parser_backend"]),
+            parser_backend_version=str(row["parser_backend_version"]),
+            option_fingerprint=str(row["option_fingerprint"]),
+            status=str(row["status"]),
+            priority=int(row["priority"]),
+            source_order=int(row["source_order"]),
+            is_partial=bool(row["is_partial"]),
+            warning_count=int(row["warning_count"]),
+            error_count=int(row["error_count"]),
+            artifact_count=int(row["artifact_count"]),
+            parse_status=None if parse_status is None else ArtifactParseStatus(str(parse_status)),
+            last_error=None
+            if row.get("last_error_json") is None
+            else json.loads(str(row["last_error_json"])),
+            discovered_at=parse_timestamp(str(row["discovered_at"])),
+            analyzed_at=None
+            if row.get("analyzed_at") is None
+            else parse_timestamp(str(row["analyzed_at"])),
+            updated_at=parse_timestamp(str(row["updated_at"])),
+        )
+
+    def _row_to_artifact(self, row: sqlite3.Row) -> ArtifactRecord:
+        observed_at_utc = row["observed_at_utc"]
+        return ArtifactRecord(
+            artifact_id=str(row["artifact_id"]),
+            case_id=str(row["case_id"]),
+            evidence_id=str(row["evidence_id"]),
+            source_file_node_id=str(row["source_file_node_id"]),
+            artifact_type=ArtifactType(str(row["artifact_type"])),
+            artifact_subtype=str(row["artifact_subtype"]),
+            analyzer_id=str(row["analyzer_id"]),
+            analyzer_version=str(row["analyzer_version"]),
+            parser_backend=str(row["parser_backend"]),
+            parser_backend_version=str(row["parser_backend_version"]),
+            source_path=str(row["source_path"]),
+            source_kind=ArtifactSourceKind(str(row["source_kind"])),
+            observed_at_raw=row["observed_at_raw"],
+            observed_at_utc=None
+            if observed_at_utc is None
+            else parse_timestamp(str(observed_at_utc)),
+            timezone_source=row["timezone_source"],
+            timezone_confidence=str(row["timezone_confidence"]),
+            title=str(row["title"]),
+            summary=str(row["summary"]),
+            fields=json.loads(str(row["fields_json"])),
+            raw_locator=json.loads(str(row["raw_locator_json"])),
+            citations=json.loads(str(row["citations_json"])),
+            warnings=json.loads(str(row["warnings_json"])),
+            parse_status=ArtifactParseStatus(str(row["parse_status"])),
+            confidence=float(row["confidence"]),
+            is_partial=bool(row["is_partial"]),
+            index_revision=int(row["index_revision"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+            updated_at=parse_timestamp(str(row["updated_at"])),
+            dedup_key=str(row["dedup_key"]),
+            schema_version=str(row["schema_version"]),
+        )
+
+    @staticmethod
+    def _row_to_artifact_coverage(row: sqlite3.Row) -> ArtifactCoverage:
+        return ArtifactCoverage(
+            job_id=str(row["job_id"]),
+            case_id=str(row["case_id"]),
+            evidence_id=str(row["evidence_id"]),
+            profile_type=AnalysisProfileType(str(row["profile_type"])),
+            option_fingerprint=str(row["option_fingerprint"]),
+            status=ArtifactCoverageStatus(str(row["status"])),
+            source_count=int(row["source_count"]),
+            processed_sources=int(row["processed_sources"]),
+            skipped_sources=int(row["skipped_sources"]),
+            artifact_count=int(row["artifact_count"]),
+            warning_count=int(row["warning_count"]),
+            error_count=int(row["error_count"]),
+            current_analyzer=row["current_analyzer"],
+            current_source_path=row["current_source_path"],
+            elapsed_seconds=float(row["elapsed_seconds"]),
+            throughput_items_per_second=row["throughput_items_per_second"],
+            estimated_remaining_seconds=row["estimated_remaining_seconds"],
+            eta_confidence=str(row["eta_confidence"]),
             is_partial=bool(row["is_partial"]),
             index_revision=int(row["index_revision"]),
             created_at=parse_timestamp(str(row["created_at"])),
