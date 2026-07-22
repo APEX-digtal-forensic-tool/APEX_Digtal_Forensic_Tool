@@ -12,7 +12,7 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트는 **Phase 3 Windows Artifact Analysis MVP 구현 완료** 상태입니다.
+> 현재 Forensic Core Engine은 **Phase 3 Windows Artifact Analysis MVP 구현 완료** 상태입니다.
 > Phase 1·2의 Case·Evidence·Hash·SQLite·Chain of Custody, Job, Logical File System Indexing 기반 위에 Windows Registry `.reg`, exported Event XML, minimal Prefetch metadata, Artifact Discovery, Query, SQLite persistence, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 CLI 조회 기능이 구현되었습니다.
 >
 > Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
@@ -443,21 +443,58 @@ Timezone 후보 출처:
 
 ## 현재 구현 범위
 
-Phase 2는 Directory Evidence와 일반 Logical File Evidence를 대상으로 하는 Progressive File System & Indexing 기반을 구현했습니다. 구현된 범위는 read-only metadata index, Logical Directory Provider, provider capability contract, SQLite-backed priority queue/checkpoint/coverage, stable cursor pagination, CLI E2E 흐름, JSON Schema 계약 및 회귀 테스트다.
+### Phase 1 — Core Foundation
 
-지원 범위는 다음과 같다.
+- Case 및 Evidence 관리
+- MD5·SHA-1·SHA-256 Streaming Hash와 무결성 검증
+- SQLite Repository
+- Append-only Chain of Custody 및 Hash Chain
+- Job·Progress·Cancellation
+- JSON Schema 검증
+- `apex-forensic` CLI
+- Unit·Integration Test
 
-- Directory Evidence는 `os.scandir()` 기반으로 원본 이름과 상대 경로를 손실 없이 보존하며 metadata만 수집한다.
-- 일반 logical file evidence는 하나의 root/file node로 표현한다.
-- Quick Triage는 기본 깊이 제한으로 빠른 partial tree를 제공하고, Full Analysis는 전체 directory metadata tree를 완료한다.
-- Selected Scope는 선택된 directory/node를 background scope보다 우선 queue에 배치한다.
-- item budget은 deterministic partial result와 checkpoint/resume 재현에 사용한다.
-- pause, resume, cancel은 batch/checkpoint 경계에서 cooperative 방식으로 동작하며 partial 결과를 보존한다.
-- symlink 및 reparse point는 기본적으로 따라가지 않고 entry 자체만 가능한 metadata로 기록한다.
-- metadata indexing 중 file body를 읽지 않고 automatic hash를 수행하지 않는다. Hash는 기존 Evidence Hash Service의 명시 호출에서만 수행한다.
-- File tree 조회는 opaque stable cursor를 사용하며 query option과 cursor fingerprint 불일치를 검증한다.
+### Phase 2 — Progressive File System & Indexing
 
-Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, NTFS/FAT/exFAT/ext 직접 parser, deleted file recovery, slack/unallocated 분석, FTS5/full text search, artifact parser, timeline 통합, GUI, web server, MCP/LLM/OCR/STT/report renderer 실행 코드다. 해당 내부 탐색 요청은 `CAPABILITY_UNAVAILABLE`로 표현한다.
+- Directory Evidence의 read-only Metadata Index
+- Logical Directory / Logical File Provider
+- Quick Triage / Selected Scope / Full Analysis
+- Priority Queue와 SQLite Batch 저장
+- Partial Result 및 Coverage
+- Checkpoint·Resume
+- Cooperative Pause·Cancel
+- Opaque Stable Cursor Pagination
+- 한글·Unicode 경로 보존
+- Symlink 및 Reparse Point 기본 미추적
+- Metadata Index 중 File Body 미열람 및 자동 Hash 미실행
+
+### Phase 3 — Windows Artifact Analysis MVP
+
+- 공통 Artifact Domain Model과 Provider-neutral Analyzer Port
+- Phase 2 File System Index를 재사용하는 Artifact Discovery
+- Windows Registry Export Text (`.reg`) 분석
+- Autorun, USBSTOR, TimeZoneInformation 및 UserAssist Artifact 추출
+- Exported Windows Event XML 분석
+- 주요 Security·System·Sysmon Event의 Subtype 후보 제공
+- Prefetch `.pf` Version 17·23·26·30의 최소 Metadata 분석
+- Optional `python-registry` 기반 Offline Binary Hive Capability
+- Optional `python-evtx` 기반 Binary EVTX Capability
+- SQLite Artifact Persistence
+- Checkpoint·Resume 및 Cooperative Pause·Cancel
+- Stable Cursor 기반 Artifact Query
+- Raw Locator 및 Citation
+- Artifact CLI와 Unit·Integration Test
+
+현재 제한:
+
+- Binary Registry Hive와 EVTX 실행 분석은 `windows-artifacts` Optional Dependency가 필요
+- Prefetch MAM Compression은 감지하지만 압축 해제는 미지원
+- Event Message DLL Rendering 미지원
+- Live Windows Artifact Acquisition 및 Remote Registry 미지원
+- Registry Transaction Log·삭제 Key 복구 미지원
+- Credential·Secret·Password Hash 추출 미지원
+- Artifact와 Timeline·Search의 통합은 이후 Phase에서 구현
+- E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing 미지원
 
 ---
 
@@ -530,29 +567,74 @@ Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, N
 
 ### Windows Artifact Analysis
 
+현재 구현은 오프라인 Windows Artifact를 읽기 전용으로 분석합니다.
+
 #### Registry
 
-- Run Key
-- UserAssist
-- Recent Files
-- USB History
+현재 구현:
+
+- Windows Registry Export Text (`.reg`)
+- UTF-16LE 및 UTF-8 BOM 처리
+- String·Expand String·DWORD·QWORD·Binary·Multi String의 안전한 범위
+- Run / RunOnce Autorun
+- USBSTOR 기반 USB Device History
+- TimeZoneInformation
+- UserAssist ROT13 및 알려진 Count 구조의 안전한 범위
+- `python-registry`가 설치된 경우 SYSTEM·SOFTWARE·NTUSER.DAT·USRCLASS.DAT Offline Hive Capability
+- Parser Backend와 Version 기록
+- Logical Raw Locator 및 Citation
+
+현재 제한:
+
+- SAM Password Hash, SECURITY Secret 및 Credential 추출 미지원
+- Registry Transaction Log 및 삭제 Key 복구 미지원
+- Live / Remote Registry 미지원
+- Binary Parser Dependency가 없으면 `CAPABILITY_UNAVAILABLE` 또는 `UNSUPPORTED`
 
 #### Event Log
 
-- Security Event
-- System Event
-- Application Event
-- Sysmon Event
+현재 구현:
+
+- Exported Windows Event XML
+- XML Namespace 안전 처리
+- Channel·Provider·Event ID·Record ID·Computer·User SID·Process ID·Thread ID 보존
+- EventData / UserData 및 Raw XML 보존
+- 주요 Security·System·Sysmon Event ID의 Subtype·Title 후보
+- `python-evtx`가 설치된 경우 Binary `.evtx` Iterator Capability
+- Item Budget·Cancellation·Partial Result
+- Record 기반 Raw Locator 및 Citation
+
+현재 제한:
+
+- Event Message DLL Rendering 미지원
+- Event ID만으로 침해 또는 악성 여부를 확정하지 않음
+- Binary Parser Dependency가 없으면 `CAPABILITY_UNAVAILABLE` 또는 `UNSUPPORTED`
 
 #### Prefetch
 
-- 실행 프로그램
-- 실행 횟수
-- 마지막 실행 시간
+현재 구현:
 
-### Browser Communications MVP
+- `.pf` Version 17·23·26·30의 테스트된 최소 Metadata Parser
+- Executable Name
+- Prefetch Hash
+- Format Version
+- File Size
+- Run Count
+- 안전하게 확인 가능한 Last Run Time
+- Bounds Check와 손상 입력 처리
+- Field Offset / Length 기반 Raw Locator
+- MAM Compression 감지
 
-초기 Communications 분석은 Browser Artifact 중심으로 구현합니다.
+현재 제한:
+
+- 알 수 없는 Version은 `UNSUPPORTED`
+- MAM Compression 압축 해제 미지원
+- Prefetch만으로 사용자가 직접 프로그램을 실행했다고 단정하지 않음
+- Volume 및 Referenced File Path는 안전하게 파싱 가능한 범위만 제공
+
+### Browser Communications MVP (예정)
+
+초기 Communications 분석은 Browser Artifact 중심으로 구현할 예정입니다.
 
 - 방문 History
 - 검색 History
@@ -571,7 +653,7 @@ Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, N
 - KakaoTalk
 - 기타 Messenger
 
-### Timeline Analysis
+### Timeline Analysis (예정)
 
 - File MAC Time
 - Registry Timestamp
@@ -585,7 +667,7 @@ Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, N
 - Citation 가능한 Timeline Event
 - AI 기반 사건 흐름 요약
 
-### Search & Discovery
+### Search & Discovery (예정)
 
 - File Name Search
 - Keyword Search
@@ -1004,17 +1086,28 @@ APEX/
 ├── src/
 │   └── apex_forensic/
 │       ├── adapters/
+│       │   ├── artifacts/
+│       │   │   └── windows/
 │       │   ├── filesystem/
 │       │   ├── hashing/
 │       │   ├── persistence/
 │       │   └── schema/
 │       ├── application/
 │       │   └── services/
+│       │       ├── artifact_analysis.py
+│       │       └── file_system_index.py
 │       ├── cli/
 │       ├── config/
 │       ├── domain/
+│       │   └── models/
+│       │       ├── artifact.py
+│       │       └── filesystem.py
 │       ├── jobs/
 │       └── ports/
+│           ├── artifact_analyzer.py
+│           ├── artifact_repository.py
+│           ├── file_system_repository.py
+│           └── filesystem_provider.py
 │
 ├── schemas/
 │   └── v1/
@@ -1098,12 +1191,24 @@ APEX/
 - [x] Cooperative Pause / Cancel
 - [x] Stable Cursor Pagination
 - [x] 한글 및 Unicode Path Round Trip
+- [x] Phase 3 Windows Artifact Analysis MVP
+- [x] 공통 Artifact Domain 및 Analyzer Port
+- [x] File System Index 기반 Artifact Discovery
+- [x] Registry `.reg` 및 Optional Binary Hive Capability
+- [x] Exported Event XML 및 Optional Binary EVTX Capability
+- [x] Prefetch 최소 Metadata Parser
+- [x] Artifact SQLite Persistence 및 Query
+- [x] Artifact Checkpoint / Resume / Pause / Cancel
+- [x] Artifact Raw Locator 및 Citation
+- [x] Artifact CLI 및 Unit / Integration Test
 
 ### 구현 예정
 
 - [ ] E01 / RAW / DD / IMG / VHD / VHDX 내부 File System Parsing
 - [ ] 삭제 File Recovery 및 Unallocated / Slack 분석
-- [ ] Registry / Event Log / Prefetch Analyzer
+- [ ] Registry Transaction Log 및 삭제 Key Recovery
+- [ ] Prefetch MAM Compression 해제
+- [ ] Event Message DLL Rendering
 - [ ] Timeline / Search / Keyword Set
 - [ ] Timezone Resolver 및 Timestamp Normalizer 확장
 - [ ] Browser Communications Analyzer
@@ -1170,12 +1275,24 @@ APEX/
 - [x] CLI 및 JSON Schema 확장
 - [x] Unit / Integration Test
 
-### Phase 3 — Windows Artifact
+### Phase 3 — Windows Artifact Analysis — 완료
 
-- Registry
-- Event Log
-- Prefetch
-- Raw Locator
+- [x] 공통 Artifact Domain Model
+- [x] Provider-neutral Analyzer Port
+- [x] File System Index 기반 Artifact Discovery
+- [x] Registry Export Text (`.reg`) 분석
+- [x] Autorun / USBSTOR / TimeZoneInformation / UserAssist
+- [x] Optional `python-registry` Binary Hive Capability
+- [x] Exported Windows Event XML 분석
+- [x] Optional `python-evtx` Binary EVTX Capability
+- [x] Prefetch Version 17·23·26·30 최소 Metadata 분석
+- [x] MAM Compression 감지 및 Unsupported 상태 구분
+- [x] Artifact SQLite Persistence
+- [x] Checkpoint / Resume / Pause / Cancel
+- [x] Stable Cursor Query
+- [x] Raw Locator 및 Citation
+- [x] Artifact CLI
+- [x] Unit / Integration Test
 
 ### Phase 4 — Search 및 Timeline
 
@@ -1215,48 +1332,6 @@ APEX/
 - Approval
 - Chain of Custody Section
 - PDF / HTML Export
-
-## Phase 3 Windows Artifact Analysis MVP
-
-Phase 3 is implemented for read-only offline Windows artifacts discovered from the Phase 2
-filesystem index. The runtime adds provider-neutral artifact domain records, analyzer ports,
-SQLite persistence, stable cursor queries, CLI commands, JSON Schema validation, and tests.
-
-Implemented inputs:
-
-- Registry export text (`.reg`) with UTF-16LE/UTF-8 BOM handling, key/value records, autorun,
-  USBSTOR, TimeZoneInformation, and safe UserAssist ROT13/count parsing.
-- Binary Registry hive sources (`SYSTEM`, `SOFTWARE`, `NTUSER.DAT`, `USRCLASS.DAT`) as optional
-  `python-registry` capability. When the dependency is absent, analysis returns
-  `CAPABILITY_UNAVAILABLE`/`UNSUPPORTED` instead of a fake success.
-- Exported Windows Event XML with namespace-safe field extraction and event subtype candidates for
-  common Security/System/Sysmon event IDs.
-- Binary EVTX sources as optional `python-evtx` capability. Message DLL rendering is not performed.
-- Prefetch `.pf` minimal metadata parser for tested versions 17, 23, 26, and 30, with MAM
-  compression detection and explicit unsupported-version handling.
-
-Artifact discovery reuses existing `fs_nodes`; it does not rescan directories or access paths that
-are not represented by the filesystem index. Partial filesystem coverage is propagated to artifact
-coverage. Raw locators distinguish logical Registry/Event references from byte ranges and do not
-invent offsets when a parser does not expose them.
-
-CLI additions:
-
-- `apex-forensic artifact discover`
-- `apex-forensic artifact analyze`
-- `apex-forensic artifact status`
-- `apex-forensic artifact resume`
-- `apex-forensic artifact cancel`
-- `apex-forensic artifact list`
-- `apex-forensic artifact show`
-- `apex-forensic artifact warnings`
-- Registry helpers: `artifact registry autoruns|usb|timezone|userassist`
-- Event Log helpers: `artifact eventlog list|show`
-- Prefetch helpers: `artifact prefetch list|show`
-
-Security boundaries remain unchanged: Phase 3 does not perform live acquisition, remote Registry
-access, credential/secret extraction, Registry transaction log recovery, Event Message DLL
-rendering, timeline/search integration, GUI, MCP, OCR/STT, LLM calls, or report rendering.
 
 ### Phase 9 — Benchmark 및 배포
 
@@ -1394,20 +1469,3 @@ AI가 생성한 분석 결과와 Report는 분석 보조 자료이며, 최종 �
 - Chain of Custody Event 불변성 유지
 - 검증되지 않은 성능 또는 법적 효력 주장 금지
 
-## Phase 2 구현 업데이트
-
-Phase 2는 Directory Evidence와 일반 Logical File Evidence를 대상으로 하는 Progressive File System & Indexing 기반을 구현한다. 구현된 범위는 read-only metadata index, Logical Directory Provider, provider capability contract, SQLite-backed priority queue/checkpoint/coverage, stable cursor pagination, CLI E2E 흐름, JSON Schema 계약 및 회귀 테스트다.
-
-지원 범위는 다음과 같다.
-
-- Directory Evidence는 `os.scandir()` 기반으로 원본 이름과 상대 경로를 손실 없이 보존하며 metadata만 수집한다.
-- 일반 logical file evidence는 하나의 root/file node로 표현한다.
-- Quick Triage는 기본 깊이 제한으로 빠른 partial tree를 제공하고, Full Analysis는 전체 directory metadata tree를 완료한다.
-- Selected Scope는 선택된 directory/node를 background scope보다 우선 queue에 배치한다.
-- item budget은 deterministic partial result와 checkpoint/resume 재현에 사용한다.
-- pause, resume, cancel은 batch/checkpoint 경계에서 cooperative 방식으로 동작하며 partial 결과를 보존한다.
-- symlink 및 reparse point는 기본적으로 따라가지 않고 entry 자체만 가능한 metadata로 기록한다.
-- metadata indexing 중 file body를 읽지 않고 automatic hash를 수행하지 않는다. Hash는 기존 Evidence Hash Service의 명시 호출에서만 수행한다.
-- File tree 조회는 opaque stable cursor를 사용하며 query option과 cursor fingerprint 불일치를 검증한다.
-
-Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, NTFS/FAT/exFAT/ext 직접 parser, deleted file recovery, slack/unallocated 분석, FTS5/full text search, artifact parser, timeline 통합, GUI, web server, MCP/LLM/OCR/STT/report renderer 실행 코드다. 해당 내부 탐색 요청은 `CAPABILITY_UNAVAILABLE`로 표현한다.
