@@ -96,8 +96,8 @@ Lifecycle:
 
 | Analyzer | 주요 입력 | 대표 Artifact | 핵심 Provenance |
 | --- | --- | --- | --- |
-| Registry | SYSTEM, SOFTWARE, SAM, SECURITY, NTUSER.DAT 등 Hive | Key/Value, User, Installed Program, USB, Run Key | Hive 경로, Key 경로, Value, Cell Offset |
-| Event Log | Windows `.evtx` | Event Record | File 경로, Record ID, Channel, Provider |
+| Registry | SYSTEM, SOFTWARE, NTUSER.DAT, USRCLASS.DAT, `.reg` | Key/Value, Timezone, USB, Run Key, UserAssist | Hive 경로, Key 경로, Value, 제한된 Logical Locator |
+| Event Log | Windows `.evtx`, exported Event XML | Event Record | File 경로, Record ID, Channel, Provider |
 | Prefetch | Windows `.pf` | Program Execution | File 경로, Format Version, Run Count |
 | Browser Communications | SQLite/JSON/Cache DB | Visit, Search, Download, URL, Profile | Profile, DB/Table/Row ID |
 | Media | 이미지/영상 | EXIF, GPS, Thumbnail, Codec, Duration, 삭제 상태 | File 경로, Metadata Tag/Offset |
@@ -338,3 +338,25 @@ External Validation Plan은 공개/Synthetic Dataset과 동일 비교 조건을 
 - `LogicalDirectoryFileSystemProvider`: implements read-only directory and logical file metadata collection with `os.scandir()`, deterministic sorting, Unicode-preserving path handling, and no default link traversal.
 - `SQLiteRepository`: remains the single writer for nodes, queue/checkpoints, coverage, provider metadata, scan events, and job state.
 - CLI: provides `evidence index`, `index-status`, `index-resume`, `index-cancel`, and `fs roots/list/show/prioritize` commands.
+
+## Phase 3 Runtime Responsibilities
+
+- `ArtifactAnalysisService`: validates case/evidence state, reuses existing `fs_nodes`, creates
+  ARTIFACT jobs, applies selected scope/include/exclude filters, prevents completed duplicate
+  source/analyzer/options runs, persists coverage/checkpoints, handles cooperative pause/cancel/resume,
+  and exposes stable cursor artifact queries.
+- `ArtifactAnalyzer` port: defines capability reporting, source detection, support checks, parse
+  execution, warning/error output, raw locator production, and analyzer/backend version reporting.
+- `WindowsRegistryAnalyzer`: parses `.reg` text and exposes optional `python-registry` binary hive
+  capability for `SYSTEM`, `SOFTWARE`, `NTUSER.DAT`, and `USRCLASS.DAT`.
+- `WindowsEventLogAnalyzer`: parses exported Event XML and exposes optional `python-evtx` EVTX
+  capability through a streaming iterator boundary; it does not perform message DLL rendering.
+- `WindowsPrefetchAnalyzer`: parses minimal `.pf` header metadata for versions 17/23/26/30 and marks
+  MAM compression or unknown versions as unsupported.
+- `SQLiteRepository`: remains the single writer for artifacts, artifact sources, analyzer registry,
+  option fingerprints, warnings, checkpoints, coverage, and cursor-query projections.
+- CLI: provides artifact discovery, analyze/status/resume/cancel/list/show/warnings plus
+  registry/eventlog/prefetch helper commands.
+
+Artifact analyzers emit observed facts only. Credential/secret extraction, live acquisition, Timeline
+projection, FTS search, GUI, MCP, OCR/STT, and LLM behavior remain outside Phase 3.

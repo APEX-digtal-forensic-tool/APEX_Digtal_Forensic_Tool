@@ -124,8 +124,22 @@ requirement_ids = re.findall(r"\|\s*([A-Z]+(?:-[A-Z]+)*-\d{3})\s*\|", traceabili
 duplicates = sorted({item for item in requirement_ids if requirement_ids.count(item) > 1})
 check(not duplicates, "duplicate requirement IDs: " + ", ".join(duplicates))
 for prefix in [
-    "CORE", "CTX", "LOC", "RPT", "MCP", "PERF", "COMM", "MEDIA",
-    "AI", "AUD", "IDX", "TZ", "KW", "COC", "VIEW", "VAL",
+    "CORE",
+    "CTX",
+    "LOC",
+    "RPT",
+    "MCP",
+    "PERF",
+    "COMM",
+    "MEDIA",
+    "AI",
+    "AUD",
+    "IDX",
+    "TZ",
+    "KW",
+    "COC",
+    "VIEW",
+    "VAL",
 ]:
     check(
         re.search(rf"\|\s*{prefix}-\d{{3}}\s*\|", traceability) is not None,

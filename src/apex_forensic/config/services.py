@@ -5,11 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from apex_forensic.adapters.artifacts import (
+    WindowsEventLogAnalyzer,
+    WindowsPrefetchAnalyzer,
+    WindowsRegistryAnalyzer,
+)
 from apex_forensic.adapters.filesystem import LogicalDirectoryFileSystemProvider
 from apex_forensic.adapters.hashing import HashlibStreamingHashProvider
 from apex_forensic.adapters.persistence.sqlite import SQLiteRepository
 from apex_forensic.adapters.system import SystemClock, UuidGenerator
 from apex_forensic.application.services import (
+    ArtifactAnalysisService,
     CaseManager,
     CustodyLedger,
     EvidenceManager,
@@ -26,6 +32,7 @@ class ServiceBundle:
     evidence: EvidenceManager
     custody: CustodyLedger
     fs: FileSystemIndexService
+    artifacts: ArtifactAnalysisService
 
     def close(self) -> None:
         """Close underlying resources."""
@@ -64,7 +71,25 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         clock=clock,
         id_generator=ids,
     )
+    artifacts = ArtifactAnalysisService(
+        case_repository=repository,
+        evidence_repository=repository,
+        artifact_repository=repository,
+        fs_repository=repository,
+        analyzers=(
+            WindowsRegistryAnalyzer(),
+            WindowsEventLogAnalyzer(),
+            WindowsPrefetchAnalyzer(),
+        ),
+        clock=clock,
+        id_generator=ids,
+    )
     cases = CaseManager(repository=repository, clock=clock, id_generator=ids)
     return ServiceBundle(
-        repository=repository, cases=cases, evidence=evidence, custody=custody, fs=fs
+        repository=repository,
+        cases=cases,
+        evidence=evidence,
+        custody=custody,
+        fs=fs,
+        artifacts=artifacts,
     )

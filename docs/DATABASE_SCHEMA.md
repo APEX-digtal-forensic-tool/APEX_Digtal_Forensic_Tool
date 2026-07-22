@@ -1121,6 +1121,30 @@ Live Progress와 Live GUI Context는 Session Store를 우선한다. 재현, Audi
 
 The SQLite repository now applies an idempotent `phase2-progressive-filesystem-indexing` migration while preserving Phase 1 tables, WAL, foreign keys, and append-only custody triggers.
 
+## Phase 3 SQLite Tables
+
+The SQLite repository now applies an idempotent `phase3-windows-artifact-analysis` migration while
+preserving Phase 1/2 tables, WAL, foreign keys, and append-only custody triggers.
+
+Runtime tables:
+
+- `artifact_analyzers`: analyzer capability registry, including parser backend/version and explicit
+  unavailable capabilities.
+- `analyzer_option_fingerprints`: canonical options used to decide when a new analyzer revision or
+  option set may run again.
+- `artifact_analysis_jobs`: Phase 3 job metadata linked to `jobs`.
+- `artifact_sources`: queue/checkpoint source rows derived only from indexed `fs_nodes`.
+- `artifacts`: immutable observed facts with common Phase 3 fields, JSON `fields`, raw locator,
+  citations, parser backend/version, parse status, confidence, partial flag, and stable `dedup_key`.
+- `artifact_warnings`: analyzer warnings and parse errors by job/source/artifact.
+- `artifact_checkpoints`: resumable progress for interrupted jobs.
+- `artifact_coverage`: source/artifact/warning/error counters and partial coverage state.
+
+Projection columns on `artifacts` support Phase 3 filters without FTS: `event_id`, `registry_path`,
+`registry_path_key`, `executable_name`, `executable_name_key`, `sort_timestamp`, and `has_warnings`.
+Artifact deletion APIs are not added; reruns with the same dedup key are ignored rather than updating
+the stored fact.
+
 Implemented tables:
 
 - `fs_providers`: provider id/version, capabilities, and metadata.

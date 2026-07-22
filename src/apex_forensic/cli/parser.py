@@ -134,6 +134,67 @@ def build_parser() -> argparse.ArgumentParser:
     fs_prioritize.add_argument("--priority", type=int, default=0)
     fs_prioritize.add_argument("--json", action="store_true")
 
+    artifact_parser = subcommands.add_parser("artifact", help="Windows artifact commands")
+    artifact_commands = artifact_parser.add_subparsers(dest="artifact_command", required=True)
+    artifact_discover = artifact_commands.add_parser("discover", help="Discover artifact sources")
+    _add_artifact_scope_args(artifact_discover, include_case=True)
+    artifact_discover.add_argument("--batch-size", type=int, default=100)
+    artifact_discover.add_argument("--json", action="store_true")
+
+    artifact_analyze = artifact_commands.add_parser("analyze", help="Analyze artifact sources")
+    _add_artifact_scope_args(artifact_analyze, include_case=True)
+    artifact_analyze.add_argument("--item-budget", type=int)
+    artifact_analyze.add_argument("--batch-size", type=int, default=100)
+    artifact_analyze.add_argument("--json", action="store_true")
+
+    artifact_status = artifact_commands.add_parser("status", help="Show artifact job status")
+    artifact_status.add_argument("--job-id", required=True)
+    artifact_status.add_argument("--json", action="store_true")
+
+    artifact_resume = artifact_commands.add_parser("resume", help="Resume an artifact job")
+    artifact_resume.add_argument("--job-id", required=True)
+    artifact_resume.add_argument("--item-budget", type=int)
+    artifact_resume.add_argument("--json", action="store_true")
+
+    artifact_cancel = artifact_commands.add_parser("cancel", help="Cancel an artifact job")
+    artifact_cancel.add_argument("--job-id", required=True)
+    artifact_cancel.add_argument("--json", action="store_true")
+
+    artifact_list = artifact_commands.add_parser("list", help="List artifacts")
+    _add_artifact_query_args(artifact_list)
+
+    artifact_show = artifact_commands.add_parser("show", help="Show one artifact")
+    artifact_show.add_argument("--artifact-id", required=True)
+    artifact_show.add_argument("--json", action="store_true")
+
+    artifact_warnings = artifact_commands.add_parser("warnings", help="List artifact warnings")
+    artifact_warnings.add_argument("--job-id")
+    artifact_warnings.add_argument("--artifact-id")
+    artifact_warnings.add_argument("--evidence-id")
+    artifact_warnings.add_argument("--json", action="store_true")
+
+    registry_parser = artifact_commands.add_parser("registry", help="Registry artifact helpers")
+    registry_commands = registry_parser.add_subparsers(dest="registry_command", required=True)
+    for command_name in ("autoruns", "usb", "timezone", "userassist"):
+        registry_command = registry_commands.add_parser(command_name)
+        _add_artifact_query_args(registry_command, artifact_type_required=False)
+
+    eventlog_parser = artifact_commands.add_parser("eventlog", help="Event Log artifact helpers")
+    eventlog_commands = eventlog_parser.add_subparsers(dest="eventlog_command", required=True)
+    eventlog_list = eventlog_commands.add_parser("list")
+    _add_artifact_query_args(eventlog_list, artifact_type_required=False)
+    eventlog_show = eventlog_commands.add_parser("show")
+    eventlog_show.add_argument("--artifact-id", required=True)
+    eventlog_show.add_argument("--json", action="store_true")
+
+    prefetch_parser = artifact_commands.add_parser("prefetch", help="Prefetch artifact helpers")
+    prefetch_commands = prefetch_parser.add_subparsers(dest="prefetch_command", required=True)
+    prefetch_list = prefetch_commands.add_parser("list")
+    _add_artifact_query_args(prefetch_list, artifact_type_required=False)
+    prefetch_show = prefetch_commands.add_parser("show")
+    prefetch_show.add_argument("--artifact-id", required=True)
+    prefetch_show.add_argument("--json", action="store_true")
+
     custody_parser = subcommands.add_parser("custody", help="Custody commands")
     custody_commands = custody_parser.add_subparsers(dest="custody_command", required=True)
     custody_list = custody_commands.add_parser("list", help="List custody events")
@@ -154,3 +215,44 @@ def build_parser() -> argparse.ArgumentParser:
     custody_add.add_argument("--json", action="store_true")
 
     return parser
+
+
+def _add_artifact_scope_args(parser: argparse.ArgumentParser, *, include_case: bool) -> None:
+    if include_case:
+        parser.add_argument("--case-id", required=True)
+    parser.add_argument("--evidence-id", required=True)
+    parser.add_argument(
+        "--profile",
+        default="QUICK_TRIAGE",
+        choices=["QUICK_TRIAGE", "SELECTED_SCOPE", "FULL_ANALYSIS", "CUSTOM"],
+    )
+    parser.add_argument("--analyzer", action="append", default=[])
+    parser.add_argument("--artifact-type", action="append", default=[])
+    parser.add_argument("--selected-path", action="append", default=[])
+    parser.add_argument("--selected-node-id", action="append", default=[])
+    parser.add_argument("--include", action="append", default=[])
+    parser.add_argument("--exclude", action="append", default=[])
+
+
+def _add_artifact_query_args(
+    parser: argparse.ArgumentParser,
+    *,
+    artifact_type_required: bool = True,
+) -> None:
+    parser.add_argument("--case-id", required=True)
+    parser.add_argument("--evidence-id")
+    parser.add_argument("--source-node-id")
+    del artifact_type_required
+    parser.add_argument("--artifact-type")
+    parser.add_argument("--artifact-subtype")
+    parser.add_argument("--analyzer")
+    parser.add_argument("--event-id", type=int)
+    parser.add_argument("--registry-path")
+    parser.add_argument("--executable-name")
+    parser.add_argument("--observed-from")
+    parser.add_argument("--observed-to")
+    parser.add_argument("--parse-status")
+    parser.add_argument("--has-warnings", action="store_true")
+    parser.add_argument("--cursor")
+    parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--json", action="store_true")

@@ -575,3 +575,33 @@ apex-forensic fs prioritize --job-id <id> --node-id <id>
 ```
 
 All commands keep `--db` and `--json`. File tree pagination uses an opaque cursor containing a query fingerprint and last stable sort key; changing filter/scope options invalidates the cursor with a structured validation error. Disk image internal traversal returns `CAPABILITY_UNAVAILABLE` rather than a successful empty tree.
+
+## Phase 3 CLI/Application Interface
+
+Phase 3 exposes Windows artifact analysis through the application service and CLI. No backend web
+server is added.
+
+CLI-equivalent commands:
+
+- `apex-forensic artifact discover --case-id CASE --evidence-id EVIDENCE`
+- `apex-forensic artifact analyze --case-id CASE --evidence-id EVIDENCE`
+- `apex-forensic artifact status --job-id JOB`
+- `apex-forensic artifact resume --job-id JOB`
+- `apex-forensic artifact cancel --job-id JOB`
+- `apex-forensic artifact list --case-id CASE [--evidence-id EVIDENCE]`
+- `apex-forensic artifact show --artifact-id ARTIFACT`
+- `apex-forensic artifact warnings [--job-id JOB] [--artifact-id ARTIFACT]`
+- `apex-forensic artifact registry autoruns|usb|timezone|userassist`
+- `apex-forensic artifact eventlog list|show`
+- `apex-forensic artifact prefetch list|show`
+
+Supported command options include `--json`, `--profile`, `--item-budget`, `--batch-size`,
+`--analyzer`, `--artifact-type`, `--selected-path`, `--selected-node-id`, `--include`, `--exclude`,
+`--cursor`, `--limit`, time range filters, parse status, event ID, registry path, executable name,
+source node, and warning filters.
+
+Artifact list queries use opaque stable cursors bound to the query fingerprint and explicit
+`observed_or_created_at, artifact_id` ordering. Cursor/query mismatches return structured validation
+errors. Capability gaps such as missing `python-registry`, missing `python-evtx`, unsupported Prefetch
+versions, and MAM compression are reported as warnings or unsupported parse status, not successful
+facts.

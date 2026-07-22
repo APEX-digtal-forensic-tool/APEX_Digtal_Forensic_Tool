@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트는 **Phase 2 Progressive File System & Indexing 구현 완료** 상태입니다.
-> Phase 1의 Case·Evidence·Hash·SQLite·Chain of Custody 기반 위에 Directory Evidence와 Logical File Evidence의 read-only metadata indexing, Quick Triage, Selected Scope, Full Analysis, Partial Result, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 CLI 조회 기능이 구현되었습니다.
+> 현재 프로젝트는 **Phase 3 Windows Artifact Analysis MVP 구현 완료** 상태입니다.
+> Phase 1·2의 Case·Evidence·Hash·SQLite·Chain of Custody, Job, Logical File System Indexing 기반 위에 Windows Registry `.reg`, exported Event XML, minimal Prefetch metadata, Artifact Discovery, Query, SQLite persistence, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 CLI 조회 기능이 구현되었습니다.
 >
-> E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Windows Artifact Parser, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
 
 ---
 
@@ -1215,6 +1215,48 @@ APEX/
 - Approval
 - Chain of Custody Section
 - PDF / HTML Export
+
+## Phase 3 Windows Artifact Analysis MVP
+
+Phase 3 is implemented for read-only offline Windows artifacts discovered from the Phase 2
+filesystem index. The runtime adds provider-neutral artifact domain records, analyzer ports,
+SQLite persistence, stable cursor queries, CLI commands, JSON Schema validation, and tests.
+
+Implemented inputs:
+
+- Registry export text (`.reg`) with UTF-16LE/UTF-8 BOM handling, key/value records, autorun,
+  USBSTOR, TimeZoneInformation, and safe UserAssist ROT13/count parsing.
+- Binary Registry hive sources (`SYSTEM`, `SOFTWARE`, `NTUSER.DAT`, `USRCLASS.DAT`) as optional
+  `python-registry` capability. When the dependency is absent, analysis returns
+  `CAPABILITY_UNAVAILABLE`/`UNSUPPORTED` instead of a fake success.
+- Exported Windows Event XML with namespace-safe field extraction and event subtype candidates for
+  common Security/System/Sysmon event IDs.
+- Binary EVTX sources as optional `python-evtx` capability. Message DLL rendering is not performed.
+- Prefetch `.pf` minimal metadata parser for tested versions 17, 23, 26, and 30, with MAM
+  compression detection and explicit unsupported-version handling.
+
+Artifact discovery reuses existing `fs_nodes`; it does not rescan directories or access paths that
+are not represented by the filesystem index. Partial filesystem coverage is propagated to artifact
+coverage. Raw locators distinguish logical Registry/Event references from byte ranges and do not
+invent offsets when a parser does not expose them.
+
+CLI additions:
+
+- `apex-forensic artifact discover`
+- `apex-forensic artifact analyze`
+- `apex-forensic artifact status`
+- `apex-forensic artifact resume`
+- `apex-forensic artifact cancel`
+- `apex-forensic artifact list`
+- `apex-forensic artifact show`
+- `apex-forensic artifact warnings`
+- Registry helpers: `artifact registry autoruns|usb|timezone|userassist`
+- Event Log helpers: `artifact eventlog list|show`
+- Prefetch helpers: `artifact prefetch list|show`
+
+Security boundaries remain unchanged: Phase 3 does not perform live acquisition, remote Registry
+access, credential/secret extraction, Registry transaction log recovery, Event Message DLL
+rendering, timeline/search integration, GUI, MCP, OCR/STT, LLM calls, or report rendering.
 
 ### Phase 9 — Benchmark 및 배포
 
