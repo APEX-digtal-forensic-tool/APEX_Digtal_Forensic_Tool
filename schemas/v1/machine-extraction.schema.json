@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/machine-extraction.schema.json",
+  "title": "APEX Machine-extracted Candidate",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/machineExtraction"
+    },
+    {
+      "$ref": "#/$defs/extractionReview"
+    }
+  ],
+  "$defs": {
+    "sourceRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height",
+        "unit"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "enum": [
+            "PIXEL",
+            "NORMALIZED"
+          ]
+        }
+      }
+    },
+    "machineExtraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "extraction_id",
+        "case_id",
+        "evidence_id",
+        "file_id",
+        "media_type",
+        "extraction_type",
+        "extracted_text",
+        "confidence",
+        "language",
+        "engine_id",
+        "engine_version",
+        "frame_number",
+        "timestamp_offset_ms",
+        "source_region",
+        "source_locator",
+        "citations",
+        "analyst_status",
+        "corrected_text",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "extraction_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "file_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "media_type": {
+          "enum": [
+            "IMAGE",
+            "VIDEO",
+            "AUDIO",
+            "DOCUMENT"
+          ]
+        },
+        "extraction_type": {
+          "enum": [
+            "IMAGE_OCR",
+            "FRAME_OCR",
+            "SUBTITLE",
+            "AUDIO_STT",
+            "SCREEN_TEXT",
+            "DOCUMENT_TEXT"
+          ]
+        },
+        "extracted_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "engine_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "engine_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "timestamp_offset_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source_region": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sourceRegion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_locator": {
+          "$ref": "citation.schema.json#/$defs/rawLocator"
+        },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "analyst_status": {
+          "enum": [
+            "UNREVIEWED",
+            "ACCEPTED",
+            "REJECTED",
+            "CORRECTED"
+          ]
+        },
+        "corrected_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "extractionReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "extraction_id",
+        "decision",
+        "corrected_text",
+        "reason",
+        "reviewed_by",
+        "reviewed_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "extraction_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "decision": {
+          "enum": [
+            "ACCEPTED",
+            "REJECTED",
+            "CORRECTED"
+          ]
+        },
+        "corrected_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewed_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewed_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}

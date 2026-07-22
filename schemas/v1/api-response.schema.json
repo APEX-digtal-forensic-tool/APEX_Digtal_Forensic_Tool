@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/api-response.schema.json",
+  "title": "APEX API Response Envelope",
+  "oneOf": [
+    { "$ref": "#/$defs/successResponse" },
+    { "$ref": "common.schema.json#/$defs/errorResponse" }
+  ],
+  "$defs": {
+    "successResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "request_id", "data", "page", "warnings"],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "request_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "data": true,
+        "page": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/pageInfo" },
+            { "type": "null" }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/warning"
+          }
+        }
+      }
+    }
+  }
+}

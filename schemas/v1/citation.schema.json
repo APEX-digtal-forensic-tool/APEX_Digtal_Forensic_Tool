@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/citation.schema.json",
+  "title": "APEX Evidence Citation",
+  "$ref": "#/$defs/citation",
+  "$defs": {
+    "nullableUuid": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "case_id",
+        "evidence_id",
+        "source_kind",
+        "source_id",
+        "file_id",
+        "artifact_id",
+        "timeline_event_id",
+        "search_result_id",
+        "source_path",
+        "source_offset",
+        "source_reference",
+        "excerpt",
+        "content_sha256",
+        "created_at",
+        "source_length",
+        "encoding",
+        "raw_locator"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "label": {
+          "type": "string",
+          "pattern": "^CIT-[0-9]{3,}$"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "source_kind": {
+          "enum": [
+            "EVIDENCE",
+            "FILE",
+            "ARTIFACT",
+            "TIMELINE_EVENT",
+            "SEARCH_RESULT",
+            "ANALYST_ANNOTATION",
+            "AI_ENRICHMENT",
+            "MACHINE_EXTRACTION",
+            "CUSTODY_EVENT",
+            "KEYWORD_RECOMMENDATION"
+          ]
+        },
+        "source_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "file_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "timeline_event_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "search_result_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "source_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_offset": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "excerpt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_sha256": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "source_length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "encoding": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw_locator": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/rawLocator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "rawLocator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "source_kind",
+        "source_id",
+        "source_path",
+        "source_reference",
+        "offset",
+        "length",
+        "encoding",
+        "view_types",
+        "content_sha256"
+      ],
+      "properties": {
+        "evidence_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_kind": {
+          "enum": [
+            "EVIDENCE",
+            "FILE",
+            "ARTIFACT",
+            "MACHINE_EXTRACTION"
+          ]
+        },
+        "source_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "encoding": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "view_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "HEX",
+              "TEXT"
+            ]
+          }
+        },
+        "content_sha256": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

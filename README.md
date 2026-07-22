@@ -12,8 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트는 **설계 기준선(Design Baseline)** 단계입니다.  
-> Architecture, Database, API, JSON Schema 및 설계 검증 도구는 작성되었지만 실제 Engine, GUI, MCP, AI, OCR/STT 및 Report 실행 기능은 아직 구현되지 않았습니다.
+> 현재 프로젝트는 **Phase 1 Core Foundation 구현 완료** 상태입니다.
+> Case·Evidence 관리, MD5·SHA-1·SHA-256 Streaming Hash와 무결성 검증, SQLite Repository, Append-only Chain of Custody, Job·Progress·Cancellation, JSON Schema 검증, CLI 및 Unit·Integration Test가 구현되었습니다.
+>
+> File System 내부 분석, Artifact Parser, Progressive Indexing 전체 기능, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
 
 ---
 

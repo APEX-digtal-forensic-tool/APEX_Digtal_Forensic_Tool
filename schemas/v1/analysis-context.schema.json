@@ -1,0 +1,463 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/analysis-context.schema.json",
+  "title": "APEX Analysis Context Snapshot",
+  "$ref": "#/$defs/analysisContext",
+  "$defs": {
+    "nullableUuid": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "resultReferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_ids",
+        "file_ids",
+        "artifact_ids",
+        "timeline_event_ids",
+        "search_result_ids",
+        "analyst_annotation_ids",
+        "ai_enrichment_ids",
+        "tag_ids",
+        "keyword_recommendation_ids",
+        "search_execution_ids",
+        "machine_extraction_ids",
+        "custody_event_ids",
+        "report_ids"
+      ],
+      "properties": {
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "file_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "artifact_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "timeline_event_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "search_result_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "analyst_annotation_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "ai_enrichment_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "keyword_recommendation_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "search_execution_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "machine_extraction_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "custody_event_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        },
+        "report_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          }
+        }
+      }
+    },
+    "analystAnnotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "target_type",
+        "target_id",
+        "body",
+        "locale",
+        "created_by",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "target_type": {
+          "enum": [
+            "EVIDENCE",
+            "FILE",
+            "ARTIFACT",
+            "TIMELINE_EVENT",
+            "SEARCH_RESULT"
+          ]
+        },
+        "target_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "$ref": "common.schema.json#/$defs/locale"
+        },
+        "created_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "tag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "name",
+        "color",
+        "description",
+        "created_by",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "taggedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tag_id",
+        "target_type",
+        "target_id",
+        "tagged_by",
+        "tagged_at"
+      ],
+      "properties": {
+        "tag_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "target_type": {
+          "enum": [
+            "EVIDENCE",
+            "FILE",
+            "ARTIFACT",
+            "TIMELINE_EVENT",
+            "SEARCH_RESULT"
+          ]
+        },
+        "target_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "tagged_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tagged_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "analysisContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "purpose",
+        "ui_context_snapshot_id",
+        "ui_context",
+        "result_references",
+        "citations",
+        "locale",
+        "timezone",
+        "created_by",
+        "created_at",
+        "content_sha256",
+        "scope",
+        "scope_revision",
+        "included_scopes",
+        "partial_result",
+        "result_completeness",
+        "analyzer_versions",
+        "filters",
+        "time_range",
+        "item_count",
+        "context_size_bytes",
+        "transmitted_scopes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "purpose": {
+          "enum": [
+            "GUI_HANDOFF",
+            "AI_ENRICHMENT",
+            "REPORT_DRAFT",
+            "EXPLANATION",
+            "CORRELATION",
+            "RECOMMENDATION",
+            "KEYWORD_RECOMMENDATION",
+            "SCOPE_SUMMARY",
+            "CHAIN_OF_CUSTODY"
+          ]
+        },
+        "ui_context_snapshot_id": {
+          "$ref": "#/$defs/nullableUuid"
+        },
+        "ui_context": {
+          "oneOf": [
+            {
+              "$ref": "ui-context.schema.json#/$defs/uiContext"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result_references": {
+          "$ref": "#/$defs/resultReferences"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "locale": {
+          "$ref": "common.schema.json#/$defs/locale"
+        },
+        "timezone": {
+          "$ref": "common.schema.json#/$defs/timezone"
+        },
+        "created_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "content_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "scope": {
+          "$ref": "common.schema.json#/$defs/analysisScope"
+        },
+        "scope_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "included_scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scopeContextReference"
+          }
+        },
+        "partial_result": {
+          "type": "boolean"
+        },
+        "result_completeness": {
+          "$ref": "common.schema.json#/$defs/partialResult"
+        },
+        "analyzer_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "filters": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "time_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "to"
+          ],
+          "properties": {
+            "from": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "to": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "context_size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "transmitted_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/analysisScope"
+          }
+        }
+      }
+    },
+    "scopeContextReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context_id",
+        "scope",
+        "revision",
+        "is_partial",
+        "item_count",
+        "created_at",
+        "content_sha256"
+      ],
+      "properties": {
+        "context_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "scope": {
+          "$ref": "common.schema.json#/$defs/analysisScope"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "content_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

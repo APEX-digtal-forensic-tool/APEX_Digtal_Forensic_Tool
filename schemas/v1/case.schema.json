@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/case.schema.json",
+  "title": "APEX Case",
+  "$ref": "#/$defs/case",
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "status",
+        "locale",
+        "timezone",
+        "created_at",
+        "created_by",
+        "closed_at",
+        "engine_version",
+        "metadata",
+        "timezone_decision_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "OPEN",
+            "CLOSED",
+            "ARCHIVED"
+          ]
+        },
+        "locale": {
+          "$ref": "common.schema.json#/$defs/locale"
+        },
+        "timezone": {
+          "$ref": "common.schema.json#/$defs/timezone"
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "created_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closed_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engine_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/metadata"
+        },
+        "timezone_decision_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "timezoneCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "timezone",
+        "source",
+        "confidence",
+        "citations",
+        "detected_at",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "timezone": {
+          "$ref": "common.schema.json#/$defs/timezone"
+        },
+        "source": {
+          "enum": [
+            "CASE_SETTING",
+            "EVIDENCE_OS",
+            "WINDOWS_REGISTRY",
+            "LINUX_LOCALTIME",
+            "BROWSER_PROFILE",
+            "APPLICATION_SETTING",
+            "ARTIFACT_OFFSET",
+            "ANALYST_OVERRIDE"
+          ]
+        },
+        "confidence": {
+          "$ref": "common.schema.json#/$defs/confidenceLevel"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "detected_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "status": {
+          "enum": [
+            "CANDIDATE",
+            "CONFIRMED",
+            "REJECTED"
+          ]
+        }
+      }
+    },
+    "timezoneDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "timezone",
+        "source_candidate_id",
+        "confidence",
+        "decided_by",
+        "decided_at",
+        "reason",
+        "supersedes_decision_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "timezone": {
+          "$ref": "common.schema.json#/$defs/timezone"
+        },
+        "source_candidate_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "$ref": "common.schema.json#/$defs/confidenceLevel"
+        },
+        "decided_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decided_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "supersedes_decision_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
