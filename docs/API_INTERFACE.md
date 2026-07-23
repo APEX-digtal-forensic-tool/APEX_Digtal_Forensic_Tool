@@ -605,3 +605,34 @@ Artifact list queries use opaque stable cursors bound to the query fingerprint a
 errors. Capability gaps such as missing `python-registry`, missing `python-evtx`, unsupported Prefetch
 versions, and MAM compression are reported as warnings or unsupported parse status, not successful
 facts.
+
+## Phase 4 CLI Interface
+
+The implemented Phase 4 interface is CLI/service-layer only; no REST/web server is added.
+
+Search commands:
+
+- `apex-forensic search index --case-id ... [--evidence-id ...] [--source-type ...]`
+- `apex-forensic search index-status --job-id ...`
+- `apex-forensic search resume --job-id ...`
+- `apex-forensic search cancel --job-id ...`
+- `apex-forensic search query --case-id ... --query ... [--mode TERM|PHRASE|PREFIX|EXACT|REGEX_METADATA]`
+- `apex-forensic search show --execution-id ...`
+- `apex-forensic search history --case-id ...`
+- `apex-forensic search rerun --execution-id ...`
+- `apex-forensic search cache-status --case-id ...`
+- `apex-forensic search rebuild [--case-id ...]`
+
+Keyword commands:
+
+- `apex-forensic keyword-set create|list|show|add|remove|activate|archive|version`
+
+Timeline commands:
+
+- `apex-forensic timeline build|status|resume|cancel|list|show`
+
+Common options include `--db`, `--json`, `--case-id`, `--evidence-id`, `--query`,
+`--keyword-set-id`, `--source-type`, `--event-type`, `--time-from`, `--time-to`, `--timezone`,
+`--cursor`, `--limit`, `--order`, `--item-budget`, and `--batch-size`. Search and Timeline pagination
+use opaque stable cursors, not offset-only pagination. Capability gaps use structured
+`CAPABILITY_UNAVAILABLE` responses.

@@ -31,7 +31,8 @@
         "REGEX",
         "RELATED_TERM",
         "TRANSLITERATION",
-        "TYPO_VARIANT"
+        "TYPO_VARIANT",
+        "OTHER"
       ]
     },
     "keywordCandidate": {
@@ -243,6 +244,8 @@
         "status": {
           "enum": [
             "DRAFT",
+            "ACTIVE",
+            "ARCHIVED",
             "APPROVED",
             "EXECUTED",
             "SUPERSEDED"

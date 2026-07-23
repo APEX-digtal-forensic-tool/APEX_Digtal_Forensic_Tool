@@ -266,3 +266,19 @@ The existing `SQLiteRepository`, CLI parser/commands, service factory, JSON Sche
 domain enum module are extended in place. Tests use synthetic Registry export, Event XML, and Prefetch
 fixtures; optional binary hive/EVTX dependency tests may be skipped when the parser dependency is not
 installed.
+
+## Phase 4 Added Files
+
+```text
+src/apex_forensic/domain/models/search.py
+src/apex_forensic/domain/models/timeline.py
+src/apex_forensic/ports/search_index.py
+src/apex_forensic/ports/timeline_repository.py
+src/apex_forensic/application/services/search.py
+src/apex_forensic/application/services/timeline.py
+tests/unit/test_phase4_search_timeline.py
+```
+
+Existing files extended in place include the SQLite repository, service factory, CLI parser/commands,
+domain enum exports, model exports, `search.schema.json`, `timeline-event.schema.json`,
+`keyword-recommendation.schema.json`, and `job.schema.json`.

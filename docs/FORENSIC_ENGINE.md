@@ -1396,3 +1396,26 @@ Phase 2는 Directory Evidence와 일반 Logical File Evidence를 대상으로 �
 - File tree 조회는 opaque stable cursor를 사용하며 query option과 cursor fingerprint 불일치를 검증한다.
 
 Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, NTFS/FAT/exFAT/ext 직접 parser, deleted file recovery, slack/unallocated 분석, FTS5/full text search, artifact parser, timeline 통합, GUI, web server, MCP/LLM/OCR/STT/report renderer 실행 코드다. 해당 내부 탐색 요청은 `CAPABILITY_UNAVAILABLE`로 표현한다.
+
+## Phase 4 Search, Keyword Set, Timeline 구현
+
+Forensic Core Engine은 Phase 4에서 저장된 metadata와 artifact field만 대상으로 하는 Search와
+Timeline projection을 제공한다. Search Index Coordinator는 기존 Job/Progress/Checkpoint를
+재사용하고 background daemon 없이 batch 단위로 동작한다. SQLite FTS5가 runtime capability로
+확인되지 않으면 Search Index/Query는 `CAPABILITY_UNAVAILABLE`을 반환한다.
+
+Search Document source는 `FILE_SYSTEM_NODE`, `WINDOWS_ARTIFACT`, `TIMELINE_EVENT`이며 document
+type은 file/directory/registry/event log/prefetch/timeline/other로 분리된다. Index field는
+allowlist 기반이고 대용량 JSON 전체 또는 원본 file body를 하나의 문자열로 넣지 않는다. Query는
+TERM, PHRASE, PREFIX, EXACT, 제한된 `REGEX_METADATA`를 지원한다. Regex는 case/evidence/type/path/time
+candidate를 먼저 제한한 뒤 structured metadata에 post-filter한다.
+
+Keyword Set은 수동/외부 입력 keyword만 관리하며 AI recommendation 실행 코드는 없다. Active set
+수정은 새 version을 생성하고 이전 version을 보존한다. Search Reproduction은 query option,
+keyword set version, backend/version, index revision, source revision, 0건 결과와 partial 상태를
+불변 실행 기록으로 저장한다.
+
+Timeline Generator는 filesystem created/modified/accessed/changed, registry observed facts,
+Event Log SystemTime, Prefetch last run candidate를 event로 변환한다. Raw/UTC/case time을 분리하고
+timezone source/confidence, semantics, precision, raw locator, citation, partial flag를 보존한다.
+Event ID나 Prefetch만으로 악성 여부 또는 사용자 실행 사실을 확정하지 않는다.

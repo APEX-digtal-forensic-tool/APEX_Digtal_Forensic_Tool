@@ -626,3 +626,30 @@ Raw locators distinguish logical Registry/Event references from Prefetch byte fi
 parser does not expose an offset, the locator records `offset: null`, `length: null`, and a limitation
 instead of fabricating a byte range. Event records preserve raw XML and EventData/UserData facts but
 do not render messages through Windows DLLs or assert maliciousness.
+
+## Phase 4 Architecture Extension
+
+Phase 4 keeps the existing ports-and-adapters boundary. `SearchService` and `TimelineService` are
+application services; they depend on provider-neutral ports rather than SQLite SQL. `SQLiteRepository`
+implements the new Search Index Provider, Search Repository, and Timeline Repository operations while
+remaining the single SQLite writer.
+
+Flow:
+
+```text
+fs_nodes / artifacts / timeline_events
+    -> SearchService -> SearchIndexProvider(SQLite FTS5)
+    -> search_documents/search_queries/search_executions/search_results/search_cache
+
+fs_nodes / artifacts
+    -> TimelineService
+    -> timeline_events/timeline_jobs/timeline_checkpoints/timeline_coverage
+```
+
+FTS5 is capability-gated. The virtual table is created only when SQLite supports FTS5; otherwise
+commands return structured capability errors. The application layer never builds FTS SQL directly.
+Stable cursor pagination is used for Search result pages and Timeline pages. Cursor payloads are
+opaque base64 JSON with deterministic tie-breakers.
+
+The architecture deliberately omits file body indexing, AI/LLM, GUI/web/MCP server, OCR/STT, report
+rendering, disk image internals, deleted/slack search, and live acquisition in this phase.

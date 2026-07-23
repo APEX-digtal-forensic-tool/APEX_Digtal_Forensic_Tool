@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -23,7 +25,18 @@ from apex_forensic.domain.enums import (
     IndexCoverageStatus,
     JobStatus,
     JobType,
+    KeywordMatchMode,
+    KeywordSetStatus,
+    KeywordType,
     ProgressUnit,
+    SearchDocumentType,
+    SearchQueryMode,
+    SearchSourceType,
+    TimelineEventType,
+    TimelineSourceType,
+    TimestampPrecision,
+    TimezoneConfidence,
+    TimezoneSource,
 )
 from apex_forensic.domain.models import (
     ArtifactCapability,
@@ -41,7 +54,193 @@ from apex_forensic.domain.models import (
     IndexCoverage,
     Job,
     JobProgress,
+    Keyword,
+    KeywordSet,
+    SearchCacheEntry,
+    SearchDocument,
+    SearchExecution,
+    SearchIndexCapability,
+    SearchQuery,
+    SearchResult,
+    TimelineBuildCoverage,
+    TimelineEvent,
+    TimelineQuery,
 )
+from apex_forensic.domain.services.canonical import canonical_sha256
+
+_FS_METADATA_ALLOWLIST = {
+    "mode",
+    "inode",
+    "device",
+    "uid",
+    "gid",
+    "nlink",
+}
+_PROVIDER_METADATA_ALLOWLIST = {
+    "entry_sort_key",
+    "file_attributes",
+    "source_kind",
+    "reads_file_body",
+}
+_ARTIFACT_FIELD_ALLOWLIST = {
+    "registry_path",
+    "value_name",
+    "value_type",
+    "value_data",
+    "decoded_value",
+    "raw_command",
+    "executable_candidate",
+    "arguments_candidate",
+    "TimeZoneKeyName",
+    "iana_candidate",
+    "vendor_candidate",
+    "product_candidate",
+    "device_instance",
+    "decoded_value_name",
+    "provider_name",
+    "provider_guid",
+    "channel",
+    "event_id",
+    "event_data",
+    "user_data",
+    "executable_name",
+    "prefetch_hash",
+    "referenced_path_candidates",
+    "source_path",
+}
+_TIMELINE_FIELD_ALLOWLIST = {
+    "path",
+    "source_path",
+    "registry_path",
+    "artifact_type",
+    "event_id",
+    "executable_name",
+    "executable_candidate",
+    "timestamp_key",
+    "node_type",
+}
+
+
+def _query_terms(value: str) -> list[str]:
+    return [item for item in re.findall(r"[^\s\"]+", value, flags=re.UNICODE) if item]
+
+
+def _quote_fts(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _prefix_fts_token(value: str) -> str:
+    cleaned = re.sub(r"[^\w\u0080-\uffff]+", "", value, flags=re.UNICODE)
+    return f"{cleaned}*" if cleaned else _quote_fts(value)
+
+
+def _matched_fields(
+    terms: list[str],
+    title: str,
+    path: str,
+    searchable: str,
+    structured: dict[str, Any],
+) -> list[str]:
+    fields: list[str] = []
+    lowered_terms = [term.casefold() for term in terms]
+    if any(term in title.casefold() for term in lowered_terms):
+        fields.append("title")
+    if any(term in path.casefold() for term in lowered_terms):
+        fields.append("path")
+    if any(term in searchable.casefold() for term in lowered_terms):
+        fields.append("searchable_text")
+    structured_text = " ".join(str(value) for value in structured.values()).casefold()
+    if any(term in structured_text for term in lowered_terms):
+        fields.append("structured_fields")
+    return fields or ["searchable_text"]
+
+
+def _safe_field_map(data: dict[str, Any], allowlist: set[str]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key in allowlist:
+        if key not in data:
+            continue
+        value = _safe_field_value(data[key])
+        if value is not None:
+            result[key] = value
+    return result
+
+
+def _safe_field_value(value: Any) -> str | int | float | bool | list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, bool | int | float):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped[:1000] if stripped else None
+    if isinstance(value, list):
+        safe_items = []
+        for item in value[:20]:
+            safe = _safe_field_value(item)
+            if safe is not None:
+                safe_items.append(str(safe)[:300])
+        return safe_items
+    if isinstance(value, dict):
+        safe_items = []
+        for item_key in sorted(value)[:30]:
+            safe = _safe_field_value(value[item_key])
+            if safe is not None:
+                safe_items.append(f"{item_key}={safe}"[:300])
+        return safe_items
+    return str(value)[:500]
+
+
+def _join_search_text(values: Any) -> str:
+    parts: list[str] = []
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, list):
+            parts.extend(str(item) for item in value)
+        else:
+            parts.append(str(value))
+    return " ".join(parts)
+
+
+def _fs_document_type(node_type: str) -> SearchDocumentType:
+    if node_type in {FileSystemNodeType.ROOT.value, FileSystemNodeType.DIRECTORY.value}:
+        return SearchDocumentType.DIRECTORY
+    if node_type == FileSystemNodeType.FILE.value:
+        return SearchDocumentType.FILE
+    return SearchDocumentType.OTHER
+
+
+def _artifact_document_type(artifact_type: str) -> SearchDocumentType:
+    if artifact_type in {
+        ArtifactType.REGISTRY_KEY.value,
+        ArtifactType.REGISTRY_VALUE.value,
+        ArtifactType.REGISTRY_AUTORUN.value,
+        ArtifactType.REGISTRY_USB_DEVICE.value,
+        ArtifactType.REGISTRY_TIMEZONE.value,
+        ArtifactType.REGISTRY_USERASSIST.value,
+    }:
+        return SearchDocumentType.REGISTRY
+    if artifact_type == ArtifactType.EVENT_LOG_RECORD.value:
+        return SearchDocumentType.EVENT_LOG
+    if artifact_type == ArtifactType.PREFETCH_EXECUTION.value:
+        return SearchDocumentType.PREFETCH
+    return SearchDocumentType.OTHER
+
+
+def _timeline_source_artifact_types(source_type: str) -> list[str]:
+    if source_type == TimelineSourceType.EVENT_LOG_ARTIFACT.value:
+        return [ArtifactType.EVENT_LOG_RECORD.value]
+    if source_type == TimelineSourceType.PREFETCH_ARTIFACT.value:
+        return [ArtifactType.PREFETCH_EXECUTION.value]
+    return [
+        ArtifactType.REGISTRY_KEY.value,
+        ArtifactType.REGISTRY_VALUE.value,
+        ArtifactType.REGISTRY_AUTORUN.value,
+        ArtifactType.REGISTRY_USB_DEVICE.value,
+        ArtifactType.REGISTRY_TIMEZONE.value,
+        ArtifactType.REGISTRY_USERASSIST.value,
+    ]
 
 
 class SQLiteRepository:
@@ -499,6 +698,324 @@ class SQLiteRepository:
                 CREATE INDEX IF NOT EXISTS idx_artifact_coverage_evidence
                     ON artifact_coverage(evidence_id, updated_at, job_id);
 
+                CREATE TABLE IF NOT EXISTS search_index_metadata (
+                    case_id TEXT PRIMARY KEY REFERENCES cases(case_id),
+                    index_revision INTEGER NOT NULL,
+                    backend TEXT NOT NULL,
+                    backend_version TEXT NOT NULL,
+                    fts5_available INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS search_documents (
+                    document_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_type TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    document_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    path TEXT,
+                    normalized_path TEXT,
+                    searchable_text TEXT NOT NULL,
+                    structured_fields_json TEXT NOT NULL,
+                    observed_at_utc TEXT,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    analyzer_id TEXT,
+                    analyzer_version TEXT,
+                    is_partial INTEGER NOT NULL,
+                    index_revision INTEGER NOT NULL,
+                    search_backend TEXT NOT NULL,
+                    search_backend_version TEXT NOT NULL,
+                    is_stale INTEGER NOT NULL DEFAULT 0,
+                    fts_rowid INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(
+                        case_id, evidence_id, source_type, source_id,
+                        source_revision, document_type
+                    )
+                );
+                CREATE INDEX IF NOT EXISTS idx_search_documents_case_revision
+                    ON search_documents(case_id, index_revision, document_id);
+                CREATE INDEX IF NOT EXISTS idx_search_documents_source
+                    ON search_documents(
+                        case_id, evidence_id, source_type, source_id, source_revision
+                    );
+                CREATE INDEX IF NOT EXISTS idx_search_documents_type_time
+                    ON search_documents(case_id, document_type, observed_at_utc, document_id);
+
+                CREATE TABLE IF NOT EXISTS search_jobs (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT REFERENCES evidence(evidence_id),
+                    profile_type TEXT NOT NULL,
+                    options_json TEXT NOT NULL,
+                    option_fingerprint TEXT NOT NULL,
+                    index_revision INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    pause_requested INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_search_jobs_case_status
+                    ON search_jobs(case_id, status, created_at);
+
+                CREATE TABLE IF NOT EXISTS search_checkpoints (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    current_source_type TEXT,
+                    current_source_id TEXT,
+                    processed_items INTEGER NOT NULL,
+                    indexed_items INTEGER NOT NULL,
+                    skipped_items INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS search_queries (
+                    query_id TEXT PRIMARY KEY,
+                    query_text TEXT NOT NULL,
+                    query_mode TEXT NOT NULL,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_ids_json TEXT NOT NULL,
+                    source_types_json TEXT NOT NULL,
+                    document_types_json TEXT NOT NULL,
+                    time_range_json TEXT NOT NULL,
+                    path_scope TEXT,
+                    filters_json TEXT NOT NULL,
+                    keyword_set_id TEXT,
+                    keyword_set_version INTEGER,
+                    index_revision INTEGER,
+                    options_fingerprint TEXT NOT NULL,
+                    sort TEXT NOT NULL,
+                    limit_value INTEGER NOT NULL,
+                    case_sensitive INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_search_queries_case_created
+                    ON search_queries(case_id, created_at, query_id);
+
+                CREATE TABLE IF NOT EXISTS search_executions (
+                    execution_id TEXT PRIMARY KEY,
+                    query_id TEXT NOT NULL REFERENCES search_queries(query_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    query_text TEXT NOT NULL,
+                    query_mode TEXT NOT NULL,
+                    keyword_set_id TEXT,
+                    keyword_set_version INTEGER,
+                    options_json TEXT NOT NULL,
+                    options_fingerprint TEXT NOT NULL,
+                    search_backend TEXT NOT NULL,
+                    search_backend_version TEXT NOT NULL,
+                    index_revision INTEGER NOT NULL,
+                    source_revision_fingerprint TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    status TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    result_count INTEGER NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    cache_key TEXT,
+                    cache_hit INTEGER NOT NULL,
+                    zero_result_keyword_ids_json TEXT NOT NULL,
+                    execution_revision INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_search_executions_case_started
+                    ON search_executions(case_id, started_at DESC, execution_id);
+
+                CREATE TABLE IF NOT EXISTS search_results (
+                    result_id TEXT PRIMARY KEY,
+                    query_id TEXT NOT NULL REFERENCES search_queries(query_id),
+                    document_id TEXT NOT NULL REFERENCES search_documents(document_id),
+                    source_type TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    rank REAL NOT NULL,
+                    matched_fields_json TEXT NOT NULL,
+                    matched_terms_json TEXT NOT NULL,
+                    snippet TEXT NOT NULL,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    index_revision INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_search_results_query_rank
+                    ON search_results(query_id, rank, document_id);
+
+                CREATE TABLE IF NOT EXISTS search_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    query_fingerprint TEXT NOT NULL,
+                    keyword_set_version INTEGER,
+                    index_revision INTEGER NOT NULL,
+                    source_revision_fingerprint TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    result_count INTEGER NOT NULL,
+                    results_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    hit_count INTEGER NOT NULL,
+                    invalidated_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_search_cache_case_revision
+                    ON search_cache(case_id, index_revision, invalidated_at);
+
+                CREATE TABLE IF NOT EXISTS keyword_sets (
+                    keyword_set_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    current_version INTEGER NOT NULL,
+                    current_version_id TEXT NOT NULL,
+                    current_status TEXT NOT NULL,
+                    created_by TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_keyword_sets_case
+                    ON keyword_sets(case_id, current_status, updated_at);
+
+                CREATE TABLE IF NOT EXISTS keyword_set_versions (
+                    keyword_set_version_id TEXT PRIMARY KEY,
+                    keyword_set_id TEXT NOT NULL REFERENCES keyword_sets(keyword_set_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    version INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    created_by TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    default_options_json TEXT NOT NULL,
+                    previous_version_id TEXT,
+                    UNIQUE(keyword_set_id, version)
+                );
+                CREATE INDEX IF NOT EXISTS idx_keyword_set_versions_set
+                    ON keyword_set_versions(keyword_set_id, version DESC);
+
+                CREATE TABLE IF NOT EXISTS keywords (
+                    keyword_id TEXT NOT NULL,
+                    keyword_set_version_id TEXT NOT NULL
+                        REFERENCES keyword_set_versions(keyword_set_version_id),
+                    term TEXT NOT NULL,
+                    normalized_term TEXT NOT NULL,
+                    keyword_type TEXT NOT NULL,
+                    match_mode TEXT NOT NULL,
+                    case_sensitive INTEGER NOT NULL,
+                    enabled INTEGER NOT NULL,
+                    notes TEXT,
+                    source TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(keyword_set_version_id, keyword_id),
+                    UNIQUE(keyword_set_version_id, normalized_term, match_mode, case_sensitive)
+                );
+
+                CREATE TABLE IF NOT EXISTS timeline_revisions (
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    timeline_revision INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(case_id, timeline_revision)
+                );
+
+                CREATE TABLE IF NOT EXISTS timeline_jobs (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT REFERENCES evidence(evidence_id),
+                    profile_type TEXT NOT NULL,
+                    options_json TEXT NOT NULL,
+                    option_fingerprint TEXT NOT NULL,
+                    timeline_revision INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    pause_requested INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_timeline_jobs_case_status
+                    ON timeline_jobs(case_id, status, created_at);
+
+                CREATE TABLE IF NOT EXISTS timeline_checkpoints (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    current_source_type TEXT,
+                    current_source_id TEXT,
+                    processed_items INTEGER NOT NULL,
+                    event_count INTEGER NOT NULL,
+                    skipped_items INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS timeline_events (
+                    timeline_event_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_type TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    event_subtype TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    raw_timestamp TEXT,
+                    raw_timezone TEXT,
+                    timestamp_semantics TEXT NOT NULL,
+                    normalized_utc TEXT,
+                    sort_timestamp TEXT NOT NULL,
+                    case_timezone TEXT NOT NULL,
+                    displayed_case_time TEXT,
+                    timezone_source TEXT NOT NULL,
+                    timezone_confidence TEXT NOT NULL,
+                    precision TEXT NOT NULL,
+                    analyzer_id TEXT,
+                    analyzer_version TEXT,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    fields_json TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    timeline_revision INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    dedup_key TEXT NOT NULL UNIQUE,
+                    artifact_type TEXT,
+                    path_key TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_case_sort
+                    ON timeline_events(case_id, sort_timestamp, timeline_event_id);
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_evidence_sort
+                    ON timeline_events(evidence_id, sort_timestamp, timeline_event_id);
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_type_sort
+                    ON timeline_events(case_id, event_type, sort_timestamp, timeline_event_id);
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_source
+                    ON timeline_events(source_type, source_id, source_revision);
+                CREATE INDEX IF NOT EXISTS idx_timeline_events_path
+                    ON timeline_events(case_id, path_key, sort_timestamp, timeline_event_id);
+
+                CREATE TABLE IF NOT EXISTS timeline_coverage (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT REFERENCES evidence(evidence_id),
+                    status TEXT NOT NULL,
+                    discovered_items INTEGER NOT NULL,
+                    processed_items INTEGER NOT NULL,
+                    skipped_items INTEGER NOT NULL,
+                    event_count INTEGER NOT NULL,
+                    warning_count INTEGER NOT NULL,
+                    error_count INTEGER NOT NULL,
+                    current_source TEXT,
+                    is_partial INTEGER NOT NULL,
+                    timeline_revision INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS timezone_mappings (
+                    mapping_id TEXT PRIMARY KEY,
+                    windows_time_zone_key_name TEXT NOT NULL,
+                    iana_timezone TEXT NOT NULL,
+                    confidence TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(windows_time_zone_key_name, iana_timezone)
+                );
+
                 CREATE TRIGGER IF NOT EXISTS custody_events_no_update
                 BEFORE UPDATE ON custody_events
                 BEGIN
@@ -534,6 +1051,26 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("phase3-windows-artifact-analysis", to_json_timestamp(utc_now())),
+            )
+            if self._fts5_available():
+                self.connection.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS search_documents_fts
+                    USING fts5(
+                        document_id UNINDEXED,
+                        title,
+                        path,
+                        searchable_text,
+                        tokenize = 'unicode61'
+                    )
+                    """
+                )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("phase4-search-keyword-timeline", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -2025,6 +2562,1356 @@ class SQLiteRepository:
                 ),
             )
 
+    def search_capability(self) -> SearchIndexCapability:
+        """Return SQLite FTS5 capability without pretending fallback search is equivalent."""
+
+        available = self._fts5_available()
+        unavailable = [] if available else ["SQLITE_FTS5"]
+        warnings = []
+        if not available:
+            warnings.append(
+                {
+                    "code": "SQLITE_FTS5_UNAVAILABLE",
+                    "developer_message": "SQLite was built without FTS5 support.",
+                }
+            )
+        return SearchIndexCapability(
+            backend="sqlite-fts5",
+            backend_version=sqlite3.sqlite_version,
+            fts5_available=available,
+            tokenizer="unicode61",
+            capabilities=[
+                "METADATA_SEARCH",
+                "ARTIFACT_FIELD_SEARCH",
+                "TERM",
+                "PHRASE",
+                "PREFIX",
+                "EXACT",
+                "REGEX_METADATA_CANDIDATE_FILTER",
+            ]
+            if available
+            else [],
+            unavailable_capabilities=unavailable,
+            warnings=warnings,
+        )
+
+    def search_backend_version(self) -> str:
+        """Return the SQLite runtime version used by the search backend."""
+
+        return sqlite3.sqlite_version
+
+    def next_search_index_revision(self, case_id: str) -> int:
+        """Reserve and return the next search index revision for a case."""
+
+        current = self.current_search_index_revision(case_id)
+        next_revision = current + 1
+        now = to_json_timestamp(utc_now())
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO search_index_metadata (
+                    case_id, index_revision, backend, backend_version,
+                    fts5_available, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(case_id) DO UPDATE SET
+                    index_revision = excluded.index_revision,
+                    backend = excluded.backend,
+                    backend_version = excluded.backend_version,
+                    fts5_available = excluded.fts5_available,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    case_id,
+                    next_revision,
+                    "sqlite-fts5",
+                    sqlite3.sqlite_version,
+                    int(self._fts5_available()),
+                    now,
+                ),
+            )
+        return next_revision
+
+    def current_search_index_revision(self, case_id: str) -> int:
+        """Return the latest search index revision known for a case."""
+
+        row = self.connection.execute(
+            "SELECT index_revision FROM search_index_metadata WHERE case_id = ?",
+            (case_id,),
+        ).fetchone()
+        if row is not None:
+            return int(row["index_revision"])
+        row = self.connection.execute(
+            """
+            SELECT COALESCE(MAX(index_revision), 0) AS latest
+            FROM search_documents
+            WHERE case_id = ?
+            """,
+            (case_id,),
+        ).fetchone()
+        return int(row["latest"])
+
+    def index_search_document(self, document: SearchDocument) -> None:
+        """Index one search document."""
+
+        self.batch_index_search_documents([document])
+
+    def batch_index_search_documents(self, documents: list[SearchDocument]) -> int:
+        """Batch insert metadata search documents and their FTS rows."""
+
+        if not documents:
+            return 0
+        self._ensure_fts_available()
+        indexed = 0
+        with self.connection:
+            for document in documents:
+                self.connection.execute(
+                    """
+                    INSERT INTO search_documents (
+                        document_id, case_id, evidence_id, source_type, source_id,
+                        source_revision, document_type, title, path, normalized_path,
+                        searchable_text, structured_fields_json, observed_at_utc,
+                        raw_locator_json, citations_json, analyzer_id, analyzer_version,
+                        is_partial, index_revision, search_backend, search_backend_version,
+                        is_stale, fts_rowid, created_at, updated_at
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )
+                    ON CONFLICT(document_id) DO UPDATE SET
+                        source_revision = excluded.source_revision,
+                        title = excluded.title,
+                        path = excluded.path,
+                        normalized_path = excluded.normalized_path,
+                        searchable_text = excluded.searchable_text,
+                        structured_fields_json = excluded.structured_fields_json,
+                        observed_at_utc = excluded.observed_at_utc,
+                        raw_locator_json = excluded.raw_locator_json,
+                        citations_json = excluded.citations_json,
+                        analyzer_id = excluded.analyzer_id,
+                        analyzer_version = excluded.analyzer_version,
+                        is_partial = excluded.is_partial,
+                        index_revision = excluded.index_revision,
+                        search_backend = excluded.search_backend,
+                        search_backend_version = excluded.search_backend_version,
+                        is_stale = excluded.is_stale,
+                        updated_at = excluded.updated_at
+                    """,
+                    self._search_document_values(document),
+                )
+                row = self.connection.execute(
+                    "SELECT fts_rowid FROM search_documents WHERE document_id = ?",
+                    (document.document_id,),
+                ).fetchone()
+                fts_rowid = None if row is None else row["fts_rowid"]
+                if fts_rowid is not None:
+                    self.connection.execute(
+                        "DELETE FROM search_documents_fts WHERE rowid = ?",
+                        (int(fts_rowid),),
+                    )
+                    self.connection.execute(
+                        """
+                        INSERT INTO search_documents_fts(
+                            rowid, document_id, title, path, searchable_text
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            int(fts_rowid),
+                            document.document_id,
+                            document.title,
+                            document.path or "",
+                            document.searchable_text,
+                        ),
+                    )
+                else:
+                    cursor = self.connection.execute(
+                        """
+                        INSERT INTO search_documents_fts(
+                            document_id, title, path, searchable_text
+                        ) VALUES (?, ?, ?, ?)
+                        """,
+                        (
+                            document.document_id,
+                            document.title,
+                            document.path or "",
+                            document.searchable_text,
+                        ),
+                    )
+                    fts_rowid = cursor.lastrowid
+                    self.connection.execute(
+                        "UPDATE search_documents SET fts_rowid = ? WHERE document_id = ?",
+                        (fts_rowid, document.document_id),
+                    )
+                self._upsert_search_index_metadata(document.case_id, document.index_revision)
+                indexed += 1
+        return indexed
+
+    def mark_search_source_stale(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str,
+        source_type: str,
+        source_id: str,
+        current_source_revision: int,
+    ) -> None:
+        """Mark old document revisions for one source as stale."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE search_documents
+                SET is_stale = 1, updated_at = ?
+                WHERE case_id = ? AND evidence_id = ? AND source_type = ?
+                  AND source_id = ? AND source_revision != ?
+                """,
+                (
+                    to_json_timestamp(utc_now()),
+                    case_id,
+                    evidence_id,
+                    source_type,
+                    source_id,
+                    current_source_revision,
+                ),
+            )
+
+    def query_search_documents(
+        self,
+        *,
+        query: SearchQuery,
+        after: tuple[float, str] | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Execute a parameterized search query and return result-row dictionaries."""
+
+        self._ensure_fts_available()
+        if query.query_mode is SearchQueryMode.REGEX_METADATA:
+            return self._query_search_regex(query=query, after=after, limit=limit)
+        fts_query = self._fts_query(query.query_text, query.query_mode)
+        clauses, params = self._search_filter_clauses(query, "d")
+        clauses.append("search_documents_fts MATCH ?")
+        params.append(fts_query)
+        if after is not None:
+            clauses.append(
+                """
+                (
+                    bm25(search_documents_fts) > ?
+                    OR (
+                        bm25(search_documents_fts) = ?
+                        AND d.document_id > ?
+                    )
+                )
+                """
+            )
+            params.extend([after[0], after[0], after[1]])
+        sql = f"""
+            SELECT
+                d.*,
+                bm25(search_documents_fts) AS rank,
+                snippet(search_documents_fts, 3, '[', ']', '...', 16) AS snippet
+            FROM search_documents_fts
+            JOIN search_documents d ON d.fts_rowid = search_documents_fts.rowid
+            WHERE {" AND ".join(clauses)}
+            ORDER BY rank, d.document_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        results = [self._search_hit_from_row(row, query) for row in rows]
+        if query.query_mode is SearchQueryMode.EXACT:
+            needle = query.query_text if query.case_sensitive else query.query_text.casefold()
+            results = [
+                result
+                for result in results
+                if needle
+                in (
+                    result["_haystack"]
+                    if query.case_sensitive
+                    else str(result["_haystack"]).casefold()
+                )
+            ]
+        for result in results:
+            result.pop("_haystack", None)
+        return results[:limit]
+
+    def count_search_documents(self, query: SearchQuery) -> int:
+        """Count matching documents using the same filters as query."""
+
+        self._ensure_fts_available()
+        if query.query_mode is SearchQueryMode.REGEX_METADATA:
+            return len(self._query_search_regex(query=query, after=None, limit=5000))
+        clauses, params = self._search_filter_clauses(query, "d")
+        clauses.append("search_documents_fts MATCH ?")
+        params.append(self._fts_query(query.query_text, query.query_mode))
+        sql = f"""
+            SELECT COUNT(*) AS count
+            FROM search_documents_fts
+            JOIN search_documents d ON d.fts_rowid = search_documents_fts.rowid
+            WHERE {" AND ".join(clauses)}
+        """
+        row = self.connection.execute(sql, tuple(params)).fetchone()
+        return int(row["count"])
+
+    def rebuild_search_index(self, *, case_id: str | None = None) -> int:
+        """Rebuild the FTS table from persisted search documents."""
+
+        self._ensure_fts_available()
+        with self.connection:
+            if case_id is None:
+                self.connection.execute("DELETE FROM search_documents_fts")
+                self.connection.execute("UPDATE search_documents SET fts_rowid = NULL")
+                rows = self.connection.execute(
+                    "SELECT * FROM search_documents WHERE is_stale = 0 ORDER BY document_id"
+                ).fetchall()
+            else:
+                existing = self.connection.execute(
+                    """
+                    SELECT fts_rowid FROM search_documents
+                    WHERE case_id = ? AND fts_rowid IS NOT NULL
+                    """,
+                    (case_id,),
+                ).fetchall()
+                for row in existing:
+                    self.connection.execute(
+                        "DELETE FROM search_documents_fts WHERE rowid = ?",
+                        (int(row["fts_rowid"]),),
+                    )
+                self.connection.execute(
+                    "UPDATE search_documents SET fts_rowid = NULL WHERE case_id = ?",
+                    (case_id,),
+                )
+                rows = self.connection.execute(
+                    """
+                    SELECT * FROM search_documents
+                    WHERE case_id = ? AND is_stale = 0
+                    ORDER BY document_id
+                    """,
+                    (case_id,),
+                ).fetchall()
+            count = 0
+            for row in rows:
+                cursor = self.connection.execute(
+                    """
+                    INSERT INTO search_documents_fts(document_id, title, path, searchable_text)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        row["document_id"],
+                        row["title"],
+                        row["path"] or "",
+                        row["searchable_text"],
+                    ),
+                )
+                self.connection.execute(
+                    "UPDATE search_documents SET fts_rowid = ? WHERE document_id = ?",
+                    (cursor.lastrowid, row["document_id"]),
+                )
+                count += 1
+        return count
+
+    def optimize_search_index(self) -> None:
+        """Optimize the SQLite FTS5 index."""
+
+        self._ensure_fts_available()
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO search_documents_fts(search_documents_fts) VALUES('optimize')"
+            )
+
+    def create_search_job(
+        self,
+        *,
+        job_id: str,
+        case_id: str,
+        evidence_id: str | None,
+        profile_type: str,
+        options: dict[str, Any],
+        option_fingerprint: str,
+        index_revision: int,
+        status: str,
+        created_at: str,
+    ) -> None:
+        """Persist search index job metadata."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO search_jobs (
+                    job_id, case_id, evidence_id, profile_type, options_json,
+                    option_fingerprint, index_revision, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    case_id,
+                    evidence_id,
+                    profile_type,
+                    self._json(options),
+                    option_fingerprint,
+                    index_revision,
+                    status,
+                    created_at,
+                    created_at,
+                ),
+            )
+
+    def update_search_job_status(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        pause_requested: bool | None = None,
+    ) -> None:
+        """Update search index job status."""
+
+        assignments = ["status = ?", "updated_at = ?"]
+        params: list[Any] = [status, to_json_timestamp(utc_now())]
+        if pause_requested is not None:
+            assignments.append("pause_requested = ?")
+            params.append(int(pause_requested))
+        params.append(job_id)
+        with self.connection:
+            self.connection.execute(
+                f"UPDATE search_jobs SET {', '.join(assignments)} WHERE job_id = ?",
+                tuple(params),
+            )
+
+    def get_search_job(self, job_id: str) -> dict[str, Any] | None:
+        """Return search index job metadata."""
+
+        row = self.connection.execute(
+            "SELECT * FROM search_jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["options"] = json.loads(str(data.pop("options_json")))
+        data["pause_requested"] = bool(data["pause_requested"])
+        return data
+
+    def save_search_checkpoint(
+        self,
+        *,
+        job_id: str,
+        current_source_type: str | None,
+        current_source_id: str | None,
+        processed_items: int,
+        indexed_items: int,
+        skipped_items: int,
+    ) -> None:
+        """Persist search index checkpoint."""
+
+        now = to_json_timestamp(utc_now())
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO search_checkpoints (
+                    job_id, current_source_type, current_source_id, processed_items,
+                    indexed_items, skipped_items, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    current_source_type = excluded.current_source_type,
+                    current_source_id = excluded.current_source_id,
+                    processed_items = excluded.processed_items,
+                    indexed_items = excluded.indexed_items,
+                    skipped_items = excluded.skipped_items,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    job_id,
+                    current_source_type,
+                    current_source_id,
+                    processed_items,
+                    indexed_items,
+                    skipped_items,
+                    now,
+                ),
+            )
+
+    def get_search_checkpoint(self, job_id: str) -> dict[str, Any] | None:
+        """Return search checkpoint."""
+
+        row = self.connection.execute(
+            "SELECT * FROM search_checkpoints WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        return None if row is None else dict(row)
+
+    def iter_search_source_rows(
+        self,
+        *,
+        case_id: str,
+        evidence_ids: tuple[str, ...],
+        source_types: tuple[str, ...],
+        after_source: tuple[str, str] | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return existing source rows projected into search-document input rows."""
+
+        selected = set(source_types)
+        if not selected:
+            selected = {
+                SearchSourceType.FILE_SYSTEM_NODE.value,
+                SearchSourceType.WINDOWS_ARTIFACT.value,
+            }
+        rows: list[dict[str, Any]] = []
+        for source_type in (
+            SearchSourceType.FILE_SYSTEM_NODE.value,
+            SearchSourceType.WINDOWS_ARTIFACT.value,
+            SearchSourceType.TIMELINE_EVENT.value,
+        ):
+            if source_type not in selected or len(rows) >= limit:
+                continue
+            if after_source is not None:
+                if source_type < after_source[0]:
+                    continue
+                after_id = after_source[1] if source_type == after_source[0] else None
+            else:
+                after_id = None
+            remaining = limit - len(rows)
+            if source_type == SearchSourceType.FILE_SYSTEM_NODE.value:
+                rows.extend(
+                    self._iter_fs_search_rows(
+                        case_id=case_id,
+                        evidence_ids=evidence_ids,
+                        after_id=after_id,
+                        limit=remaining,
+                    )
+                )
+            elif source_type == SearchSourceType.WINDOWS_ARTIFACT.value:
+                rows.extend(
+                    self._iter_artifact_search_rows(
+                        case_id=case_id,
+                        evidence_ids=evidence_ids,
+                        after_id=after_id,
+                        limit=remaining,
+                    )
+                )
+            else:
+                rows.extend(
+                    self._iter_timeline_search_rows(
+                        case_id=case_id,
+                        evidence_ids=evidence_ids,
+                        after_id=after_id,
+                        limit=remaining,
+                    )
+                )
+        return sorted(
+            rows,
+            key=lambda item: (str(item["source_type"]), str(item["source_id"])),
+        )[:limit]
+
+    def search_document_exists_current(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str,
+        source_type: str,
+        source_id: str,
+        source_revision: int,
+        document_type: str,
+    ) -> bool:
+        """Return whether an up-to-date document projection already exists."""
+
+        row = self.connection.execute(
+            """
+            SELECT 1 FROM search_documents
+            WHERE case_id = ? AND evidence_id = ? AND source_type = ?
+              AND source_id = ? AND source_revision = ?
+              AND document_type = ? AND is_stale = 0
+            LIMIT 1
+            """,
+            (case_id, evidence_id, source_type, source_id, source_revision, document_type),
+        ).fetchone()
+        return row is not None
+
+    def search_source_revision_fingerprint(
+        self,
+        *,
+        case_id: str,
+        evidence_ids: tuple[str, ...],
+        source_types: tuple[str, ...],
+    ) -> str:
+        """Return a deterministic source-revision fingerprint for cache keys."""
+
+        sources = self.iter_search_source_rows(
+            case_id=case_id,
+            evidence_ids=evidence_ids,
+            source_types=source_types,
+            after_source=None,
+            limit=1_000_000,
+        )
+        return canonical_sha256(
+            [
+                {
+                    "source_type": source["source_type"],
+                    "source_id": source["source_id"],
+                    "source_revision": source["source_revision"],
+                }
+                for source in sources
+            ]
+        )
+
+    def save_search_query(self, query: SearchQuery) -> None:
+        """Persist an immutable search query."""
+
+        created_at = query.created_at or utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO search_queries (
+                    query_id, query_text, query_mode, case_id, evidence_ids_json,
+                    source_types_json, document_types_json, time_range_json, path_scope,
+                    filters_json, keyword_set_id, keyword_set_version, index_revision,
+                    options_fingerprint, sort, limit_value, case_sensitive, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    query.query_id,
+                    query.query_text,
+                    query.query_mode.value,
+                    query.case_id,
+                    self._json(list(query.evidence_ids)),
+                    self._json([item.value for item in query.source_types]),
+                    self._json([item.value for item in query.document_types]),
+                    self._json(query.time_range),
+                    query.path_scope,
+                    self._json(query.filters),
+                    query.keyword_set_id,
+                    query.keyword_set_version,
+                    query.index_revision,
+                    query.options_fingerprint,
+                    query.sort,
+                    query.limit,
+                    int(query.case_sensitive),
+                    to_json_timestamp(created_at),
+                ),
+            )
+
+    def save_search_execution(self, execution: SearchExecution) -> None:
+        """Persist a search execution reproduction record."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO search_executions (
+                    execution_id, query_id, case_id, query_text, query_mode,
+                    keyword_set_id, keyword_set_version, options_json,
+                    options_fingerprint, search_backend, search_backend_version,
+                    index_revision, source_revision_fingerprint, started_at,
+                    completed_at, status, is_partial, result_count, warnings_json,
+                    cache_key, cache_hit, zero_result_keyword_ids_json, execution_revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._search_execution_values(execution),
+            )
+
+    def update_search_execution(self, execution: SearchExecution) -> None:
+        """Update completion fields for a persisted execution."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE search_executions
+                SET completed_at = ?, status = ?, is_partial = ?, result_count = ?,
+                    warnings_json = ?, cache_key = ?, cache_hit = ?,
+                    zero_result_keyword_ids_json = ?, execution_revision = ?
+                WHERE execution_id = ?
+                """,
+                (
+                    self._nullable_timestamp(execution.completed_at),
+                    execution.status,
+                    int(execution.is_partial),
+                    execution.result_count,
+                    self._json(execution.warnings),
+                    execution.cache_key,
+                    int(execution.cache_hit),
+                    self._json(execution.zero_result_keyword_ids),
+                    execution.execution_revision,
+                    execution.execution_id,
+                ),
+            )
+
+    def get_search_query(self, query_id: str) -> SearchQuery | None:
+        """Return a persisted search query."""
+
+        row = self.connection.execute(
+            "SELECT * FROM search_queries WHERE query_id = ?",
+            (query_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_search_query(row)
+
+    def get_search_execution(self, execution_id: str) -> SearchExecution | None:
+        """Return a persisted search execution."""
+
+        row = self.connection.execute(
+            "SELECT * FROM search_executions WHERE execution_id = ?",
+            (execution_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_search_execution(row)
+
+    def list_search_executions(
+        self,
+        *,
+        case_id: str,
+        limit: int,
+    ) -> list[SearchExecution]:
+        """List recent search executions for a case."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM search_executions
+            WHERE case_id = ?
+            ORDER BY started_at DESC, execution_id
+            LIMIT ?
+            """,
+            (case_id, limit),
+        ).fetchall()
+        return [self._row_to_search_execution(row) for row in rows]
+
+    def save_search_results(self, results: list[SearchResult]) -> None:
+        """Persist search result rows."""
+
+        with self.connection:
+            for result in results:
+                self.connection.execute(
+                    """
+                    INSERT INTO search_results (
+                        result_id, query_id, document_id, source_type, source_id, rank,
+                        matched_fields_json, matched_terms_json, snippet,
+                        raw_locator_json, citations_json, is_partial, index_revision, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    self._search_result_values(result),
+                )
+
+    def list_search_results(
+        self,
+        *,
+        query_id: str,
+        after: tuple[float, str] | None,
+        limit: int,
+    ) -> list[SearchResult]:
+        """List persisted search results with stable rank/document ordering."""
+
+        clauses = ["query_id = ?"]
+        params: list[Any] = [query_id]
+        if after is not None:
+            clauses.append("(rank > ? OR (rank = ? AND document_id > ?))")
+            params.extend([after[0], after[0], after[1]])
+        sql = f"""
+            SELECT * FROM search_results
+            WHERE {" AND ".join(clauses)}
+            ORDER BY rank, document_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._row_to_search_result(row) for row in rows]
+
+    def get_search_cache(self, cache_key: str) -> SearchCacheEntry | None:
+        """Return a valid cache entry, if present."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM search_cache
+            WHERE cache_key = ? AND invalidated_at IS NULL
+              AND (expires_at IS NULL OR expires_at > ?)
+            """,
+            (cache_key, to_json_timestamp(utc_now())),
+        ).fetchone()
+        return None if row is None else self._row_to_search_cache(row)
+
+    def save_search_cache(self, entry: SearchCacheEntry) -> None:
+        """Persist a search cache entry."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO search_cache (
+                    cache_key, case_id, query_fingerprint, keyword_set_version,
+                    index_revision, source_revision_fingerprint, is_partial,
+                    result_count, results_json, created_at, expires_at, hit_count,
+                    invalidated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    result_count = excluded.result_count,
+                    results_json = excluded.results_json,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at,
+                    invalidated_at = NULL
+                """,
+                (
+                    entry.cache_key,
+                    entry.case_id,
+                    entry.query_fingerprint,
+                    entry.keyword_set_version,
+                    entry.index_revision,
+                    entry.source_revision_fingerprint,
+                    int(entry.is_partial),
+                    entry.result_count,
+                    self._json(entry.results),
+                    to_json_timestamp(entry.created_at),
+                    self._nullable_timestamp(entry.expires_at),
+                    entry.hit_count,
+                    self._nullable_timestamp(entry.invalidated_at),
+                ),
+            )
+
+    def record_search_cache_hit(self, cache_key: str) -> None:
+        """Increment cache hit counter."""
+
+        with self.connection:
+            self.connection.execute(
+                "UPDATE search_cache SET hit_count = hit_count + 1 WHERE cache_key = ?",
+                (cache_key,),
+            )
+
+    def invalidate_search_cache(
+        self,
+        *,
+        case_id: str | None,
+        index_revision: int | None,
+        source_revision_fingerprint: str | None,
+        invalidated_at: str,
+    ) -> int:
+        """Invalidate search cache entries globally or by case and optional revision keys."""
+
+        clauses = ["invalidated_at IS NULL"]
+        params: list[Any] = []
+        if case_id is not None:
+            clauses.append("case_id = ?")
+            params.append(case_id)
+        if index_revision is not None:
+            clauses.append("index_revision != ?")
+            params.append(index_revision)
+        if source_revision_fingerprint is not None:
+            clauses.append("source_revision_fingerprint != ?")
+            params.append(source_revision_fingerprint)
+        sql = f"UPDATE search_cache SET invalidated_at = ? WHERE {' AND '.join(clauses)}"
+        with self.connection:
+            cursor = self.connection.execute(sql, (invalidated_at, *params))
+        return cursor.rowcount
+
+    def search_cache_status(self, case_id: str) -> dict[str, Any]:
+        """Return cache state counters for a case."""
+
+        row = self.connection.execute(
+            """
+            SELECT
+                COUNT(*) AS entries,
+                COALESCE(SUM(hit_count), 0) AS hit_count,
+                SUM(CASE WHEN invalidated_at IS NULL THEN 1 ELSE 0 END) AS active_entries,
+                SUM(CASE WHEN invalidated_at IS NOT NULL THEN 1 ELSE 0 END) AS invalidated_entries
+            FROM search_cache
+            WHERE case_id = ?
+            """,
+            (case_id,),
+        ).fetchone()
+        return {
+            "case_id": case_id,
+            "entries": int(row["entries"]),
+            "hit_count": int(row["hit_count"]),
+            "active_entries": int(row["active_entries"] or 0),
+            "invalidated_entries": int(row["invalidated_entries"] or 0),
+            "ttl_seconds": None,
+        }
+
+    def save_keyword_set(self, keyword_set: KeywordSet) -> None:
+        """Persist a keyword-set version and update the set's current pointer."""
+
+        version_id = keyword_set.keyword_set_version_id or keyword_set.keyword_set_id
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO keyword_sets (
+                    keyword_set_id, case_id, name, description, current_version,
+                    current_version_id, current_status, created_by, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(keyword_set_id) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    current_version = excluded.current_version,
+                    current_version_id = excluded.current_version_id,
+                    current_status = excluded.current_status,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    keyword_set.keyword_set_id,
+                    keyword_set.case_id,
+                    keyword_set.name,
+                    keyword_set.description,
+                    keyword_set.version,
+                    version_id,
+                    keyword_set.status.value,
+                    keyword_set.created_by,
+                    to_json_timestamp(keyword_set.created_at),
+                    to_json_timestamp(keyword_set.updated_at),
+                ),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO keyword_set_versions (
+                    keyword_set_version_id, keyword_set_id, case_id, name, description,
+                    version, status, created_by, created_at, updated_at,
+                    default_options_json, previous_version_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    version_id,
+                    keyword_set.keyword_set_id,
+                    keyword_set.case_id,
+                    keyword_set.name,
+                    keyword_set.description,
+                    keyword_set.version,
+                    keyword_set.status.value,
+                    keyword_set.created_by,
+                    to_json_timestamp(keyword_set.created_at),
+                    to_json_timestamp(keyword_set.updated_at),
+                    self._json(keyword_set.default_options),
+                    keyword_set.previous_version_id,
+                ),
+            )
+            self.save_keywords_for_version(
+                keyword_set_version_id=version_id,
+                keywords=keyword_set.keywords,
+            )
+
+    def save_keywords_for_version(
+        self,
+        *,
+        keyword_set_version_id: str,
+        keywords: list[Keyword],
+    ) -> None:
+        """Persist keywords for one immutable keyword-set version."""
+
+        with self.connection:
+            for keyword in keywords:
+                self.connection.execute(
+                    """
+                    INSERT INTO keywords (
+                        keyword_id, keyword_set_version_id, term, normalized_term,
+                        keyword_type, match_mode, case_sensitive, enabled, notes,
+                        source, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        keyword.keyword_id,
+                        keyword_set_version_id,
+                        keyword.term,
+                        keyword.term if keyword.case_sensitive else keyword.term.casefold(),
+                        keyword.keyword_type.value,
+                        keyword.match_mode.value,
+                        int(keyword.case_sensitive),
+                        int(keyword.enabled),
+                        keyword.notes,
+                        keyword.source,
+                        to_json_timestamp(keyword.created_at),
+                    ),
+                )
+
+    def get_keyword_set(
+        self,
+        *,
+        keyword_set_id: str,
+        version: int | None = None,
+    ) -> KeywordSet | None:
+        """Return a keyword set version."""
+
+        if version is None:
+            row = self.connection.execute(
+                """
+                SELECT v.* FROM keyword_sets s
+                JOIN keyword_set_versions v ON v.keyword_set_version_id = s.current_version_id
+                WHERE s.keyword_set_id = ?
+                """,
+                (keyword_set_id,),
+            ).fetchone()
+        else:
+            row = self.connection.execute(
+                """
+                SELECT * FROM keyword_set_versions
+                WHERE keyword_set_id = ? AND version = ?
+                """,
+                (keyword_set_id, version),
+            ).fetchone()
+        return None if row is None else self._row_to_keyword_set(row)
+
+    def list_keyword_sets(
+        self,
+        *,
+        case_id: str,
+        status: str | None = None,
+    ) -> list[KeywordSet]:
+        """List current keyword-set versions for a case."""
+
+        clauses = ["s.case_id = ?"]
+        params: list[Any] = [case_id]
+        if status is not None:
+            clauses.append("s.current_status = ?")
+            params.append(status)
+        sql = f"""
+            SELECT v.* FROM keyword_sets s
+            JOIN keyword_set_versions v ON v.keyword_set_version_id = s.current_version_id
+            WHERE {" AND ".join(clauses)}
+            ORDER BY s.updated_at DESC, s.keyword_set_id
+        """
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._row_to_keyword_set(row) for row in rows]
+
+    def next_timeline_revision(self, case_id: str) -> int:
+        """Reserve and return the next timeline revision for a case."""
+
+        row = self.connection.execute(
+            """
+            SELECT COALESCE(MAX(timeline_revision), 0) AS latest
+            FROM timeline_revisions
+            WHERE case_id = ?
+            """,
+            (case_id,),
+        ).fetchone()
+        revision = int(row["latest"]) + 1
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO timeline_revisions(case_id, timeline_revision, created_at)
+                VALUES (?, ?, ?)
+                """,
+                (case_id, revision, to_json_timestamp(utc_now())),
+            )
+        return revision
+
+    def create_timeline_job(
+        self,
+        *,
+        job_id: str,
+        case_id: str,
+        evidence_id: str | None,
+        profile_type: str,
+        options: dict[str, Any],
+        option_fingerprint: str,
+        timeline_revision: int,
+        status: str,
+        created_at: str,
+    ) -> None:
+        """Persist timeline job metadata."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO timeline_jobs (
+                    job_id, case_id, evidence_id, profile_type, options_json,
+                    option_fingerprint, timeline_revision, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    case_id,
+                    evidence_id,
+                    profile_type,
+                    self._json(options),
+                    option_fingerprint,
+                    timeline_revision,
+                    status,
+                    created_at,
+                    created_at,
+                ),
+            )
+
+    def update_timeline_job_status(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        pause_requested: bool | None = None,
+    ) -> None:
+        """Update timeline job status."""
+
+        assignments = ["status = ?", "updated_at = ?"]
+        params: list[Any] = [status, to_json_timestamp(utc_now())]
+        if pause_requested is not None:
+            assignments.append("pause_requested = ?")
+            params.append(int(pause_requested))
+        params.append(job_id)
+        with self.connection:
+            self.connection.execute(
+                f"UPDATE timeline_jobs SET {', '.join(assignments)} WHERE job_id = ?",
+                tuple(params),
+            )
+
+    def get_timeline_job(self, job_id: str) -> dict[str, Any] | None:
+        """Return timeline job metadata."""
+
+        row = self.connection.execute(
+            "SELECT * FROM timeline_jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["options"] = json.loads(str(data.pop("options_json")))
+        data["pause_requested"] = bool(data["pause_requested"])
+        return data
+
+    def save_timeline_checkpoint(
+        self,
+        *,
+        job_id: str,
+        current_source_type: str | None,
+        current_source_id: str | None,
+        processed_items: int,
+        event_count: int,
+        skipped_items: int,
+    ) -> None:
+        """Persist timeline checkpoint."""
+
+        now = to_json_timestamp(utc_now())
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO timeline_checkpoints (
+                    job_id, current_source_type, current_source_id,
+                    processed_items, event_count, skipped_items, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    current_source_type = excluded.current_source_type,
+                    current_source_id = excluded.current_source_id,
+                    processed_items = excluded.processed_items,
+                    event_count = excluded.event_count,
+                    skipped_items = excluded.skipped_items,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    job_id,
+                    current_source_type,
+                    current_source_id,
+                    processed_items,
+                    event_count,
+                    skipped_items,
+                    now,
+                ),
+            )
+
+    def get_timeline_checkpoint(self, job_id: str) -> dict[str, Any] | None:
+        """Return timeline checkpoint."""
+
+        row = self.connection.execute(
+            "SELECT * FROM timeline_checkpoints WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        return None if row is None else dict(row)
+
+    def iter_timeline_source_rows(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str | None,
+        source_types: tuple[str, ...],
+        after_source: tuple[str, str] | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return existing source rows projected for timeline generation."""
+
+        selected = set(source_types)
+        if not selected:
+            selected = {
+                TimelineSourceType.FILE_SYSTEM_NODE.value,
+                TimelineSourceType.REGISTRY_ARTIFACT.value,
+                TimelineSourceType.EVENT_LOG_ARTIFACT.value,
+                TimelineSourceType.PREFETCH_ARTIFACT.value,
+            }
+        rows: list[dict[str, Any]] = []
+        for source_type in (
+            TimelineSourceType.FILE_SYSTEM_NODE.value,
+            TimelineSourceType.REGISTRY_ARTIFACT.value,
+            TimelineSourceType.EVENT_LOG_ARTIFACT.value,
+            TimelineSourceType.PREFETCH_ARTIFACT.value,
+        ):
+            if source_type not in selected or len(rows) >= limit:
+                continue
+            if after_source is not None:
+                if source_type < after_source[0]:
+                    continue
+                after_id = after_source[1] if source_type == after_source[0] else None
+            else:
+                after_id = None
+            remaining = limit - len(rows)
+            if source_type == TimelineSourceType.FILE_SYSTEM_NODE.value:
+                rows.extend(
+                    self._iter_fs_timeline_rows(
+                        case_id=case_id,
+                        evidence_id=evidence_id,
+                        after_id=after_id,
+                        limit=remaining,
+                    )
+                )
+            else:
+                rows.extend(
+                    self._iter_artifact_timeline_rows(
+                        case_id=case_id,
+                        evidence_id=evidence_id,
+                        source_type=source_type,
+                        after_id=after_id,
+                        limit=remaining,
+                    )
+                )
+        return sorted(
+            rows,
+            key=lambda item: (str(item["source_type"]), str(item["source_id"])),
+        )[:limit]
+
+    def save_timeline_events(self, events: list[TimelineEvent]) -> int:
+        """Persist timeline events, preventing duplicate source/event/timestamp rows."""
+
+        saved = 0
+        with self.connection:
+            for event in events:
+                cursor = self.connection.execute(
+                    """
+                    INSERT OR IGNORE INTO timeline_events (
+                        timeline_event_id, case_id, evidence_id, source_type, source_id,
+                        source_revision, event_type, event_subtype, title, description,
+                        raw_timestamp, raw_timezone, timestamp_semantics, normalized_utc,
+                        sort_timestamp, case_timezone, displayed_case_time, timezone_source,
+                        timezone_confidence, precision, analyzer_id, analyzer_version,
+                        raw_locator_json, citations_json, fields_json, is_partial,
+                        timeline_revision, created_at, dedup_key, artifact_type, path_key
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?
+                    )
+                    """,
+                    self._timeline_event_values(event),
+                )
+                saved += cursor.rowcount
+        return saved
+
+    def get_timeline_event(self, timeline_event_id: str) -> TimelineEvent | None:
+        """Return a timeline event by ID."""
+
+        row = self.connection.execute(
+            "SELECT * FROM timeline_events WHERE timeline_event_id = ?",
+            (timeline_event_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_timeline_event(row)
+
+    def query_timeline_events(self, query: TimelineQuery) -> list[TimelineEvent]:
+        """Query timeline events with stable cursor pagination."""
+
+        clauses = ["case_id = ?"]
+        params: list[Any] = [query.case_id]
+        if query.evidence_id is not None:
+            clauses.append("evidence_id = ?")
+            params.append(query.evidence_id)
+        if query.source_types:
+            clauses.append(
+                "source_type IN (" + ", ".join("?" for _ in query.source_types) + ")"
+            )
+            params.extend(item.value for item in query.source_types)
+        if query.event_types:
+            clauses.append("event_type IN (" + ", ".join("?" for _ in query.event_types) + ")")
+            params.extend(item.value for item in query.event_types)
+        if query.analyzer_id is not None:
+            clauses.append("analyzer_id = ?")
+            params.append(query.analyzer_id)
+        if query.artifact_type is not None:
+            clauses.append("artifact_type = ?")
+            params.append(query.artifact_type)
+        if query.path is not None:
+            clauses.append("path_key LIKE ?")
+            params.append(f"%{query.path.casefold()}%")
+        if query.keyword is not None:
+            clauses.append(
+                "(title LIKE ? OR description LIKE ? OR fields_json LIKE ? OR path_key LIKE ?)"
+            )
+            keyword = f"%{query.keyword}%"
+            params.extend([keyword, keyword, keyword, keyword.casefold()])
+        if query.is_partial is not None:
+            clauses.append("is_partial = ?")
+            params.append(int(query.is_partial))
+        if query.confidence is not None:
+            clauses.append("timezone_confidence = ?")
+            params.append(query.confidence.value)
+        if query.time_from is not None:
+            clauses.append("normalized_utc >= ?")
+            params.append(to_json_timestamp(query.time_from))
+        if query.time_to is not None:
+            clauses.append("normalized_utc <= ?")
+            params.append(to_json_timestamp(query.time_to))
+        cursor_data = self._decode_timeline_cursor(query.cursor)
+        order = "DESC" if query.order == "DESC" else "ASC"
+        if cursor_data is not None:
+            cursor_sort = cursor_data.get("sort") or "9999-12-31T23:59:59.999999Z"
+            cursor_id = str(cursor_data["timeline_event_id"])
+            operator = "<" if order == "DESC" else ">"
+            clauses.append(
+                f"(sort_timestamp {operator} ? "
+                f"OR (sort_timestamp = ? AND timeline_event_id {operator} ?))"
+            )
+            params.extend([cursor_sort, cursor_sort, cursor_id])
+        sql = f"""
+            SELECT * FROM timeline_events
+            WHERE {" AND ".join(clauses)}
+            ORDER BY sort_timestamp {order}, timeline_event_id {order}
+            LIMIT ?
+        """
+        params.append(query.limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._row_to_timeline_event(row) for row in rows]
+
+    def upsert_timeline_coverage(self, coverage: TimelineBuildCoverage) -> None:
+        """Persist timeline build coverage."""
+
+        now = utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO timeline_coverage (
+                    job_id, case_id, evidence_id, status, discovered_items,
+                    processed_items, skipped_items, event_count, warning_count,
+                    error_count, current_source, is_partial, timeline_revision,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    status = excluded.status,
+                    discovered_items = excluded.discovered_items,
+                    processed_items = excluded.processed_items,
+                    skipped_items = excluded.skipped_items,
+                    event_count = excluded.event_count,
+                    warning_count = excluded.warning_count,
+                    error_count = excluded.error_count,
+                    current_source = excluded.current_source,
+                    is_partial = excluded.is_partial,
+                    timeline_revision = excluded.timeline_revision,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    coverage.job_id,
+                    coverage.case_id,
+                    coverage.evidence_id,
+                    coverage.status,
+                    coverage.discovered_items,
+                    coverage.processed_items,
+                    coverage.skipped_items,
+                    coverage.event_count,
+                    coverage.warning_count,
+                    coverage.error_count,
+                    coverage.current_source,
+                    int(coverage.is_partial),
+                    coverage.timeline_revision,
+                    to_json_timestamp(coverage.created_at or now),
+                    to_json_timestamp(coverage.updated_at or now),
+                ),
+            )
+
+    def get_timeline_coverage(self, job_id: str) -> TimelineBuildCoverage | None:
+        """Return timeline build coverage."""
+
+        row = self.connection.execute(
+            "SELECT * FROM timeline_coverage WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_timeline_coverage(row)
+
     def _configure_connection(self) -> None:
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.execute("PRAGMA journal_mode = WAL")
@@ -2052,6 +3939,573 @@ class SQLiteRepository:
         }
         if column not in columns:
             self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _fts5_available(self) -> bool:
+        try:
+            self.connection.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS temp.apex_fts5_probe USING fts5(value)"
+            )
+            self.connection.execute("DROP TABLE IF EXISTS temp.apex_fts5_probe")
+        except sqlite3.Error:
+            return False
+        return True
+
+    def _ensure_fts_available(self) -> None:
+        if not self._fts5_available():
+            from apex_forensic.domain.errors import UnsupportedCapabilityError
+
+            raise UnsupportedCapabilityError(
+                "SQLite FTS5 is not available; search cannot be executed.",
+                required_capability="SQLITE_FTS5",
+            )
+        self.connection.execute(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS search_documents_fts
+            USING fts5(
+                document_id UNINDEXED,
+                title,
+                path,
+                searchable_text,
+                tokenize = 'unicode61'
+            )
+            """
+        )
+
+    def _upsert_search_index_metadata(self, case_id: str, index_revision: int) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO search_index_metadata (
+                case_id, index_revision, backend, backend_version, fts5_available, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(case_id) DO UPDATE SET
+                index_revision = MAX(search_index_metadata.index_revision, excluded.index_revision),
+                backend = excluded.backend,
+                backend_version = excluded.backend_version,
+                fts5_available = excluded.fts5_available,
+                updated_at = excluded.updated_at
+            """,
+            (
+                case_id,
+                index_revision,
+                "sqlite-fts5",
+                sqlite3.sqlite_version,
+                int(self._fts5_available()),
+                to_json_timestamp(utc_now()),
+            ),
+        )
+
+    def _search_document_values(self, document: SearchDocument) -> tuple[Any, ...]:
+        return (
+            document.document_id,
+            document.case_id,
+            document.evidence_id,
+            document.source_type.value,
+            document.source_id,
+            document.source_revision,
+            document.document_type.value,
+            document.title,
+            document.path,
+            document.normalized_path,
+            document.searchable_text,
+            self._json(document.structured_fields),
+            self._nullable_timestamp(document.observed_at_utc),
+            self._json(document.raw_locator),
+            self._json(document.citations),
+            document.analyzer_id,
+            document.analyzer_version,
+            int(document.is_partial),
+            document.index_revision,
+            document.search_backend,
+            document.search_backend_version,
+            int(document.is_stale),
+            None,
+            to_json_timestamp(document.created_at),
+            to_json_timestamp(document.updated_at),
+        )
+
+    def _search_filter_clauses(
+        self,
+        query: SearchQuery,
+        alias: str,
+    ) -> tuple[list[str], list[Any]]:
+        clauses = [f"{alias}.case_id = ?", f"{alias}.is_stale = 0"]
+        params: list[Any] = [query.case_id]
+        if query.evidence_ids:
+            placeholders = ", ".join("?" for _ in query.evidence_ids)
+            clauses.append(f"{alias}.evidence_id IN ({placeholders})")
+            params.extend(query.evidence_ids)
+        if query.source_types:
+            placeholders = ", ".join("?" for _ in query.source_types)
+            clauses.append(f"{alias}.source_type IN ({placeholders})")
+            params.extend(item.value for item in query.source_types)
+        if query.document_types:
+            placeholders = ", ".join("?" for _ in query.document_types)
+            clauses.append(f"{alias}.document_type IN ({placeholders})")
+            params.extend(item.value for item in query.document_types)
+        if query.time_range.get("from") is not None:
+            clauses.append(f"{alias}.observed_at_utc >= ?")
+            params.append(query.time_range["from"])
+        if query.time_range.get("to") is not None:
+            clauses.append(f"{alias}.observed_at_utc <= ?")
+            params.append(query.time_range["to"])
+        if query.path_scope:
+            clauses.append(f"{alias}.normalized_path LIKE ?")
+            params.append(f"%{query.path_scope.casefold()}%")
+        return clauses, params
+
+    def _query_search_regex(
+        self,
+        *,
+        query: SearchQuery,
+        after: tuple[float, str] | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        flags = 0 if query.case_sensitive else re.IGNORECASE
+        pattern = re.compile(query.query_text, flags)
+        clauses, params = self._search_filter_clauses(query, "d")
+        if after is not None:
+            clauses.append("d.document_id > ?")
+            params.append(after[1])
+        candidate_limit = min(max(limit * 20, 500), 5000)
+        sql = f"""
+            SELECT d.*, 0.0 AS rank, '' AS snippet
+            FROM search_documents d
+            WHERE {" AND ".join(clauses)}
+            ORDER BY d.document_id
+            LIMIT ?
+        """
+        params.append(candidate_limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        results = []
+        for row in rows:
+            structured = json.loads(str(row["structured_fields_json"]))
+            metadata_text = " ".join(str(value) for value in structured.values())
+            if pattern.search(metadata_text):
+                hit = self._search_hit_from_row(row, query)
+                hit["matched_terms"] = [query.query_text]
+                hit["matched_fields"] = ["structured_fields"]
+                hit.pop("_haystack", None)
+                results.append(hit)
+            if len(results) >= limit:
+                break
+        return results
+
+    def _search_hit_from_row(self, row: sqlite3.Row, query: SearchQuery) -> dict[str, Any]:
+        structured = json.loads(str(row["structured_fields_json"]))
+        title = str(row["title"])
+        path = "" if row["path"] is None else str(row["path"])
+        searchable = str(row["searchable_text"])
+        structured_text = " ".join(str(value) for value in structured.values())
+        haystack = " ".join([title, path, searchable, structured_text])
+        terms = _query_terms(query.query_text)
+        return {
+            "document_id": str(row["document_id"]),
+            "source_type": str(row["source_type"]),
+            "source_id": str(row["source_id"]),
+            "rank": float(row["rank"]),
+            "matched_fields": _matched_fields(terms, title, path, searchable, structured),
+            "matched_terms": terms,
+            "snippet": str(row["snippet"] or title),
+            "raw_locator": json.loads(str(row["raw_locator_json"])),
+            "citations": json.loads(str(row["citations_json"])),
+            "is_partial": bool(row["is_partial"]),
+            "index_revision": int(row["index_revision"]),
+            "_haystack": haystack,
+        }
+
+    @staticmethod
+    def _fts_query(query_text: str, query_mode: SearchQueryMode) -> str:
+        if query_mode is SearchQueryMode.PHRASE or query_mode is SearchQueryMode.EXACT:
+            return _quote_fts(query_text)
+        tokens = _query_terms(query_text)
+        if query_mode is SearchQueryMode.PREFIX:
+            return " ".join(_prefix_fts_token(token) for token in tokens)
+        return " ".join(_quote_fts(token) for token in tokens)
+
+    def _iter_fs_search_rows(
+        self,
+        *,
+        case_id: str,
+        evidence_ids: tuple[str, ...],
+        after_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if evidence_ids:
+            clauses.append("evidence_id IN (" + ", ".join("?" for _ in evidence_ids) + ")")
+            params.extend(evidence_ids)
+        if after_id is not None:
+            clauses.append("node_id > ?")
+            params.append(after_id)
+        sql = f"""
+            SELECT * FROM fs_nodes
+            WHERE {" AND ".join(clauses)}
+            ORDER BY node_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._fs_search_row(row) for row in rows]
+
+    def _fs_search_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        fs_metadata = json.loads(str(row["fs_metadata_json"]))
+        provider_metadata = json.loads(str(row["provider_metadata_json"]))
+        structured = {
+            "original_name": row["original_name"],
+            "original_relative_path": row["original_relative_path"],
+            "display_path": row["display_path"],
+            "extension": row["extension"],
+            "mime_candidate": row["mime_candidate"],
+            "platform": row["platform"],
+            "node_type": row["node_type"],
+            "file_size": row["file_size"],
+            **_safe_field_map(fs_metadata, _FS_METADATA_ALLOWLIST),
+            **_safe_field_map(provider_metadata, _PROVIDER_METADATA_ALLOWLIST),
+        }
+        text_values = [value for value in structured.values() if value is not None]
+        return {
+            "case_id": str(row["case_id"]),
+            "evidence_id": str(row["evidence_id"]),
+            "source_type": SearchSourceType.FILE_SYSTEM_NODE.value,
+            "source_id": str(row["node_id"]),
+            "source_revision": int(row["index_revision"]),
+            "document_type": _fs_document_type(str(row["node_type"])).value,
+            "title": str(row["original_name"]),
+            "path": row["display_path"],
+            "normalized_path": row["comparison_path"],
+            "searchable_text": _join_search_text(text_values),
+            "structured_fields": structured,
+            "observed_at_utc": None,
+            "raw_locator": json.loads(str(row["raw_locator_json"])),
+            "citations": [],
+            "analyzer_id": str(row["provider_id"]),
+            "analyzer_version": str(row["provider_version"]),
+            "is_partial": bool(row["is_partial"]),
+        }
+
+    def _iter_artifact_search_rows(
+        self,
+        *,
+        case_id: str,
+        evidence_ids: tuple[str, ...],
+        after_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if evidence_ids:
+            clauses.append("evidence_id IN (" + ", ".join("?" for _ in evidence_ids) + ")")
+            params.extend(evidence_ids)
+        if after_id is not None:
+            clauses.append("artifact_id > ?")
+            params.append(after_id)
+        sql = f"""
+            SELECT * FROM artifacts
+            WHERE {" AND ".join(clauses)}
+            ORDER BY artifact_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._artifact_search_row(row) for row in rows]
+
+    def _artifact_search_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        fields = json.loads(str(row["fields_json"]))
+        structured = {
+            "title": row["title"],
+            "summary": row["summary"],
+            "artifact_type": row["artifact_type"],
+            "artifact_subtype": row["artifact_subtype"],
+            "source_path": row["source_path"],
+            "source_kind": row["source_kind"],
+            **_safe_field_map(fields, _ARTIFACT_FIELD_ALLOWLIST),
+        }
+        return {
+            "case_id": str(row["case_id"]),
+            "evidence_id": str(row["evidence_id"]),
+            "source_type": SearchSourceType.WINDOWS_ARTIFACT.value,
+            "source_id": str(row["artifact_id"]),
+            "source_revision": int(row["index_revision"]),
+            "document_type": _artifact_document_type(str(row["artifact_type"])).value,
+            "title": str(row["title"]),
+            "path": row["source_path"],
+            "normalized_path": str(row["source_path"]).casefold(),
+            "searchable_text": _join_search_text(structured.values()),
+            "structured_fields": structured,
+            "observed_at_utc": row["observed_at_utc"],
+            "raw_locator": json.loads(str(row["raw_locator_json"])),
+            "citations": json.loads(str(row["citations_json"])),
+            "analyzer_id": row["analyzer_id"],
+            "analyzer_version": row["analyzer_version"],
+            "is_partial": bool(row["is_partial"]),
+        }
+
+    def _iter_timeline_search_rows(
+        self,
+        *,
+        case_id: str,
+        evidence_ids: tuple[str, ...],
+        after_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if evidence_ids:
+            clauses.append("evidence_id IN (" + ", ".join("?" for _ in evidence_ids) + ")")
+            params.extend(evidence_ids)
+        if after_id is not None:
+            clauses.append("timeline_event_id > ?")
+            params.append(after_id)
+        sql = f"""
+            SELECT * FROM timeline_events
+            WHERE {" AND ".join(clauses)}
+            ORDER BY timeline_event_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._timeline_search_row(row) for row in rows]
+
+    def _timeline_search_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        fields = json.loads(str(row["fields_json"]))
+        structured = {
+            "title": row["title"],
+            "description": row["description"],
+            "event_type": row["event_type"],
+            "event_subtype": row["event_subtype"],
+            "source_type": row["source_type"],
+            **_safe_field_map(fields, _TIMELINE_FIELD_ALLOWLIST),
+        }
+        return {
+            "case_id": str(row["case_id"]),
+            "evidence_id": str(row["evidence_id"]),
+            "source_type": SearchSourceType.TIMELINE_EVENT.value,
+            "source_id": str(row["timeline_event_id"]),
+            "source_revision": int(row["timeline_revision"]),
+            "document_type": SearchDocumentType.TIMELINE.value,
+            "title": str(row["title"]),
+            "path": fields.get("path") or fields.get("source_path"),
+            "normalized_path": None
+            if row["path_key"] is None
+            else str(row["path_key"]),
+            "searchable_text": _join_search_text(structured.values()),
+            "structured_fields": structured,
+            "observed_at_utc": row["normalized_utc"],
+            "raw_locator": json.loads(str(row["raw_locator_json"])),
+            "citations": json.loads(str(row["citations_json"])),
+            "analyzer_id": row["analyzer_id"],
+            "analyzer_version": row["analyzer_version"],
+            "is_partial": bool(row["is_partial"]),
+        }
+
+    def _iter_fs_timeline_rows(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str | None,
+        after_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if evidence_id is not None:
+            clauses.append("evidence_id = ?")
+            params.append(evidence_id)
+        if after_id is not None:
+            clauses.append("node_id > ?")
+            params.append(after_id)
+        sql = f"""
+            SELECT * FROM fs_nodes
+            WHERE {" AND ".join(clauses)}
+            ORDER BY node_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            result.append(
+                {
+                    "case_id": str(row["case_id"]),
+                    "evidence_id": str(row["evidence_id"]),
+                    "source_type": TimelineSourceType.FILE_SYSTEM_NODE.value,
+                    "source_id": str(row["node_id"]),
+                    "source_revision": int(row["index_revision"]),
+                    "title": str(row["display_path"]),
+                    "description": str(row["original_name"]),
+                    "path": row["display_path"],
+                    "node_type": row["node_type"],
+                    "platform": row["platform"],
+                    "raw_timestamps": json.loads(str(row["raw_timestamps_json"])),
+                    "utc_timestamps": json.loads(str(row["utc_timestamps_json"])),
+                    "timestamp_meanings": json.loads(str(row["timestamp_meanings_json"])),
+                    "timestamp_sources": json.loads(str(row["timestamp_sources_json"])),
+                    "raw_locator": json.loads(str(row["raw_locator_json"])),
+                    "citations": [],
+                    "analyzer_id": row["provider_id"],
+                    "analyzer_version": row["provider_version"],
+                    "is_partial": bool(row["is_partial"]),
+                }
+            )
+        return result
+
+    def _iter_artifact_timeline_rows(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str | None,
+        source_type: str,
+        after_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        artifact_types = _timeline_source_artifact_types(source_type)
+        clauses.append("artifact_type IN (" + ", ".join("?" for _ in artifact_types) + ")")
+        params.extend(artifact_types)
+        if evidence_id is not None:
+            clauses.append("evidence_id = ?")
+            params.append(evidence_id)
+        if after_id is not None:
+            clauses.append("artifact_id > ?")
+            params.append(after_id)
+        sql = f"""
+            SELECT * FROM artifacts
+            WHERE {" AND ".join(clauses)}
+            ORDER BY artifact_id
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            result.append(
+                {
+                    "case_id": str(row["case_id"]),
+                    "evidence_id": str(row["evidence_id"]),
+                    "source_type": source_type,
+                    "source_id": str(row["artifact_id"]),
+                    "source_revision": int(row["index_revision"]),
+                    "title": str(row["title"]),
+                    "description": str(row["summary"]),
+                    "path": row["source_path"],
+                    "artifact_type": row["artifact_type"],
+                    "raw_timestamp": row["observed_at_raw"],
+                    "normalized_utc": row["observed_at_utc"],
+                    "timestamp_semantics": "artifact_observed_at",
+                    "fields": json.loads(str(row["fields_json"])),
+                    "raw_locator": json.loads(str(row["raw_locator_json"])),
+                    "citations": json.loads(str(row["citations_json"])),
+                    "analyzer_id": row["analyzer_id"],
+                    "analyzer_version": row["analyzer_version"],
+                    "is_partial": bool(row["is_partial"]),
+                }
+            )
+        return result
+
+    def _search_execution_values(self, execution: SearchExecution) -> tuple[Any, ...]:
+        return (
+            execution.execution_id,
+            execution.query_id,
+            execution.case_id,
+            execution.query_text,
+            execution.query_mode.value,
+            execution.keyword_set_id,
+            execution.keyword_set_version,
+            self._json(execution.options),
+            execution.options_fingerprint,
+            execution.search_backend,
+            execution.search_backend_version,
+            execution.index_revision,
+            execution.source_revision_fingerprint,
+            to_json_timestamp(execution.started_at),
+            self._nullable_timestamp(execution.completed_at),
+            execution.status,
+            int(execution.is_partial),
+            execution.result_count,
+            self._json(execution.warnings),
+            execution.cache_key,
+            int(execution.cache_hit),
+            self._json(execution.zero_result_keyword_ids),
+            execution.execution_revision,
+        )
+
+    def _search_result_values(self, result: SearchResult) -> tuple[Any, ...]:
+        return (
+            result.result_id,
+            result.query_id,
+            result.document_id,
+            result.source_type.value,
+            result.source_id,
+            result.rank,
+            self._json(result.matched_fields),
+            self._json(result.matched_terms),
+            result.snippet,
+            self._json(result.raw_locator),
+            self._json(result.citations),
+            int(result.is_partial),
+            result.index_revision,
+            to_json_timestamp(result.created_at),
+        )
+
+    def _timeline_event_values(self, event: TimelineEvent) -> tuple[Any, ...]:
+        normalized_utc = self._nullable_timestamp(event.normalized_utc)
+        sort_timestamp = normalized_utc or "9999-12-31T23:59:59.999999Z"
+        artifact_type = event.fields.get("artifact_type")
+        path = (
+            event.fields.get("path")
+            or event.fields.get("source_path")
+            or event.fields.get("registry_path")
+        )
+        return (
+            event.timeline_event_id,
+            event.case_id,
+            event.evidence_id,
+            event.source_type.value,
+            event.source_id,
+            event.source_revision,
+            event.event_type.value,
+            event.event_subtype,
+            event.title,
+            event.description,
+            event.raw_timestamp,
+            event.raw_timezone,
+            event.timestamp_semantics,
+            normalized_utc,
+            sort_timestamp,
+            event.case_timezone,
+            event.displayed_case_time,
+            event.timezone_source.value,
+            event.timezone_confidence.value,
+            event.precision.value,
+            event.analyzer_id,
+            event.analyzer_version,
+            self._json(event.raw_locator),
+            self._json(event.citations),
+            self._json(event.fields),
+            int(event.is_partial),
+            event.timeline_revision,
+            to_json_timestamp(event.created_at),
+            event.dedup_key,
+            None if artifact_type is None else str(artifact_type),
+            None if path is None else str(path).casefold(),
+        )
+
+    @staticmethod
+    def _decode_timeline_cursor(cursor: str | None) -> dict[str, Any] | None:
+        if cursor is None:
+            return None
+        try:
+            padded = cursor + "=" * (-len(cursor) % 4)
+            data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("cursor is not an object")
+            return data
+        except (ValueError, TypeError, json.JSONDecodeError) as error:
+            from apex_forensic.domain.errors import ValidationError
+
+            raise ValidationError("Invalid timeline cursor.", target="cursor") from error
 
     def _fs_node_values(self, node: FileSystemNode) -> tuple[Any, ...]:
         return (
@@ -2351,6 +4805,195 @@ class SQLiteRepository:
             eta_confidence=str(row["eta_confidence"]),
             index_revision=int(row["index_revision"]),
             job_id=row["job_id"],
+            created_at=parse_timestamp(str(row["created_at"])),
+            updated_at=parse_timestamp(str(row["updated_at"])),
+        )
+
+    def _row_to_search_query(self, row: sqlite3.Row) -> SearchQuery:
+        created_at = parse_timestamp(str(row["created_at"]))
+        return SearchQuery(
+            query_id=str(row["query_id"]),
+            query_text=str(row["query_text"]),
+            query_mode=SearchQueryMode(str(row["query_mode"])),
+            case_id=str(row["case_id"]),
+            evidence_ids=tuple(str(item) for item in json.loads(str(row["evidence_ids_json"]))),
+            source_types=tuple(
+                SearchSourceType(str(item))
+                for item in json.loads(str(row["source_types_json"]))
+            ),
+            document_types=tuple(
+                SearchDocumentType(str(item))
+                for item in json.loads(str(row["document_types_json"]))
+            ),
+            time_range=json.loads(str(row["time_range_json"])),
+            path_scope=row["path_scope"],
+            filters=json.loads(str(row["filters_json"])),
+            keyword_set_id=row["keyword_set_id"],
+            keyword_set_version=row["keyword_set_version"],
+            index_revision=row["index_revision"],
+            options_fingerprint=str(row["options_fingerprint"]),
+            created_at=created_at,
+            sort=str(row["sort"]),
+            limit=int(row["limit_value"]),
+            case_sensitive=bool(row["case_sensitive"]),
+        )
+
+    def _row_to_search_execution(self, row: sqlite3.Row) -> SearchExecution:
+        completed = row["completed_at"]
+        return SearchExecution(
+            execution_id=str(row["execution_id"]),
+            query_id=str(row["query_id"]),
+            case_id=str(row["case_id"]),
+            query_text=str(row["query_text"]),
+            query_mode=SearchQueryMode(str(row["query_mode"])),
+            keyword_set_id=row["keyword_set_id"],
+            keyword_set_version=row["keyword_set_version"],
+            options=json.loads(str(row["options_json"])),
+            options_fingerprint=str(row["options_fingerprint"]),
+            search_backend=str(row["search_backend"]),
+            search_backend_version=str(row["search_backend_version"]),
+            index_revision=int(row["index_revision"]),
+            source_revision_fingerprint=str(row["source_revision_fingerprint"]),
+            started_at=parse_timestamp(str(row["started_at"])),
+            completed_at=None if completed is None else parse_timestamp(str(completed)),
+            status=str(row["status"]),
+            is_partial=bool(row["is_partial"]),
+            result_count=int(row["result_count"]),
+            warnings=json.loads(str(row["warnings_json"])),
+            cache_key=row["cache_key"],
+            cache_hit=bool(row["cache_hit"]),
+            zero_result_keyword_ids=json.loads(str(row["zero_result_keyword_ids_json"])),
+            execution_revision=int(row["execution_revision"]),
+        )
+
+    def _row_to_search_result(self, row: sqlite3.Row) -> SearchResult:
+        return SearchResult(
+            result_id=str(row["result_id"]),
+            query_id=str(row["query_id"]),
+            document_id=str(row["document_id"]),
+            source_type=SearchSourceType(str(row["source_type"])),
+            source_id=str(row["source_id"]),
+            rank=float(row["rank"]),
+            matched_fields=json.loads(str(row["matched_fields_json"])),
+            matched_terms=json.loads(str(row["matched_terms_json"])),
+            snippet=str(row["snippet"]),
+            raw_locator=json.loads(str(row["raw_locator_json"])),
+            citations=json.loads(str(row["citations_json"])),
+            is_partial=bool(row["is_partial"]),
+            index_revision=int(row["index_revision"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
+
+    def _row_to_search_cache(self, row: sqlite3.Row) -> SearchCacheEntry:
+        expires_at = row["expires_at"]
+        invalidated_at = row["invalidated_at"]
+        return SearchCacheEntry(
+            cache_key=str(row["cache_key"]),
+            case_id=str(row["case_id"]),
+            query_fingerprint=str(row["query_fingerprint"]),
+            keyword_set_version=row["keyword_set_version"],
+            index_revision=int(row["index_revision"]),
+            source_revision_fingerprint=str(row["source_revision_fingerprint"]),
+            is_partial=bool(row["is_partial"]),
+            result_count=int(row["result_count"]),
+            results=json.loads(str(row["results_json"])),
+            created_at=parse_timestamp(str(row["created_at"])),
+            expires_at=None if expires_at is None else parse_timestamp(str(expires_at)),
+            hit_count=int(row["hit_count"]),
+            invalidated_at=None
+            if invalidated_at is None
+            else parse_timestamp(str(invalidated_at)),
+        )
+
+    def _row_to_keyword_set(self, row: sqlite3.Row) -> KeywordSet:
+        version_id = str(row["keyword_set_version_id"])
+        keyword_rows = self.connection.execute(
+            """
+            SELECT * FROM keywords
+            WHERE keyword_set_version_id = ?
+            ORDER BY created_at, keyword_id
+            """,
+            (version_id,),
+        ).fetchall()
+        return KeywordSet(
+            keyword_set_id=str(row["keyword_set_id"]),
+            keyword_set_version_id=version_id,
+            case_id=str(row["case_id"]),
+            name=str(row["name"]),
+            description=row["description"],
+            version=int(row["version"]),
+            status=KeywordSetStatus(str(row["status"])),
+            created_by=row["created_by"],
+            created_at=parse_timestamp(str(row["created_at"])),
+            updated_at=parse_timestamp(str(row["updated_at"])),
+            keywords=[self._row_to_keyword(item) for item in keyword_rows],
+            default_options=json.loads(str(row["default_options_json"])),
+            previous_version_id=row["previous_version_id"],
+        )
+
+    @staticmethod
+    def _row_to_keyword(row: sqlite3.Row) -> Keyword:
+        return Keyword(
+            keyword_id=str(row["keyword_id"]),
+            term=str(row["term"]),
+            keyword_type=KeywordType(str(row["keyword_type"])),
+            match_mode=KeywordMatchMode(str(row["match_mode"])),
+            case_sensitive=bool(row["case_sensitive"]),
+            enabled=bool(row["enabled"]),
+            notes=row["notes"],
+            source=str(row["source"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
+
+    def _row_to_timeline_event(self, row: sqlite3.Row) -> TimelineEvent:
+        normalized = row["normalized_utc"]
+        return TimelineEvent(
+            timeline_event_id=str(row["timeline_event_id"]),
+            case_id=str(row["case_id"]),
+            evidence_id=str(row["evidence_id"]),
+            source_type=TimelineSourceType(str(row["source_type"])),
+            source_id=str(row["source_id"]),
+            source_revision=int(row["source_revision"]),
+            event_type=TimelineEventType(str(row["event_type"])),
+            event_subtype=str(row["event_subtype"]),
+            title=str(row["title"]),
+            description=str(row["description"]),
+            raw_timestamp=row["raw_timestamp"],
+            raw_timezone=row["raw_timezone"],
+            timestamp_semantics=str(row["timestamp_semantics"]),
+            normalized_utc=None if normalized is None else parse_timestamp(str(normalized)),
+            case_timezone=str(row["case_timezone"]),
+            displayed_case_time=row["displayed_case_time"],
+            timezone_source=TimezoneSource(str(row["timezone_source"])),
+            timezone_confidence=TimezoneConfidence(str(row["timezone_confidence"])),
+            precision=TimestampPrecision(str(row["precision"])),
+            analyzer_id=row["analyzer_id"],
+            analyzer_version=row["analyzer_version"],
+            raw_locator=json.loads(str(row["raw_locator_json"])),
+            citations=json.loads(str(row["citations_json"])),
+            fields=json.loads(str(row["fields_json"])),
+            is_partial=bool(row["is_partial"]),
+            timeline_revision=int(row["timeline_revision"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+            dedup_key=str(row["dedup_key"]),
+        )
+
+    @staticmethod
+    def _row_to_timeline_coverage(row: sqlite3.Row) -> TimelineBuildCoverage:
+        return TimelineBuildCoverage(
+            job_id=str(row["job_id"]),
+            case_id=str(row["case_id"]),
+            evidence_id=row["evidence_id"],
+            status=str(row["status"]),
+            discovered_items=int(row["discovered_items"]),
+            processed_items=int(row["processed_items"]),
+            skipped_items=int(row["skipped_items"]),
+            event_count=int(row["event_count"]),
+            warning_count=int(row["warning_count"]),
+            error_count=int(row["error_count"]),
+            current_source=row["current_source"],
+            is_partial=bool(row["is_partial"]),
+            timeline_revision=int(row["timeline_revision"]),
             created_at=parse_timestamp(str(row["created_at"])),
             updated_at=parse_timestamp(str(row["updated_at"])),
         )

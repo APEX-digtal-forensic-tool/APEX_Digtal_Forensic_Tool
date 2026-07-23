@@ -264,3 +264,23 @@ deleted key recovery, Event Message DLL rendering, full EVTX fixture coverage wh
 absent, full binary hive fixture coverage when `python-registry` is absent, Prefetch MAM
 decompression, timeline integration, FTS/search engine, GUI, MCP, LLM, OCR/STT, browser/media
 analyzers, and report rendering.
+
+### Phase 4 Search, Keyword Set, Timeline Trace
+
+- Implementation: `SearchService`, `TimelineService`, `SearchIndexProvider`, `SearchRepository`,
+  `TimelineRepository`, and SQLite Phase 4 tables implement metadata/artifact search, keyword set
+  versioning, reproduction, cache, timestamp normalization, and timeline query.
+- Verification: `tests/unit/test_phase4_search_timeline.py` covers FTS5 capability, term/phrase/prefix/
+  exact/metadata-regex search, SQL-injection-like query safety, cache hit, 0-result reproduction,
+  keyword duplicate/version/regex validation, explicit offset normalization, naive timestamp unknown
+  handling, timeline build, stable cursor pagination, Asia/Seoul display, and schema validation.
+- Integration: CLI smoke was exercised for search index/query, keyword set activate, and timeline
+  build/list. Existing Phase 1-3 tests remain passing.
+- Persistence: new tables include `search_documents`, `search_index_metadata`, `search_jobs`,
+  `search_checkpoints`, `search_queries`, `search_executions`, `search_results`, `search_cache`,
+  `keyword_sets`, `keyword_set_versions`, `keywords`, `timeline_events`, `timeline_jobs`,
+  `timeline_checkpoints`, `timeline_revisions`, `timeline_coverage`, and `timezone_mappings`.
+- Unsupported boundaries: file body FTS, Office/PDF extraction, OCR/STT, YARA, AI keyword
+  recommendation, LLM/agent loops, GUI/web/MCP, report rendering, disk image internals,
+  deleted/slack/unallocated search, live acquisition, credential/secret extraction, full Windows
+  timezone auto-confirmation, compromise assertions, and benchmark superiority remain unimplemented.

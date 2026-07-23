@@ -459,6 +459,47 @@ Phase 2는 Directory Evidence와 일반 Logical File Evidence를 대상으로 �
 
 Phase 2 비지원 범위는 E01/RAW/DD/IMG/VHD/VHDX 내부 filesystem parsing, NTFS/FAT/exFAT/ext 직접 parser, deleted file recovery, slack/unallocated 분석, FTS5/full text search, artifact parser, timeline 통합, GUI, web server, MCP/LLM/OCR/STT/report renderer 실행 코드다. 해당 내부 탐색 요청은 `CAPABILITY_UNAVAILABLE`로 표현한다.
 
+## Phase 4 구현 업데이트
+
+Phase 4는 기존 `fs_nodes`, `artifacts`, `jobs`, `cases`, `evidence` SQLite 구조를 재사용해
+Metadata/Artifact Search, 수동 Keyword Set, Search Reproduction/Cache, Timeline Projection/Query를
+구현한다. Search Index는 SQLite FTS5 Capability를 실행 시 확인하며 FTS5가 없으면
+`CAPABILITY_UNAVAILABLE`로 실패하고 성공처럼 대체 검색을 수행하지 않는다.
+
+Search 대상 Field는 파일명, 상대/표시 경로, 확장자, MIME 후보, 안전한 provider metadata,
+artifact title/summary/type/subtype/source path, registry path/value, Event provider/channel/ID,
+EventData/UserData, Prefetch executable name과 referenced path candidate다. 파일 본문 전체,
+PDF/DOCX/OCR/STT 추출물, unallocated/slack, deleted file body는 인덱싱하지 않는다.
+
+Keyword Set은 `DRAFT`, `ACTIVE`, `ARCHIVED` 상태와 immutable version을 보존한다. 활성 Set을
+수정하면 새 version이 생성되고 이전 version은 검색 재현을 위해 유지된다. Search Execution은
+원본 query, scope, keyword set version, backend/version, index revision, source revision
+fingerprint, option fingerprint, 0건 결과, partial/stale warning, result count를 저장한다.
+
+Search Cache key는 case, evidence scope, query fingerprint, keyword set version, index revision,
+source revision fingerprint, time range, filters, sort로 구성한다. Index 또는 source revision이
+변하면 기존 cache는 무효화되며 원본 evidence, filesystem node, artifact는 삭제하지 않는다.
+기본 TTL은 없다. 같은 option 재실행은 새 reproduction record를 남기며 cache는 그 기록을 대체하지
+않는다.
+
+Timeline은 filesystem timestamps, Registry/Event Log/Prefetch artifacts를 `timeline_events`로
+투영한다. Raw timestamp와 raw timezone은 보존하고, UTC normalized timestamp와 case timezone
+display time은 별도 필드에 저장한다. 기본 case timezone은 `Asia/Seoul`이며 IANA timezone과
+Windows의 `tzdata`를 사용한다. Naive timestamp는 UTC로 임의 확정하지 않고 불명확하면
+`normalized_utc = null`을 허용한다. Timezone source/confidence와 timestamp semantics를 기록하고,
+Windows TimeZoneKeyName은 제한된 candidate로만 취급한다.
+
+추가 CLI:
+
+- `apex-forensic search index|index-status|resume|cancel|query|show|history|rerun|cache-status|rebuild`
+- `apex-forensic keyword-set create|list|show|add|remove|activate|archive|version`
+- `apex-forensic timeline build|status|resume|cancel|list|show`
+
+Phase 4 비지원 범위는 file body full text indexing, Office/PDF extraction, OCR/STT, YARA,
+AI Keyword Recommendation, LLM/agent loop, GUI/web/MCP server, report renderer, disk-image internal
+parser, deleted/slack/unallocated search, live acquisition, credential/secret extraction, broad
+Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 주장이다.
+
 ---
 
 ## 주요 기능

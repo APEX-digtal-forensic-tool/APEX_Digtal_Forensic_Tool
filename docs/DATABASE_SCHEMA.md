@@ -1156,3 +1156,40 @@ Implemented tables:
 - `fs_scan_events`: warnings/errors such as permission denied, file changed during scan, and callback errors.
 
 `fs_nodes` enforces uniqueness by case, evidence, provider, provider version, and original relative path to prevent duplicate node creation across resume or repeated indexing. The custody ledger remains append-only and evidence deletion/original modification is not added.
+
+## Phase 4 Implemented Tables
+
+Search:
+
+- `search_documents`: metadata/artifact/timeline searchable projections with source type, source ID,
+  source revision, document type, allowlisted structured fields, raw locator, citations, partial flag,
+  backend/version, index revision, stale flag, and FTS row link.
+- `search_documents_fts`: SQLite FTS5 virtual table for title/path/searchable text. It is created only
+  when FTS5 is available.
+- `search_index_metadata`: current per-case search index revision and backend capability state.
+- `search_jobs`, `search_checkpoints`: resumable search index job metadata and checkpoint state.
+- `search_queries`, `search_executions`, `search_results`: immutable reproduction records and persisted
+  result hits, including 0-result executions.
+- `search_cache`: cache key, source revision fingerprint, index revision, partial flag, cached result
+  page, hit count, optional expiration, and invalidation timestamp.
+
+Keyword Set:
+
+- `keyword_sets`: root pointer to the current keyword set version.
+- `keyword_set_versions`: immutable version rows with status, default options, previous version ID.
+- `keywords`: immutable keyword rows for one version with duplicate prevention by normalized term,
+  match mode, and case sensitivity.
+
+Timeline:
+
+- `timeline_revisions`: per-case timeline revision sequence.
+- `timeline_jobs`, `timeline_checkpoints`, `timeline_coverage`: build job metadata, resume state, and
+  coverage counters.
+- `timeline_events`: unified timeline projection with raw timestamp/timezone, normalized UTC,
+  displayed case time, timezone source/confidence, precision, raw locator, citations, source revision,
+  partial flag, and deterministic dedup key.
+- `timezone_mappings`: limited Windows TimeZoneKeyName to IANA candidate records. It is not a complete
+  automatic timezone-confirmation dataset.
+
+Phase 4 migrations are idempotent and keep WAL, foreign keys, and custody append-only triggers. Search
+or Timeline cache/delete behavior does not delete original evidence, filesystem nodes, or artifacts.

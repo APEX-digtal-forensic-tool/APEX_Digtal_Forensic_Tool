@@ -332,3 +332,17 @@ Deferred to later phases: timeline integration, FTS/search engine, parallel work
 view API, GUI, MCP, OCR/STT, LLM/AI flows, browser/media analyzers, and report rendering.
 
 The next phase should connect native/disk-image providers through the existing provider port and add artifact/timeline/search integrations. E01/RAW/DD/IMG/VHD/VHDX internal parsing, deleted file recovery, FTS/full text search, and artifact parser execution remain intentionally out of scope.
+
+## Phase 4 Completion Note
+
+Phase 4 has been implemented as a metadata/artifact search and timeline layer over existing
+filesystem and Windows artifact stores. Completed scope includes SQLite FTS5 capability-gated search,
+term/phrase/prefix/exact/limited metadata regex query modes, search index jobs with checkpoint/resume,
+manual keyword set versioning, immutable search reproduction, cache key/invalidation, timeline event
+projection, timestamp normalization with case timezone display, stable cursor pagination, CLI,
+schemas, docs, and regression tests.
+
+Still deferred to later phases: arbitrary file body FTS, Office/PDF extraction, OCR/STT, browser/media
+artifact parsers, deleted/slack/unallocated search, disk image internal parsers, YARA, AI keyword
+recommendation, LLM/agent loops, GUI/web/MCP server, report rendering, broad timezone auto-confirmation,
+and benchmark performance claims.

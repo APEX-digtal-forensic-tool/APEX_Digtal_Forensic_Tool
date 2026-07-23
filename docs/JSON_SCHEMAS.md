@@ -275,3 +275,24 @@ facts.
 The `locator_type`, `limitations`, and `details` fields make the difference between logical
 Registry/Event provenance and actual byte ranges explicit. This prevents non-existent byte offsets
 from being fabricated while preserving raw/source references for future raw views.
+
+## Phase 4 Schema Updates
+
+`search.schema.json` now represents:
+
+- Search Document, Search Query, Search Result, Search Execution, Search Cache
+- Keyword Set and Keyword version DTOs for manual keyword management
+- Search Result Page with cursor page metadata and runtime FTS5 capability state
+
+`timeline-event.schema.json` now represents:
+
+- Timeline Event with raw timestamp/timezone, UTC normalized timestamp, case timezone display,
+  timezone source/confidence, precision, source revision, raw locator, citations, and partial flag
+- Timestamp Normalization DTO
+- Timezone Candidate DTO
+- Timeline Page with cursor page metadata
+
+`job.schema.json` accepts `SEARCH_INDEX` jobs. `keyword-recommendation.schema.json` keeps AI
+recommendation contracts but its enum set also includes Phase 4 manual keyword status values
+`ACTIVE`/`ARCHIVED` and keyword type `OTHER`. All updated schemas remain Draft 2020-12 with explicit
+`additionalProperties` and no circular `$ref`.

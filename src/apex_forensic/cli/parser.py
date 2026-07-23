@@ -195,6 +195,172 @@ def build_parser() -> argparse.ArgumentParser:
     prefetch_show.add_argument("--artifact-id", required=True)
     prefetch_show.add_argument("--json", action="store_true")
 
+    search_parser = subcommands.add_parser("search", help="Search index and query commands")
+    search_commands = search_parser.add_subparsers(dest="search_command", required=True)
+    search_index = search_commands.add_parser("index", help="Build metadata/artifact search index")
+    search_index.add_argument("--case-id", required=True)
+    search_index.add_argument("--evidence-id", action="append", default=[])
+    search_index.add_argument("--source-type", action="append", default=[])
+    search_index.add_argument(
+        "--profile",
+        default="QUICK_TRIAGE",
+        choices=["QUICK_TRIAGE", "SELECTED_SCOPE", "FULL_ANALYSIS", "CUSTOM"],
+    )
+    search_index.add_argument("--item-budget", type=int)
+    search_index.add_argument("--batch-size", type=int, default=100)
+    search_index.add_argument("--json", action="store_true")
+
+    search_status = search_commands.add_parser("index-status", help="Show search index job status")
+    search_status.add_argument("--job-id", required=True)
+    search_status.add_argument("--json", action="store_true")
+
+    search_resume = search_commands.add_parser("resume", help="Resume a search index job")
+    search_resume.add_argument("--job-id", required=True)
+    search_resume.add_argument("--item-budget", type=int)
+    search_resume.add_argument("--json", action="store_true")
+
+    search_cancel = search_commands.add_parser("cancel", help="Cancel a search index job")
+    search_cancel.add_argument("--job-id", required=True)
+    search_cancel.add_argument("--json", action="store_true")
+
+    search_query = search_commands.add_parser("query", help="Execute a search")
+    search_query.add_argument("--case-id", required=True)
+    search_query.add_argument("--query", required=True)
+    search_query.add_argument(
+        "--mode",
+        default="TERM",
+        choices=["TERM", "PHRASE", "PREFIX", "EXACT", "REGEX_METADATA"],
+    )
+    search_query.add_argument("--evidence-id", action="append", default=[])
+    search_query.add_argument("--source-type", action="append", default=[])
+    search_query.add_argument("--document-type", action="append", default=[])
+    search_query.add_argument("--keyword-set-id")
+    search_query.add_argument("--keyword-set-version", type=int)
+    search_query.add_argument("--time-from")
+    search_query.add_argument("--time-to")
+    search_query.add_argument("--path-scope")
+    search_query.add_argument("--case-sensitive", action="store_true")
+    search_query.add_argument("--cursor")
+    search_query.add_argument("--limit", type=int, default=100)
+    search_query.add_argument("--sort", default="rank")
+    search_query.add_argument("--no-cache", action="store_true")
+    search_query.add_argument("--json", action="store_true")
+
+    search_show = search_commands.add_parser("show", help="Show a search execution")
+    search_show.add_argument("--execution-id", required=True)
+    search_show.add_argument("--limit", type=int, default=100)
+    search_show.add_argument("--json", action="store_true")
+
+    search_history = search_commands.add_parser("history", help="List search execution history")
+    search_history.add_argument("--case-id", required=True)
+    search_history.add_argument("--limit", type=int, default=100)
+    search_history.add_argument("--json", action="store_true")
+
+    search_rerun = search_commands.add_parser("rerun", help="Rerun a search execution")
+    search_rerun.add_argument("--execution-id", required=True)
+    search_rerun.add_argument("--no-cache", action="store_true")
+    search_rerun.add_argument("--json", action="store_true")
+
+    search_cache = search_commands.add_parser("cache-status", help="Show search cache status")
+    search_cache.add_argument("--case-id", required=True)
+    search_cache.add_argument("--json", action="store_true")
+
+    search_rebuild = search_commands.add_parser("rebuild", help="Rebuild the FTS search index")
+    search_rebuild.add_argument("--case-id")
+    search_rebuild.add_argument("--json", action="store_true")
+
+    keyword_parser = subcommands.add_parser("keyword-set", help="Keyword set commands")
+    keyword_commands = keyword_parser.add_subparsers(dest="keyword_command", required=True)
+    keyword_create = keyword_commands.add_parser("create", help="Create a keyword set")
+    keyword_create.add_argument("--case-id", required=True)
+    keyword_create.add_argument("--name", required=True)
+    keyword_create.add_argument("--description")
+    keyword_create.add_argument("--created-by")
+    keyword_create.add_argument("--keyword", action="append", default=[])
+    keyword_create.add_argument("--json", action="store_true")
+
+    keyword_list = keyword_commands.add_parser("list", help="List keyword sets")
+    keyword_list.add_argument("--case-id", required=True)
+    keyword_list.add_argument("--status", choices=["DRAFT", "ACTIVE", "ARCHIVED"])
+    keyword_list.add_argument("--json", action="store_true")
+
+    keyword_show = keyword_commands.add_parser("show", help="Show a keyword set")
+    keyword_show.add_argument("--keyword-set-id", required=True)
+    keyword_show.add_argument("--version", type=int)
+    keyword_show.add_argument("--json", action="store_true")
+
+    keyword_add = keyword_commands.add_parser("add", help="Add a keyword")
+    keyword_add.add_argument("--keyword-set-id", required=True)
+    keyword_add.add_argument("--term", required=True)
+    keyword_add.add_argument("--keyword-type", default="OTHER")
+    keyword_add.add_argument("--match-mode", default="TERM")
+    keyword_add.add_argument("--case-sensitive", action="store_true")
+    keyword_add.add_argument("--disabled", action="store_true")
+    keyword_add.add_argument("--notes")
+    keyword_add.add_argument("--source", default="ANALYST")
+    keyword_add.add_argument("--json", action="store_true")
+
+    keyword_remove = keyword_commands.add_parser("remove", help="Remove a keyword")
+    keyword_remove.add_argument("--keyword-set-id", required=True)
+    keyword_remove.add_argument("--keyword-id", required=True)
+    keyword_remove.add_argument("--json", action="store_true")
+
+    for command_name in ("activate", "archive", "version"):
+        keyword_command = keyword_commands.add_parser(command_name)
+        keyword_command.add_argument("--keyword-set-id", required=True)
+        keyword_command.add_argument("--json", action="store_true")
+
+    timeline_parser = subcommands.add_parser("timeline", help="Timeline commands")
+    timeline_commands = timeline_parser.add_subparsers(dest="timeline_command", required=True)
+    timeline_build = timeline_commands.add_parser("build", help="Build timeline events")
+    timeline_build.add_argument("--case-id", required=True)
+    timeline_build.add_argument("--evidence-id")
+    timeline_build.add_argument("--source-type", action="append", default=[])
+    timeline_build.add_argument(
+        "--profile",
+        default="QUICK_TRIAGE",
+        choices=["QUICK_TRIAGE", "SELECTED_SCOPE", "FULL_ANALYSIS", "CUSTOM"],
+    )
+    timeline_build.add_argument("--item-budget", type=int)
+    timeline_build.add_argument("--batch-size", type=int, default=100)
+    timeline_build.add_argument("--json", action="store_true")
+
+    timeline_status = timeline_commands.add_parser("status", help="Show timeline job status")
+    timeline_status.add_argument("--job-id", required=True)
+    timeline_status.add_argument("--json", action="store_true")
+
+    timeline_resume = timeline_commands.add_parser("resume", help="Resume a timeline job")
+    timeline_resume.add_argument("--job-id", required=True)
+    timeline_resume.add_argument("--item-budget", type=int)
+    timeline_resume.add_argument("--json", action="store_true")
+
+    timeline_cancel = timeline_commands.add_parser("cancel", help="Cancel a timeline job")
+    timeline_cancel.add_argument("--job-id", required=True)
+    timeline_cancel.add_argument("--json", action="store_true")
+
+    timeline_list = timeline_commands.add_parser("list", help="List timeline events")
+    timeline_list.add_argument("--case-id", required=True)
+    timeline_list.add_argument("--evidence-id")
+    timeline_list.add_argument("--source-type", action="append", default=[])
+    timeline_list.add_argument("--event-type", action="append", default=[])
+    timeline_list.add_argument("--analyzer")
+    timeline_list.add_argument("--keyword")
+    timeline_list.add_argument("--path")
+    timeline_list.add_argument("--artifact-type")
+    timeline_list.add_argument("--partial", action="store_true")
+    timeline_list.add_argument("--confidence")
+    timeline_list.add_argument("--time-from")
+    timeline_list.add_argument("--time-to")
+    timeline_list.add_argument("--timezone")
+    timeline_list.add_argument("--cursor")
+    timeline_list.add_argument("--limit", type=int, default=100)
+    timeline_list.add_argument("--order", default="ASC", choices=["ASC", "DESC", "asc", "desc"])
+    timeline_list.add_argument("--json", action="store_true")
+
+    timeline_show = timeline_commands.add_parser("show", help="Show one timeline event")
+    timeline_show.add_argument("--timeline-event-id", required=True)
+    timeline_show.add_argument("--json", action="store_true")
+
     custody_parser = subcommands.add_parser("custody", help="Custody commands")
     custody_commands = custody_parser.add_subparsers(dest="custody_command", required=True)
     custody_list = custody_commands.add_parser("list", help="List custody events")
