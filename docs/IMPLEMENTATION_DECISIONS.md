@@ -39,3 +39,18 @@ Foundation. The implementation keeps Phase 2+ behavior out of runtime code.
 | Item budget is applied at source boundaries | The MVP does not implement source-internal parser cursors for `.reg` sections or EVTX record offsets. | Resume remains deterministic; a single source may emit more artifacts than the requested budget, then the job pauses before the next source. |
 | Logical raw locators may have null byte offsets | Registry keys/values and XML records often have logical provenance without parser-exposed byte offsets. | `citation.schema.json` allows `offset`/`length` to be null and records `locator_type`, `limitations`, and details. |
 | New Windows artifact schema stays in `artifact.schema.json` | The common artifact contract is shared by Registry, Event Log, and Prefetch records. | No additional Windows-only schema file was needed for Phase 3. |
+
+## Phase 4 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| Search uses SQLite FTS5 only when capability is present | Returning fake search success without FTS5 would make forensic reproduction misleading. | `search_capability()` probes FTS5 and SearchService raises `CAPABILITY_UNAVAILABLE` when unavailable. |
+| File body full text indexing is excluded | Phase 4 scope is stored metadata and artifact fields only. | Search documents are built from `fs_nodes`, `artifacts`, and optional `timeline_events`; no original evidence body reads are performed. |
+| Search field input is allowlisted | Large JSON blobs and unbounded arbitrary metadata are unsafe and noisy. | Filesystem provider metadata and artifact fields are projected through explicit allowlists with bounded string/list sizes. |
+| Application service depends on SearchIndexProvider | The application layer must not depend on SQLite FTS SQL. | FTS query construction and virtual table operations live in `SQLiteRepository`; SearchService uses provider methods. |
+| Regex metadata search uses bounded candidates | Unlimited regex over all DB rows can be unsafe. | Regex mode applies case/evidence/type/path/time filters first and scans at most a bounded candidate page. |
+| Keyword set edits create versions | Reproduction needs the exact keyword set used by a search. | Active and draft edits produce a new version row; older versions remain queryable. |
+| Cache does not replace reproduction | Cache hits still need auditable search execution records. | Every query creates a new Search Query/Execution row; cached hits are copied into the new result record set. |
+| Raw/UTC/case timeline times are separate fields | Original timestamps must not be overwritten or silently reinterpreted. | Timeline events persist raw timestamp/timezone, normalized UTC when justified, case display time, source/confidence, semantics, and precision. |
+| Windows timezone mapping is candidate-only | TimeZoneKeyName is not enough to confirm every IANA zone automatically. | Phase 4 stores candidate mapping support but does not auto-confirm broad Windows timezone decisions. |
+| Search and Timeline schemas were expanded in existing files | They are core Phase 4 DTOs, not separate product-specific schemas. | `search.schema.json` and `timeline-event.schema.json` were replaced with Phase 4 DTO definitions. |

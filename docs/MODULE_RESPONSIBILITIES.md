@@ -360,3 +360,22 @@ External Validation Plan은 공개/Synthetic Dataset과 동일 비교 조건을 
 
 Artifact analyzers emit observed facts only. Credential/secret extraction, live acquisition, Timeline
 projection, FTS search, GUI, MCP, OCR/STT, and LLM behavior remain outside Phase 3.
+
+## Phase 4 Module Responsibilities
+
+- `SearchService`: coordinates search index jobs, checkpoint/resume/cancel, safe query execution,
+  reproduction records, cache keys/invalidation, and manual keyword set versioning.
+- `TimelineService`: normalizes timestamps, projects filesystem/artifact sources into timeline events,
+  manages timeline jobs/checkpoints, and provides stable cursor timeline queries.
+- `SearchIndexProvider` / `SearchRepository`: provider-neutral ports for capability, index, query,
+  count, rebuild/optimize, search jobs, executions, cache, and keyword sets.
+- `TimelineRepository`: provider-neutral port for timeline revisions, jobs, checkpoints, event storage,
+  coverage, and queries.
+- `SQLiteRepository`: implements the Phase 4 ports with FTS5 capability gating, allowlisted search
+  fields, idempotent migrations, unique source/revision constraints, immutable execution/version rows,
+  and stable query ordering.
+- CLI: exposes `search`, `keyword-set`, and `timeline` command groups with structured JSON errors and
+  capability error separation.
+
+Phase 4 modules do not implement AI recommendation, file body extraction, GUI/web/MCP, OCR/STT,
+report rendering, live acquisition, or credential/secret extraction.

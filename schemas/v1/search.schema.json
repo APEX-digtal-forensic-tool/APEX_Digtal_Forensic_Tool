@@ -1,8 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.apex-forensics.dev/v1/search.schema.json",
-  "title": "APEX Search",
+  "title": "APEX Phase 4 Search",
   "oneOf": [
+    {
+      "$ref": "#/$defs/searchDocument"
+    },
     {
       "$ref": "#/$defs/searchQuery"
     },
@@ -11,202 +14,128 @@
     },
     {
       "$ref": "#/$defs/searchExecution"
+    },
+    {
+      "$ref": "#/$defs/searchCache"
+    },
+    {
+      "$ref": "#/$defs/keywordSet"
+    },
+    {
+      "$ref": "#/$defs/searchResultPage"
     }
   ],
   "$defs": {
-    "filters": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "evidence_ids",
-        "artifact_types",
-        "time_from",
-        "time_to"
-      ],
-      "properties": {
-        "evidence_ids": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "$ref": "common.schema.json#/$defs/uuid"
-          }
-        },
-        "artifact_types": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "time_from": {
-          "oneOf": [
-            {
-              "$ref": "common.schema.json#/$defs/timestamp"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "time_to": {
-          "oneOf": [
-            {
-              "$ref": "common.schema.json#/$defs/timestamp"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
+    "searchSourceType": {
+      "enum": [
+        "FILE_SYSTEM_NODE",
+        "WINDOWS_ARTIFACT",
+        "TIMELINE_EVENT"
+      ]
     },
-    "searchQuery": {
+    "searchDocumentType": {
+      "enum": [
+        "FILE",
+        "DIRECTORY",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "TIMELINE",
+        "OTHER"
+      ]
+    },
+    "searchQueryMode": {
+      "enum": [
+        "TERM",
+        "PHRASE",
+        "PREFIX",
+        "EXACT",
+        "REGEX_METADATA"
+      ]
+    },
+    "stringOrNull": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "flexObject": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "cursorPage": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "mode",
-        "query",
-        "scope",
-        "filters",
-        "cursor",
-        "limit",
-        "options"
+        "next_cursor",
+        "has_more",
+        "returned"
       ],
       "properties": {
-        "mode": {
-          "enum": [
-            "KEYWORD",
-            "EXACT",
-            "REGEX"
-          ]
+        "next_cursor": {
+          "$ref": "#/$defs/stringOrNull"
         },
-        "query": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 4096
+        "has_more": {
+          "type": "boolean"
         },
-        "scope": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "FILE",
-              "ARTIFACT",
-              "TIMELINE",
-              "MACHINE_EXTRACTION"
-            ]
-          }
-        },
-        "filters": {
-          "$ref": "#/$defs/filters"
-        },
-        "cursor": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "limit": {
+        "returned": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 1000
-        },
-        "options": {
-          "$ref": "#/$defs/searchOptions"
+          "minimum": 0
         }
       }
     },
-    "searchHit": {
+    "searchCapability": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id",
-        "evidence_id",
-        "source_kind",
-        "source_id",
-        "title",
-        "path",
-        "snippet",
-        "score",
-        "matched_fields"
+        "backend",
+        "backend_version",
+        "fts5_available",
+        "tokenizer",
+        "capabilities",
+        "unavailable_capabilities",
+        "warnings",
+        "is_available"
       ],
       "properties": {
-        "id": {
-          "$ref": "common.schema.json#/$defs/uuid"
-        },
-        "evidence_id": {
-          "$ref": "common.schema.json#/$defs/uuid"
-        },
-        "source_kind": {
-          "enum": [
-            "FILE",
-            "ARTIFACT",
-            "TIMELINE",
-            "MACHINE_EXTRACTION"
-          ]
-        },
-        "source_id": {
-          "$ref": "common.schema.json#/$defs/uuid"
-        },
-        "title": {
+        "backend": {
           "type": "string",
           "minLength": 1
         },
-        "path": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "backend_version": {
+          "type": "string",
+          "minLength": 1
         },
-        "snippet": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "fts5_available": {
+          "type": "boolean"
         },
-        "score": {
-          "type": "number",
-          "minimum": 0
+        "tokenizer": {
+          "type": "string",
+          "minLength": 1
         },
-        "matched_fields": {
+        "capabilities": {
           "type": "array",
-          "uniqueItems": true,
           "items": {
             "type": "string",
             "minLength": 1
           }
-        }
-      }
-    },
-    "searchResult": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "query_id",
-        "took_ms",
-        "hits",
-        "page",
-        "warnings",
-        "result_completeness"
-      ],
-      "properties": {
-        "query_id": {
-          "$ref": "common.schema.json#/$defs/uuid"
         },
-        "took_ms": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "hits": {
+        "unavailable_capabilities": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/searchHit"
+            "type": "string",
+            "minLength": 1
           }
-        },
-        "page": {
-          "$ref": "common.schema.json#/$defs/pageInfo"
         },
         "warnings": {
           "type": "array",
@@ -214,83 +143,327 @@
             "$ref": "common.schema.json#/$defs/warning"
           }
         },
-        "result_completeness": {
-          "$ref": "common.schema.json#/$defs/partialResult"
+        "is_available": {
+          "type": "boolean"
         }
       }
     },
-    "searchOptions": {
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    },
+    "searchDocument": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "case_sensitive",
-        "regex_enabled",
-        "encodings",
-        "time_from",
-        "time_to",
-        "evidence_ids",
-        "source_scopes",
-        "normalization_profile"
+        "document_id",
+        "case_id",
+        "evidence_id",
+        "source_type",
+        "source_id",
+        "source_revision",
+        "document_type",
+        "title",
+        "path",
+        "normalized_path",
+        "searchable_text",
+        "structured_fields",
+        "observed_at_utc",
+        "raw_locator",
+        "citations",
+        "analyzer_id",
+        "analyzer_version",
+        "is_partial",
+        "created_at",
+        "updated_at",
+        "index_revision",
+        "search_backend",
+        "search_backend_version",
+        "is_stale"
       ],
       "properties": {
-        "case_sensitive": {
+        "document_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_type": {
+          "$ref": "#/$defs/searchSourceType"
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "document_type": {
+          "$ref": "#/$defs/searchDocumentType"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "normalized_path": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "searchable_text": {
+          "type": "string"
+        },
+        "structured_fields": {
+          "$ref": "#/$defs/flexObject"
+        },
+        "observed_at_utc": {
+          "$ref": "#/$defs/timestampOrNull"
+        },
+        "raw_locator": {
+          "$ref": "#/$defs/flexObject"
+        },
+        "citations": {
+          "$ref": "#/$defs/citationArray"
+        },
+        "analyzer_id": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "analyzer_version": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "is_partial": {
           "type": "boolean"
         },
-        "regex_enabled": {
-          "type": "boolean"
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
         },
-        "encodings": {
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "index_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "search_backend": {
+          "type": "string",
+          "minLength": 1
+        },
+        "search_backend_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "is_stale": {
+          "type": "boolean"
+        }
+      }
+    },
+    "searchQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query_id",
+        "query_text",
+        "query_mode",
+        "case_id",
+        "evidence_ids",
+        "source_types",
+        "document_types",
+        "time_range",
+        "path_scope",
+        "filters",
+        "keyword_set_id",
+        "keyword_set_version",
+        "index_revision",
+        "options_fingerprint",
+        "created_at",
+        "sort",
+        "limit",
+        "case_sensitive"
+      ],
+      "properties": {
+        "query_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "query_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "query_mode": {
+          "$ref": "#/$defs/searchQueryMode"
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_ids": {
           "type": "array",
-          "minItems": 1,
           "uniqueItems": true,
           "items": {
             "type": "string",
             "minLength": 1
           }
         },
-        "time_from": {
-          "oneOf": [
-            {
-              "$ref": "common.schema.json#/$defs/timestamp"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "time_to": {
-          "oneOf": [
-            {
-              "$ref": "common.schema.json#/$defs/timestamp"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "evidence_ids": {
+        "source_types": {
           "type": "array",
           "uniqueItems": true,
           "items": {
-            "$ref": "common.schema.json#/$defs/uuid"
+            "$ref": "#/$defs/searchSourceType"
           }
         },
-        "source_scopes": {
+        "document_types": {
           "type": "array",
-          "minItems": 1,
           "uniqueItems": true,
           "items": {
-            "enum": [
-              "FILE",
-              "ARTIFACT",
-              "TIMELINE",
-              "MACHINE_EXTRACTION"
-            ]
+            "$ref": "#/$defs/searchDocumentType"
           }
         },
-        "normalization_profile": {
+        "time_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "to"
+          ],
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/timestampOrNull"
+            },
+            "to": {
+              "$ref": "#/$defs/timestampOrNull"
+            }
+          }
+        },
+        "path_scope": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "filters": {
+          "$ref": "#/$defs/flexObject"
+        },
+        "keyword_set_id": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "keyword_set_version": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "index_revision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "options_fingerprint": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestampOrNull"
+        },
+        "sort": {
           "type": "string",
           "minLength": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "case_sensitive": {
+          "type": "boolean"
+        }
+      }
+    },
+    "searchResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result_id",
+        "query_id",
+        "document_id",
+        "source_type",
+        "source_id",
+        "rank",
+        "matched_fields",
+        "matched_terms",
+        "snippet",
+        "raw_locator",
+        "citations",
+        "is_partial",
+        "index_revision",
+        "created_at"
+      ],
+      "properties": {
+        "result_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "query_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_type": {
+          "$ref": "#/$defs/searchSourceType"
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rank": {
+          "type": "number"
+        },
+        "matched_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "matched_terms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "snippet": {
+          "type": "string"
+        },
+        "raw_locator": {
+          "$ref": "#/$defs/flexObject"
+        },
+        "citations": {
+          "$ref": "#/$defs/citationArray"
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "index_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
         }
       }
     },
@@ -298,41 +471,93 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id",
+        "execution_id",
+        "query_id",
         "case_id",
+        "query_text",
+        "query_mode",
         "keyword_set_id",
         "keyword_set_version",
         "options",
-        "status",
-        "executed_by",
+        "options_fingerprint",
+        "search_backend",
+        "search_backend_version",
+        "index_revision",
+        "source_revision_fingerprint",
         "started_at",
         "completed_at",
+        "status",
+        "is_partial",
         "result_count",
+        "warnings",
+        "cache_key",
+        "cache_hit",
         "zero_result_keyword_ids",
-        "index_version",
-        "rerun_of_execution_id",
-        "content_sha256"
+        "execution_revision"
       ],
       "properties": {
-        "id": {
-          "$ref": "common.schema.json#/$defs/uuid"
+        "execution_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "query_id": {
+          "type": "string",
+          "minLength": 1
         },
         "case_id": {
-          "$ref": "common.schema.json#/$defs/uuid"
+          "type": "string",
+          "minLength": 1
+        },
+        "query_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "query_mode": {
+          "$ref": "#/$defs/searchQueryMode"
         },
         "keyword_set_id": {
-          "$ref": "common.schema.json#/$defs/uuid"
+          "$ref": "#/$defs/stringOrNull"
         },
         "keyword_set_version": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "options": {
-          "$ref": "#/$defs/searchOptions"
+          "$ref": "#/$defs/flexObject"
+        },
+        "options_fingerprint": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "search_backend": {
+          "type": "string",
+          "minLength": 1
+        },
+        "search_backend_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "index_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_revision_fingerprint": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "started_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "completed_at": {
+          "$ref": "#/$defs/timestampOrNull"
         },
         "status": {
           "enum": [
-            "QUEUED",
             "RUNNING",
             "SUCCEEDED",
             "PARTIAL",
@@ -340,50 +565,282 @@
             "CANCELLED"
           ]
         },
-        "executed_by": {
-          "type": "string",
-          "minLength": 1
-        },
-        "started_at": {
-          "$ref": "common.schema.json#/$defs/timestamp"
-        },
-        "completed_at": {
-          "oneOf": [
-            {
-              "$ref": "common.schema.json#/$defs/timestamp"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "is_partial": {
+          "type": "boolean"
         },
         "result_count": {
           "type": "integer",
           "minimum": 0
         },
-        "zero_result_keyword_ids": {
+        "warnings": {
           "type": "array",
-          "uniqueItems": true,
           "items": {
-            "$ref": "common.schema.json#/$defs/uuid"
+            "$ref": "common.schema.json#/$defs/warning"
           }
         },
-        "index_version": {
+        "cache_key": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "cache_hit": {
+          "type": "boolean"
+        },
+        "zero_result_keyword_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "execution_revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "searchCache": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cache_key",
+        "case_id",
+        "query_fingerprint",
+        "keyword_set_version",
+        "index_revision",
+        "source_revision_fingerprint",
+        "is_partial",
+        "result_count",
+        "results",
+        "created_at",
+        "expires_at",
+        "hit_count",
+        "invalidated_at"
+      ],
+      "properties": {
+        "cache_key": {
           "type": "string",
           "minLength": 1
         },
-        "rerun_of_execution_id": {
-          "oneOf": [
-            {
-              "$ref": "common.schema.json#/$defs/uuid"
-            },
-            {
-              "type": "null"
-            }
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "query_fingerprint": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "keyword_set_version": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "index_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_revision_fingerprint": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "result_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/searchResult"
+          }
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestampOrNull"
+        },
+        "hit_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalidated_at": {
+          "$ref": "#/$defs/timestampOrNull"
+        }
+      }
+    },
+    "keyword": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyword_id",
+        "term",
+        "keyword_type",
+        "match_mode",
+        "case_sensitive",
+        "enabled",
+        "notes",
+        "source",
+        "created_at"
+      ],
+      "properties": {
+        "keyword_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "term": {
+          "type": "string",
+          "minLength": 1
+        },
+        "keyword_type": {
+          "enum": [
+            "FILE_NAME",
+            "PROCESS_NAME",
+            "ACCOUNT",
+            "EMAIL",
+            "DOMAIN",
+            "URL",
+            "IP_ADDRESS",
+            "REGISTRY_PATH",
+            "COMMAND",
+            "PATH",
+            "DOCUMENT_TERM",
+            "HASH",
+            "REGEX",
+            "RELATED_TERM",
+            "TRANSLITERATION",
+            "TYPO_VARIANT",
+            "OTHER"
           ]
         },
-        "content_sha256": {
-          "$ref": "common.schema.json#/$defs/sha256"
+        "match_mode": {
+          "$ref": "#/$defs/searchQueryMode"
+        },
+        "case_sensitive": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "notes": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
+    "keywordSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyword_set_id",
+        "case_id",
+        "name",
+        "description",
+        "version",
+        "status",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "keywords",
+        "default_options",
+        "previous_version_id",
+        "keyword_set_version_id"
+      ],
+      "properties": {
+        "keyword_set_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "DRAFT",
+            "ACTIVE",
+            "ARCHIVED"
+          ]
+        },
+        "created_by": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/keyword"
+          }
+        },
+        "default_options": {
+          "$ref": "#/$defs/flexObject"
+        },
+        "previous_version_id": {
+          "$ref": "#/$defs/stringOrNull"
+        },
+        "keyword_set_version_id": {
+          "$ref": "#/$defs/stringOrNull"
+        }
+      }
+    },
+    "searchResultPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution",
+        "query",
+        "results",
+        "page",
+        "cache",
+        "capability"
+      ],
+      "properties": {
+        "execution": {
+          "$ref": "#/$defs/searchExecution"
+        },
+        "query": {
+          "$ref": "#/$defs/searchQuery"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/searchResult"
+          }
+        },
+        "page": {
+          "$ref": "#/$defs/cursorPage"
+        },
+        "cache": {
+          "$ref": "#/$defs/flexObject"
+        },
+        "capability": {
+          "$ref": "#/$defs/searchCapability"
         }
       }
     }

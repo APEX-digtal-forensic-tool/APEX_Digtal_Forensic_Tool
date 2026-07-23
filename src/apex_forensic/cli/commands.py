@@ -17,6 +17,15 @@ from apex_forensic.domain.enums import (
     CaseStatus,
     CustodyEventType,
     HashAlgorithm,
+    KeywordMatchMode,
+    KeywordSetStatus,
+    KeywordType,
+    SearchDocumentType,
+    SearchQueryMode,
+    SearchSourceType,
+    TimelineEventType,
+    TimelineSourceType,
+    TimezoneConfidence,
 )
 from apex_forensic.domain.errors import ApexError, ValidationError
 from apex_forensic.domain.models import ArtifactQuery
@@ -61,6 +70,12 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _fs(args, services)
     if args.command == "artifact":
         return _artifact(args, services)
+    if args.command == "search":
+        return _search(args, services)
+    if args.command == "keyword-set":
+        return _keyword_set(args, services)
+    if args.command == "timeline":
+        return _timeline(args, services)
     raise ValidationError("Unknown command.", target="command")
 
 
@@ -263,6 +278,160 @@ def _custody(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown custody command.", target="custody_command")
 
 
+def _search(args: Namespace, services: Any) -> Any:
+    if args.search_command == "index":
+        job, coverage = services.search.index(
+            case_id=args.case_id,
+            evidence_ids=args.evidence_id,
+            source_types=[_parse_search_source_type(item) for item in args.source_type],
+            profile_type=AnalysisProfileType(args.profile),
+            item_budget=args.item_budget,
+            batch_size=args.batch_size,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage}
+    if args.search_command == "index-status":
+        return services.search.index_status(args.job_id)
+    if args.search_command == "resume":
+        job, coverage = services.search.resume_index_job(
+            args.job_id,
+            item_budget=args.item_budget,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage}
+    if args.search_command == "cancel":
+        return services.search.cancel_index_job(args.job_id).to_schema_dict()
+    if args.search_command == "query":
+        page = services.search.query(
+            case_id=args.case_id,
+            query_text=args.query,
+            query_mode=SearchQueryMode(args.mode),
+            evidence_ids=args.evidence_id,
+            source_types=[_parse_search_source_type(item) for item in args.source_type],
+            document_types=[_parse_search_document_type(item) for item in args.document_type],
+            time_from=_parse_timestamp_arg(args.time_from, "time_from"),
+            time_to=_parse_timestamp_arg(args.time_to, "time_to"),
+            path_scope=args.path_scope,
+            keyword_set_id=args.keyword_set_id,
+            keyword_set_version=args.keyword_set_version,
+            case_sensitive=args.case_sensitive,
+            cursor=args.cursor,
+            limit=args.limit,
+            sort=args.sort,
+            use_cache=not args.no_cache,
+        )
+        return page.to_schema_dict()
+    if args.search_command == "show":
+        return services.search.show_execution(args.execution_id, limit=args.limit)
+    if args.search_command == "history":
+        return services.search.history(case_id=args.case_id, limit=args.limit)
+    if args.search_command == "rerun":
+        return services.search.rerun(
+            args.execution_id,
+            use_cache=not args.no_cache,
+        ).to_schema_dict()
+    if args.search_command == "cache-status":
+        return services.search.cache_status(case_id=args.case_id)
+    if args.search_command == "rebuild":
+        return services.search.rebuild(case_id=args.case_id)
+    raise ValidationError("Unknown search command.", target="search_command")
+
+
+def _keyword_set(args: Namespace, services: Any) -> Any:
+    if args.keyword_command == "create":
+        keyword_set = services.search.create_keyword_set(
+            case_id=args.case_id,
+            name=args.name,
+            description=args.description,
+            created_by=args.created_by,
+            keywords=[
+                {"term": term, "keyword_type": "OTHER", "match_mode": "TERM"}
+                for term in args.keyword
+            ],
+        )
+        return keyword_set.to_schema_dict()
+    if args.keyword_command == "list":
+        status = None if args.status is None else KeywordSetStatus(args.status)
+        return [
+            item.to_schema_dict()
+            for item in services.search.list_keyword_sets(case_id=args.case_id, status=status)
+        ]
+    if args.keyword_command == "show":
+        return services.search.get_keyword_set(
+            args.keyword_set_id,
+            version=args.version,
+        ).to_schema_dict()
+    if args.keyword_command == "add":
+        return services.search.add_keyword(
+            args.keyword_set_id,
+            term=args.term,
+            keyword_type=_parse_keyword_type(args.keyword_type),
+            match_mode=_parse_keyword_match_mode(args.match_mode),
+            case_sensitive=args.case_sensitive,
+            enabled=not args.disabled,
+            notes=args.notes,
+            source=args.source,
+        ).to_schema_dict()
+    if args.keyword_command == "remove":
+        return services.search.remove_keyword(
+            args.keyword_set_id,
+            keyword_id=args.keyword_id,
+        ).to_schema_dict()
+    if args.keyword_command == "activate":
+        return services.search.activate_keyword_set(args.keyword_set_id).to_schema_dict()
+    if args.keyword_command == "archive":
+        return services.search.archive_keyword_set(args.keyword_set_id).to_schema_dict()
+    if args.keyword_command == "version":
+        return services.search.version_keyword_set(args.keyword_set_id).to_schema_dict()
+    raise ValidationError("Unknown keyword set command.", target="keyword_command")
+
+
+def _timeline(args: Namespace, services: Any) -> Any:
+    if args.timeline_command == "build":
+        job, coverage = services.timeline.build(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            source_types=[_parse_timeline_source_type(item) for item in args.source_type],
+            profile_type=AnalysisProfileType(args.profile),
+            item_budget=args.item_budget,
+            batch_size=args.batch_size,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.timeline_command == "status":
+        return services.timeline.status(args.job_id)
+    if args.timeline_command == "resume":
+        job, coverage = services.timeline.resume_build_job(
+            args.job_id,
+            item_budget=args.item_budget,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.timeline_command == "cancel":
+        return services.timeline.cancel_build_job(args.job_id).to_schema_dict()
+    if args.timeline_command == "list":
+        confidence = (
+            None if args.confidence is None else _parse_timezone_confidence(args.confidence)
+        )
+        return services.timeline.list_events(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            source_types=[_parse_timeline_source_type(item) for item in args.source_type],
+            event_types=[_parse_timeline_event_type(item) for item in args.event_type],
+            analyzer_id=args.analyzer,
+            keyword=args.keyword,
+            path=args.path,
+            artifact_type=args.artifact_type,
+            is_partial=True if args.partial else None,
+            confidence=confidence,
+            time_from=_parse_timestamp_arg(args.time_from, "time_from"),
+            time_to=_parse_timestamp_arg(args.time_to, "time_to"),
+            timezone=args.timezone,
+            cursor=args.cursor,
+            limit=args.limit,
+            order=args.order.upper(),
+        ).to_schema_dict()
+    if args.timeline_command == "show":
+        return services.timeline.get_event(args.timeline_event_id).to_schema_dict()
+    raise ValidationError("Unknown timeline command.", target="timeline_command")
+
+
 def _hash_record_output(record: Any) -> dict[str, Any]:
     return {
         "hash_id": record.hash_id,
@@ -308,6 +477,65 @@ def _parse_artifact_type(value: str | None) -> ArtifactType | None:
         return ArtifactType(normalized)
     except ValueError as error:
         raise ValidationError("Unsupported artifact type.", target="artifact_type") from error
+
+
+def _parse_search_source_type(value: str) -> SearchSourceType:
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    try:
+        return SearchSourceType(normalized)
+    except ValueError as error:
+        raise ValidationError("Unsupported search source type.", target="source_type") from error
+
+
+def _parse_search_document_type(value: str) -> SearchDocumentType:
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    try:
+        return SearchDocumentType(normalized)
+    except ValueError as error:
+        raise ValidationError(
+            "Unsupported search document type.",
+            target="document_type",
+        ) from error
+
+
+def _parse_keyword_type(value: str) -> KeywordType:
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    try:
+        return KeywordType(normalized)
+    except ValueError as error:
+        raise ValidationError("Unsupported keyword type.", target="keyword_type") from error
+
+
+def _parse_keyword_match_mode(value: str) -> KeywordMatchMode:
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    try:
+        return KeywordMatchMode(normalized)
+    except ValueError as error:
+        raise ValidationError("Unsupported keyword match mode.", target="match_mode") from error
+
+
+def _parse_timeline_source_type(value: str) -> TimelineSourceType:
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    try:
+        return TimelineSourceType(normalized)
+    except ValueError as error:
+        raise ValidationError("Unsupported timeline source type.", target="source_type") from error
+
+
+def _parse_timeline_event_type(value: str) -> TimelineEventType:
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    try:
+        return TimelineEventType(normalized)
+    except ValueError as error:
+        raise ValidationError("Unsupported timeline event type.", target="event_type") from error
+
+
+def _parse_timezone_confidence(value: str) -> TimezoneConfidence:
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    try:
+        return TimezoneConfidence(normalized)
+    except ValueError as error:
+        raise ValidationError("Unsupported timezone confidence.", target="confidence") from error
 
 
 def _parse_parse_status(value: str | None) -> ArtifactParseStatus | None:

@@ -223,6 +223,7 @@
             "TIMELINE",
             "INDEX",
             "SEARCH",
+            "SEARCH_INDEX",
             "AI_ENRICHMENT",
             "REPORT_DRAFT",
             "REPORT_EXPORT",

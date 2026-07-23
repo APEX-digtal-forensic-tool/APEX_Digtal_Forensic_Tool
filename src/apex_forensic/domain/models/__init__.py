@@ -20,6 +20,25 @@ from apex_forensic.domain.models.filesystem import (
     IndexCoverage,
 )
 from apex_forensic.domain.models.job import Job, JobProgress
+from apex_forensic.domain.models.search import (
+    Keyword,
+    KeywordSet,
+    SearchCacheEntry,
+    SearchDocument,
+    SearchExecution,
+    SearchIndexCapability,
+    SearchQuery,
+    SearchResult,
+    SearchResultPage,
+)
+from apex_forensic.domain.models.timeline import (
+    TimelineBuildCoverage,
+    TimelineEvent,
+    TimelinePage,
+    TimelineQuery,
+    TimestampNormalization,
+    TimezoneCandidate,
+)
 
 __all__ = [
     "ArtifactAnalysisResult",
@@ -42,4 +61,19 @@ __all__ = [
     "IndexCoverage",
     "Job",
     "JobProgress",
+    "Keyword",
+    "KeywordSet",
+    "SearchCacheEntry",
+    "SearchDocument",
+    "SearchExecution",
+    "SearchIndexCapability",
+    "SearchQuery",
+    "SearchResult",
+    "SearchResultPage",
+    "TimelineBuildCoverage",
+    "TimelineEvent",
+    "TimelinePage",
+    "TimelineQuery",
+    "TimestampNormalization",
+    "TimezoneCandidate",
 ]

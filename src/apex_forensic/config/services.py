@@ -20,6 +20,8 @@ from apex_forensic.application.services import (
     CustodyLedger,
     EvidenceManager,
     FileSystemIndexService,
+    SearchService,
+    TimelineService,
 )
 
 
@@ -33,6 +35,8 @@ class ServiceBundle:
     custody: CustodyLedger
     fs: FileSystemIndexService
     artifacts: ArtifactAnalysisService
+    search: SearchService
+    timeline: TimelineService
 
     def close(self) -> None:
         """Close underlying resources."""
@@ -84,6 +88,19 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         clock=clock,
         id_generator=ids,
     )
+    search = SearchService(
+        case_repository=repository,
+        search_index=repository,
+        search_repository=repository,
+        clock=clock,
+        id_generator=ids,
+    )
+    timeline = TimelineService(
+        case_repository=repository,
+        timeline_repository=repository,
+        clock=clock,
+        id_generator=ids,
+    )
     cases = CaseManager(repository=repository, clock=clock, id_generator=ids)
     return ServiceBundle(
         repository=repository,
@@ -92,4 +109,6 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         custody=custody,
         fs=fs,
         artifacts=artifacts,
+        search=search,
+        timeline=timeline,
     )
