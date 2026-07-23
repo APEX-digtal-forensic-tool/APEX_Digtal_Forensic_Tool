@@ -1,6 +1,6 @@
 # APEX Digital Forensic Tool
 
-APEX는 **Python·Native 하이브리드 분석 엔진**, **한국어 사용자 환경**, **Built-in MCP 기반 AI 분석 보조 기능**을 결합한 디지털 포렌식 분석 플랫폼입니다.
+APEX는 **Python·Native 하이브리드 분석 엔진**, **한국어 사용자 환경**, **Built-in MCP 기반 AI 분석 보조 기능**을 결합하는 것을 목표로 하는 디지털 포렌식 분석 플랫폼입니다.
 
 기존 디지털 포렌식 도구는 강력한 분석 기능을 제공하지만 높은 비용, 복잡한 사용 환경, 영어 중심의 인터페이스, 대용량 데이터 처리 지연, 전문 지식 요구 등의 한계가 있습니다.
 
@@ -12,16 +12,16 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 Forensic Core Engine은 **Phase 3 Windows Artifact Analysis MVP 구현 완료** 상태입니다.
-> Phase 1·2의 Case·Evidence·Hash·SQLite·Chain of Custody, Job, Logical File System Indexing 기반 위에 Windows Registry `.reg`, exported Event XML, minimal Prefetch metadata, Artifact Discovery, Query, SQLite persistence, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 CLI 조회 기능이 구현되었습니다.
+> 현재 Forensic Core Engine은 **Phase 4 Search·Keyword Set·Timeline 구현 완료** 상태입니다.
+> Phase 1~3의 Case·Evidence·Hash·SQLite·Chain of Custody, Job, Logical File System Indexing 및 Windows Artifact Analysis 기반 위에 SQLite FTS5 Metadata·Artifact Search, Keyword Set Versioning, Search Reproduction·Cache, Timeline Projection·Query, Timestamp Normalization, UTC·Case Timezone 표시, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 관련 CLI가 구현되었습니다.
 >
-> Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, File Body Full Text Indexing, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, Browser·Media 분석, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
 
 ---
 
 ## 프로젝트 한 줄 소개
 
-> APEX는 Python·Native 하이브리드 엔진과 한국어 UI, Built-in MCP를 기반으로 Progressive Indexing, AI Keyword 추천, Timezone 자동화, 근거 중심 분석, Report 및 Chain of Custody 자동화를 제공하는 디지털 포렌식 플랫폼입니다.
+> APEX는 Python·Native 하이브리드 엔진과 한국어 UI, Built-in MCP를 기반으로 Progressive Indexing, AI Keyword 추천, Timezone 자동화, 근거 중심 분석, Report 및 Chain of Custody 자동화를 제공하는 것을 목표로 하는 디지털 포렌식 플랫폼입니다.
 
 ---
 
@@ -493,38 +493,42 @@ Timezone 후보 출처:
 - Live Windows Artifact Acquisition 및 Remote Registry 미지원
 - Registry Transaction Log·삭제 Key 복구 미지원
 - Credential·Secret·Password Hash 추출 미지원
-- Artifact와 Timeline·Search의 통합은 이후 Phase에서 구현
+- Artifact Search와 Registry·Event Log·Prefetch Timeline Projection·Query는 Phase 4에서 구현되었으며, GUI·AI Context 연동은 미지원
 - E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing 미지원
 
-## Phase 4 구현 업데이트
+### Phase 4 — Search, Keyword Set 및 Timeline
 
-Phase 4는 기존 `fs_nodes`, `artifacts`, `jobs`, `cases`, `evidence` SQLite 구조를 재사용해
+Phase 4에서는 기존 `fs_nodes`, `artifacts`, `jobs`, `cases`, `evidence` SQLite 구조를 재사용해
 Metadata/Artifact Search, 수동 Keyword Set, Search Reproduction/Cache, Timeline Projection/Query를
-구현한다. Search Index는 SQLite FTS5 Capability를 실행 시 확인하며 FTS5가 없으면
-`CAPABILITY_UNAVAILABLE`로 실패하고 성공처럼 대체 검색을 수행하지 않는다.
+구현했습니다. Search Index는 SQLite FTS5 Capability를 실행 시 확인하며 FTS5가 없으면
+`CAPABILITY_UNAVAILABLE`를 반환하고 성공처럼 대체 검색을 수행하지 않습니다.
 
 Search 대상 Field는 파일명, 상대/표시 경로, 확장자, MIME 후보, 안전한 provider metadata,
 artifact title/summary/type/subtype/source path, registry path/value, Event provider/channel/ID,
-EventData/UserData, Prefetch executable name과 referenced path candidate다. 파일 본문 전체,
-PDF/DOCX/OCR/STT 추출물, unallocated/slack, deleted file body는 인덱싱하지 않는다.
+EventData/UserData, Prefetch executable name과 referenced path candidate입니다. 파일 본문 전체,
+PDF/DOCX/OCR/STT 추출물, unallocated/slack, deleted file body는 인덱싱하지 않습니다.
 
-Keyword Set은 `DRAFT`, `ACTIVE`, `ARCHIVED` 상태와 immutable version을 보존한다. 활성 Set을
-수정하면 새 version이 생성되고 이전 version은 검색 재현을 위해 유지된다. Search Execution은
+Keyword Set은 `DRAFT`, `ACTIVE`, `ARCHIVED` 상태와 immutable version을 보존합니다. 활성 Set을
+수정하면 새 version이 생성되고 이전 version은 검색 재현을 위해 유지됩니다. Search Execution은
 원본 query, scope, keyword set version, backend/version, index revision, source revision
-fingerprint, option fingerprint, 0건 결과, partial/stale warning, result count를 저장한다.
+fingerprint, option fingerprint, 0건 결과, partial/stale warning, result count를 저장합니다.
 
 Search Cache key는 case, evidence scope, query fingerprint, keyword set version, index revision,
-source revision fingerprint, time range, filters, sort로 구성한다. Index 또는 source revision이
-변하면 기존 cache는 무효화되며 원본 evidence, filesystem node, artifact는 삭제하지 않는다.
-기본 TTL은 없다. 같은 option 재실행은 새 reproduction record를 남기며 cache는 그 기록을 대체하지
-않는다.
+source revision fingerprint, time range, filters, sort, limit, opaque cursor를 반영합니다. Cache는
+내부적으로 `limit + 1`개를 조회해 페이지를 자르기 전에 `has_more`와 `next_cursor`를 계산합니다.
+Index 또는 source revision이 변하면 기존 cache는 무효화되며 원본 evidence, filesystem node,
+artifact는 삭제하지 않습니다. 기본 TTL은 없습니다. 같은 option 재실행은 새 reproduction
+record를 남기며 cache는 그 기록을 대체하지 않습니다.
 
 Timeline은 filesystem timestamps, Registry/Event Log/Prefetch artifacts를 `timeline_events`로
-투영한다. Raw timestamp와 raw timezone은 보존하고, UTC normalized timestamp와 case timezone
-display time은 별도 필드에 저장한다. 기본 case timezone은 `Asia/Seoul`이며 IANA timezone과
-Windows의 `tzdata`를 사용한다. Naive timestamp는 UTC로 임의 확정하지 않고 불명확하면
-`normalized_utc = null`을 허용한다. Timezone source/confidence와 timestamp semantics를 기록하고,
-Windows TimeZoneKeyName은 제한된 candidate로만 취급한다.
+투영합니다. Raw timestamp와 raw timezone은 보존하고, UTC normalized timestamp와 case timezone
+display time은 별도 필드에 저장합니다. 기본 case timezone은 `Asia/Seoul`이며 IANA timezone과
+Windows 환경의 `tzdata` fallback을 사용합니다. Naive timestamp는 UTC로 임의 확정하지 않고 불명확하면
+`normalized_utc = null`을 허용합니다. Timezone source/confidence와 timestamp semantics를 기록하고,
+Windows TimeZoneKeyName은 제한된 candidate로만 취급합니다.
+
+Search Index와 Timeline Build Job은 Checkpoint·Resume, Cooperative Pause·Cancel을 지원하며,
+조회 결과에는 Opaque Stable Cursor Pagination을 적용합니다.
 
 추가 CLI:
 
@@ -535,7 +539,7 @@ Windows TimeZoneKeyName은 제한된 candidate로만 취급한다.
 Phase 4 비지원 범위는 file body full text indexing, Office/PDF extraction, OCR/STT, YARA,
 AI Keyword Recommendation, LLM/agent loop, GUI/web/MCP server, report renderer, disk-image internal
 parser, deleted/slack/unallocated search, live acquisition, credential/secret extraction, broad
-Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 주장이다.
+Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 주장입니다.
 
 ---
 
@@ -694,39 +698,52 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 - KakaoTalk
 - 기타 Messenger
 
-### Timeline Analysis (예정)
+### Timeline Analysis
 
-- File MAC Time
-- Registry Timestamp
-- Event Log Timestamp
-- Browser Activity
-- Program Execution Time
-- Download Time
-- UTC 정규화
-- Case Timezone 변환
+현재 구현:
+
+- File System Timestamp와 Registry·Event Log·Prefetch Artifact Timestamp 투영
+- Raw Timestamp·Raw Timezone 보존
+- UTC 정규화 및 Case Timezone 표시
+- Timezone Source·Confidence와 Timestamp Semantics 기록
 - Event Type 및 Time Range Filter
-- Citation 가능한 Timeline Event
+- Opaque Stable Cursor Pagination
+- Raw Locator와 Citation 가능한 Timeline Event
+- Build Job의 Checkpoint·Resume 및 Cooperative Pause·Cancel
+
+추후 구현:
+
+- Browser Activity 및 Download Timeline
+- 광범위한 Windows Timezone 자동 판별
 - AI 기반 사건 흐름 요약
 
-### Search & Discovery (예정)
+### Search & Discovery
 
-- File Name Search
-- Keyword Search
-- Regex Search
-- Metadata Search
-- Artifact Search
-- 한국어 Keyword Search
-- FTS5 또는 동등한 Index
-- Cursor Pagination
-- Search Result Cache
-- Keyword Set
-- Search Reproduction
+현재 구현:
+
+- File Name·Path·Metadata·Artifact Field 대상 SQLite FTS5 Keyword Search
+- Case·Evidence Scope와 Filter 기반 조회
+- Opaque Stable Cursor Pagination
+- Search Result Cache와 Revision 기반 무효화
+- Keyword Set 및 Immutable Versioning
+- Search Reproduction·History·Rerun
+- Index Job의 Checkpoint·Resume 및 Cooperative Pause·Cancel
+
+추후 구현:
+
+- Regex 및 File Body Full Text Search
+- Office·PDF·OCR/STT 추출 Text 검색
+- Deleted·Unallocated·Slack 영역 검색
+- 한국어 형태소·Tokenizer 최적화 및 Localization 확장
+- YARA 및 AI Keyword Recommendation
 
 ---
 
 ## AI Keyword Recommendation
 
 AI는 조사 범위를 줄이기 위한 Keyword Candidate를 제안할 수 있습니다.
+
+> 현재는 설계 계약만 완료되었으며, AI Keyword Recommendation 실행 구현은 Phase 7 범위입니다.
 
 ```text
 Case 배경 정보
@@ -1136,19 +1153,25 @@ APEX/
 │       ├── application/
 │       │   └── services/
 │       │       ├── artifact_analysis.py
-│       │       └── file_system_index.py
+│       │       ├── file_system_index.py
+│       │       ├── search.py
+│       │       └── timeline.py
 │       ├── cli/
 │       ├── config/
 │       ├── domain/
 │       │   └── models/
 │       │       ├── artifact.py
-│       │       └── filesystem.py
+│       │       ├── filesystem.py
+│       │       ├── search.py
+│       │       └── timeline.py
 │       ├── jobs/
 │       └── ports/
 │           ├── artifact_analyzer.py
 │           ├── artifact_repository.py
 │           ├── file_system_repository.py
-│           └── filesystem_provider.py
+│           ├── filesystem_provider.py
+│           ├── search_index.py
+│           └── timeline_repository.py
 │
 ├── schemas/
 │   └── v1/
@@ -1242,6 +1265,16 @@ APEX/
 - [x] Artifact Checkpoint / Resume / Pause / Cancel
 - [x] Artifact Raw Locator 및 Citation
 - [x] Artifact CLI 및 Unit / Integration Test
+- [x] Phase 4 Search, Keyword Set 및 Timeline
+- [x] SQLite FTS5 Metadata / Artifact Search Index
+- [x] Keyword Set 및 Immutable Versioning
+- [x] Search Reproduction / History / Rerun
+- [x] Search Cache 및 Revision 기반 무효화
+- [x] File System / Registry / Event Log / Prefetch Timeline Projection
+- [x] Raw Timestamp·Timezone 보존 및 UTC·Case Timezone 표시
+- [x] Search / Timeline Opaque Stable Cursor Pagination
+- [x] Search Index / Timeline Build Checkpoint / Resume / Pause / Cancel
+- [x] Search / Keyword Set / Timeline CLI·Schema·Test
 
 ### 구현 예정
 
@@ -1250,8 +1283,7 @@ APEX/
 - [ ] Registry Transaction Log 및 삭제 Key Recovery
 - [ ] Prefetch MAM Compression 해제
 - [ ] Event Message DLL Rendering
-- [ ] Timeline / Search / Keyword Set
-- [ ] Timezone Resolver 및 Timestamp Normalizer 확장
+- [ ] 광범위한 Windows Timezone Resolver 및 Timestamp Normalizer 확장
 - [ ] Browser Communications Analyzer
 - [ ] Images / Videos Analyzer
 - [ ] OCR/STT Provider 및 Candidate Review
@@ -1335,14 +1367,18 @@ APEX/
 - [x] Artifact CLI
 - [x] Unit / Integration Test
 
-### Phase 4 — Search 및 Timeline
+### Phase 4 — Search, Keyword Set 및 Timeline — 완료
 
-- Search Index
-- Keyword Set
-- Search Reproduction
-- Timezone Normalization
-- Timeline 통합
-- Cache 및 Parallel Job
+- [x] SQLite FTS5 Search Index
+- [x] Metadata / Artifact Search
+- [x] Keyword Set 및 Immutable Versioning
+- [x] Search Reproduction / History / Rerun
+- [x] Search Cache 및 Revision 기반 무효화
+- [x] Timestamp Normalization
+- [x] Timeline Projection / Query
+- [x] Opaque Stable Cursor Pagination
+- [x] Checkpoint / Resume / Pause / Cancel
+- [x] CLI / JSON Schema / Unit·Integration Test
 
 ### Phase 5 — Browser와 Media
 
@@ -1509,4 +1545,3 @@ AI가 생성한 분석 결과와 Report는 분석 보조 자료이며, 최종 �
 - 분석 결과 재현 가능성 확보
 - Chain of Custody Event 불변성 유지
 - 검증되지 않은 성능 또는 법적 효력 주장 금지
-
