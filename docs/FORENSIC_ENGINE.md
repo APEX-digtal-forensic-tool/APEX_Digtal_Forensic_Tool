@@ -618,31 +618,27 @@ Chain of Custody는 일반 Report 문장이 아니라 Evidence 관리의 독립�
 
 ### Media MVP
 
-- Image / Video File 분류
-- Image Metadata
-- Video Metadata
-- EXIF
-- GPS
-- Thumbnail
-- Codec
-- Duration
-- 생성·수정 시간
-- 삭제된 Media File 표시
+현재 구현:
+
+- Image / Video / Audio File 후보 분류
+- JPEG / PNG / GIF / BMP / TIFF / WEBP Header Metadata와 JPEG EXIF / GPS Candidate
+- MP4 Container Duration / Codec Metadata 및 Optional `ffprobe` 기반 Video / Audio Metadata
+- `ffprobe` 미설치 또는 실패 시 `CAPABILITY_UNAVAILABLE` / Warning을 기록하고 가짜 성공 금지
+- Decompression Bomb, 손상 File, Read Limit, File Size Limit 보호
+- Timezone 없는 EXIF / Media Timestamp를 UTC로 임의 확정하지 않음
+- Source Revision, Raw Locator, Citation, Search / Timeline Projection, Stable Cursor 조회
+- Hash 검증 가능한 Thumbnail Derivative Metadata를 `cache_entries`와 `thumbnail_records`에 저장
+
+현재 제한:
+
+- Pixel 자동 회전, 원본 Media 수정, Reverse Geocoding, 자동 대량 Thumbnail Rendering은 구현하지 않음
+- Video 전체 Frame Sampling, Subtitle 추출, OCR/STT 실행은 구현하지 않음
 
 ### Machine-extracted Candidate
 
-확장 기능:
-
-- Image OCR
-- Video Frame Sampling
-- Frame OCR
-- Subtitle 추출
-- Audio Speech-to-Text
-- Screen Text 추출
-- 추출 Text의 Search Index 연동
-- Frame 또는 Audio Time Position Citation
-
 OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
+Provider Port와 Candidate Review Workflow는 구현되어 있으며 기본 OCR/STT Provider는
+`CAPABILITY_UNAVAILABLE`을 반환합니다. 실제 OCR/STT Engine은 실행하지 않습니다.
 
 Review 상태:
 
@@ -669,18 +665,26 @@ AI는 검토되지 않은 Candidate를 확정 사실로 표현할 수 없습니�
 
 ## Browser Communications MVP
 
-초기 Communications 분석은 Browser Artifact 중심으로 구현합니다.
+현재 구현:
 
-MVP 범위:
+- File System Index 기반 Chromium / Firefox Profile 후보 발견
+- Windows / Linux Path Allowlist, Unicode Path 보존, Profile 중복 방지
+- Profile 발견과 Browser 사용 확정을 분리하고 `user_candidate`는 후보로만 보존
+- Chromium `History` SQLite의 방문, 검색어, 다운로드 추출
+- Firefox `places.sqlite` 방문 및 Download Annotation Candidate 추출
+- 원본 DB를 직접 수정하지 않는 `/tmp` Snapshot Reader와 WAL / SHM 조합 보존
+- Source Fingerprint, Snapshot Hash, Profile / DB / Table / Row Logical Raw Locator 기록
+- Raw Timestamp Semantics, UTC 정규화 근거, Case Timezone 표시 분리
+- Stable Cursor 기반 조회, Search / Timeline Projection, Checkpoint / Resume / Pause / Cancel
 
-- 방문 History
-- 검색 History
-- 다운로드 History
-- URL
-- 다운로드 File
-- Browser Profile
-- 시간 범위 조회
-- 사용자 Profile별 Filter
+현재 제한:
+
+- Password / Secret / Cookie 복호화, Cache Body 복원, 삭제 Record Carving, Incognito 복원,
+  Cloud Sync 분석은 구현하지 않음
+- Firefox Search Term은 재현 가능한 Source가 없으면 완료 기능으로 표시하지 않음
+- Firefox `moz_inputhistory`는 URL-bar 입력 Candidate로 보존하며, 확인된 Search Term이나
+  Browser Search Timeline Event로 투영하지 않음
+- `danger_type` 등 다운로드 상태 값만으로 악성 여부를 확정하지 않음
 
 후순위 Plugin 범위:
 
@@ -819,6 +823,7 @@ Report에 포함 가능한 항목:
 - Recent Activity
 - Image Metadata
 - Video Metadata
+- Audio Metadata
 
 ### Timeline Engine
 
@@ -1018,9 +1023,9 @@ tests/
 - [ ] Registry / Event Log / Prefetch Analyzer
 - [ ] Timeline / Search / Keyword Set
 - [ ] Timezone Resolver 및 Timestamp Normalizer
-- [ ] Browser Communications Analyzer
-- [ ] Images / Videos Analyzer
-- [ ] OCR/STT Provider 및 Candidate Review
+- [x] Browser Communications Analyzer
+- [x] Images / Videos / Audio Analyzer
+- [x] OCR/STT Provider Port 및 Candidate Review
 - [ ] GUI Context 및 Scope별 Analysis Context
 - [ ] Simple / Detailed / Raw View
 - [ ] MCP Adapter용 공개 Interface
@@ -1131,7 +1136,7 @@ parse status, warning flag, and opaque stable cursors.
 ### Phase 5 — Browser와 Media
 
 - Browser Communications MVP
-- Image / Video Metadata
+- Image / Video / Audio Metadata
 - OCR/STT Contract
 - Machine-extracted Candidate
 

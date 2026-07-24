@@ -99,8 +99,8 @@ Lifecycle:
 | Registry | SYSTEM, SOFTWARE, NTUSER.DAT, USRCLASS.DAT, `.reg` | Key/Value, Timezone, USB, Run Key, UserAssist | Hive 경로, Key 경로, Value, 제한된 Logical Locator |
 | Event Log | Windows `.evtx`, exported Event XML | Event Record | File 경로, Record ID, Channel, Provider |
 | Prefetch | Windows `.pf` | Program Execution | File 경로, Format Version, Run Count |
-| Browser Communications | SQLite/JSON/Cache DB | Visit, Search, Download, URL, Profile | Profile, DB/Table/Row ID |
-| Media | 이미지/영상 | EXIF, GPS, Thumbnail, Codec, Duration, 삭제 상태 | File 경로, Metadata Tag/Offset |
+| Browser Communications | Indexed browser SQLite DB Snapshot | Visit, Search, Download, URL, Profile | Profile, DB/Table/Row ID, Snapshot Hash |
+| Media | 이미지/영상/음성 | EXIF, GPS, Thumbnail Metadata, Codec, Duration, 삭제 상태 | File 경로, Metadata Tag/Offset, Source Fingerprint |
 
 Analyzer는 특정 조사 결론을 생성하지 않는다. 관찰한 Fact와 제한된 정규화 결과만 생성한다.
 Email과 Messenger는 MVP가 아니며 별도 Plugin Analyzer로만 추가한다.
@@ -320,8 +320,8 @@ Frontend는 Simple/Detailed/Raw Rendering과 Role별 접근 UX를 소유한다. 
 ID, 구조화 Fact, AI 분류, Timestamp Interpretation, Citation과 제한된 Raw Locator를 제공한다.
 Raw API는 필요한 Offset만 읽고 원본을 수정하지 않는다.
 
-Machine Extraction Port는 OCR/STT 계약만 제공하고 Provider 실행은 Adapter가 담당한다.
-Candidate Store는 Confidence, Engine/Version, Frame/Audio 위치와 Analyst Review를 보존한다.
+Machine Extraction Port는 OCR/STT 계약만 제공하고 기본 Provider는 `CAPABILITY_UNAVAILABLE`을 반환한다.
+Candidate Store는 Confidence, Provider/Version, Frame/Audio 위치와 Append-only Analyst Review를 보존한다.
 미검토 Candidate는 Observed Fact가 아니며 AI와 Report에서 분류를 유지한다.
 
 ## 21. Report와 검증 책임

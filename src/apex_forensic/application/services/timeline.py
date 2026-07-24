@@ -150,6 +150,8 @@ class TimelineService:
                     TimelineSourceType.REGISTRY_ARTIFACT,
                     TimelineSourceType.EVENT_LOG_ARTIFACT,
                     TimelineSourceType.PREFETCH_ARTIFACT,
+                    TimelineSourceType.MEDIA_ARTIFACT,
+                    TimelineSourceType.BROWSER_ARTIFACT,
                 )
             ),
             item_budget=item_budget,
@@ -336,9 +338,7 @@ class TimelineService:
         has_more = len(items) > limit
         returned = items[:limit]
         next_cursor = (
-            _encode_timeline_cursor(returned[-1], order.upper())
-            if has_more and returned
-            else None
+            _encode_timeline_cursor(returned[-1], order.upper()) if has_more and returned else None
         )
         return TimelinePage(
             items=returned,
@@ -465,9 +465,7 @@ class TimelineService:
                 if utc_value is None
                 else parse_timestamp(str(utc_value)),
                 source_hint=(
-                    TimezoneSource.UTC_SOURCE
-                    if utc_value is not None
-                    else TimezoneSource.UNKNOWN
+                    TimezoneSource.UTC_SOURCE if utc_value is not None else TimezoneSource.UNKNOWN
                 ),
             )
             events.append(
@@ -622,6 +620,8 @@ class TimelineService:
                         TimelineSourceType.REGISTRY_ARTIFACT.value,
                         TimelineSourceType.EVENT_LOG_ARTIFACT.value,
                         TimelineSourceType.PREFETCH_ARTIFACT.value,
+                        TimelineSourceType.MEDIA_ARTIFACT.value,
+                        TimelineSourceType.BROWSER_ARTIFACT.value,
                     ],
                 )
             ),
@@ -783,6 +783,19 @@ def _artifact_source_type(artifact_type: str) -> TimelineSourceType:
         return TimelineSourceType.EVENT_LOG_ARTIFACT
     if artifact_type == ArtifactType.PREFETCH_EXECUTION.value:
         return TimelineSourceType.PREFETCH_ARTIFACT
+    if artifact_type in {
+        ArtifactType.MEDIA_IMAGE.value,
+        ArtifactType.MEDIA_VIDEO.value,
+        ArtifactType.MEDIA_AUDIO.value,
+    }:
+        return TimelineSourceType.MEDIA_ARTIFACT
+    if artifact_type in {
+        ArtifactType.BROWSER_PROFILE.value,
+        ArtifactType.BROWSER_VISIT.value,
+        ArtifactType.BROWSER_SEARCH.value,
+        ArtifactType.BROWSER_DOWNLOAD.value,
+    }:
+        return TimelineSourceType.BROWSER_ARTIFACT
     return TimelineSourceType.REGISTRY_ARTIFACT
 
 
@@ -800,6 +813,31 @@ def _artifact_event_type(
             else "EVENT_RECORD"
         )
         return _EVENT_ID_TYPES.get(event_id or -1, TimelineEventType.OTHER), subtype
+    if artifact_type == ArtifactType.MEDIA_IMAGE.value:
+        if fields.get("media_timestamps"):
+            return TimelineEventType.MEDIA_CAPTURED_CANDIDATE, "MEDIA_IMAGE_CAPTURED_CANDIDATE"
+        return TimelineEventType.MEDIA_MODIFIED, "MEDIA_IMAGE_MODIFIED"
+    if artifact_type == ArtifactType.MEDIA_VIDEO.value:
+        if fields.get("media_timestamps"):
+            return TimelineEventType.MEDIA_METADATA_TIMESTAMP, "MEDIA_VIDEO_METADATA_TIMESTAMP"
+        return TimelineEventType.MEDIA_MODIFIED, "MEDIA_VIDEO_MODIFIED"
+    if artifact_type == ArtifactType.MEDIA_AUDIO.value:
+        if fields.get("media_timestamps"):
+            return TimelineEventType.MEDIA_METADATA_TIMESTAMP, "MEDIA_AUDIO_METADATA_TIMESTAMP"
+        return TimelineEventType.MEDIA_MODIFIED, "MEDIA_AUDIO_MODIFIED"
+    if artifact_type == ArtifactType.BROWSER_PROFILE.value:
+        return TimelineEventType.BROWSER_PROFILE_OBSERVED, "BROWSER_PROFILE"
+    if artifact_type == ArtifactType.BROWSER_VISIT.value:
+        return TimelineEventType.BROWSER_VISIT, "BROWSER_VISIT"
+    if artifact_type == ArtifactType.BROWSER_SEARCH.value:
+        return TimelineEventType.BROWSER_SEARCH, "BROWSER_SEARCH"
+    if artifact_type == ArtifactType.BROWSER_DOWNLOAD.value:
+        status = str(fields.get("state_label") or fields.get("state") or "").upper()
+        if status in {"COMPLETE", "COMPLETED", "1"}:
+            return TimelineEventType.BROWSER_DOWNLOAD_COMPLETED, "BROWSER_DOWNLOAD_COMPLETED"
+        if fields.get("end_time_utc") is None:
+            return TimelineEventType.BROWSER_DOWNLOAD_STARTED, "BROWSER_DOWNLOAD_STARTED"
+        return TimelineEventType.BROWSER_DOWNLOAD_OBSERVED, "BROWSER_DOWNLOAD_OBSERVED"
     if artifact_type == ArtifactType.REGISTRY_KEY.value:
         return TimelineEventType.REGISTRY_KEY_LAST_WRITE, "REGISTRY_KEY"
     if artifact_type == ArtifactType.REGISTRY_USERASSIST.value:

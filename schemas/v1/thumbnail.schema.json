@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/thumbnail.schema.json",
+  "title": "APEX Thumbnail Record",
+  "$ref": "#/$defs/thumbnailRecord",
+  "$defs": {
+    "thumbnailRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thumbnail_id",
+        "case_id",
+        "evidence_id",
+        "source_node_id",
+        "source_artifact_id",
+        "source_fingerprint",
+        "cache_key",
+        "relative_path",
+        "output_format",
+        "width",
+        "height",
+        "size_bytes",
+        "content_sha256",
+        "status",
+        "analyzer_id",
+        "analyzer_version",
+        "created_at"
+      ],
+      "properties": {
+        "thumbnail_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_artifact_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cache_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_format": {
+          "enum": [
+            "JPEG",
+            "PNG",
+            "JSON_CONTRACT"
+          ]
+        },
+        "width": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "height": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "status": {
+          "enum": [
+            "NOT_REQUESTED",
+            "GENERATED",
+            "UNSUPPORTED",
+            "FAILED",
+            "SKIPPED_LIMIT",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "analyzer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "analyzer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,16 @@ from apex_forensic.domain.models.artifact import (
     ArtifactRecord,
     ArtifactSource,
 )
+from apex_forensic.domain.models.browser_media import (
+    BrowserArtifact,
+    BrowserProfile,
+    CandidateReviewEvent,
+    MachineExtractedCandidate,
+    MediaArtifact,
+    Phase5Checkpoint,
+    ProviderCapability,
+    ThumbnailRecord,
+)
 from apex_forensic.domain.models.case import Case
 from apex_forensic.domain.models.custody import CustodyEvent, HashVerification
 from apex_forensic.domain.models.evidence import Evidence, EvidenceFingerprint, HashRecord
@@ -49,6 +59,9 @@ __all__ = [
     "ArtifactQuery",
     "ArtifactRecord",
     "ArtifactSource",
+    "BrowserArtifact",
+    "BrowserProfile",
+    "CandidateReviewEvent",
     "Case",
     "CursorPage",
     "CustodyEvent",
@@ -63,6 +76,10 @@ __all__ = [
     "JobProgress",
     "Keyword",
     "KeywordSet",
+    "MachineExtractedCandidate",
+    "MediaArtifact",
+    "Phase5Checkpoint",
+    "ProviderCapability",
     "SearchCacheEntry",
     "SearchDocument",
     "SearchExecution",
@@ -70,6 +87,7 @@ __all__ = [
     "SearchQuery",
     "SearchResult",
     "SearchResultPage",
+    "ThumbnailRecord",
     "TimelineBuildCoverage",
     "TimelineEvent",
     "TimelinePage",

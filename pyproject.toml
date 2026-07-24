@@ -23,6 +23,9 @@ windows-artifacts = [
   "python-registry>=1.3.1",
   "python-evtx>=0.8.1",
 ]
+browser-media = [
+  "Pillow>=10.0",
+]
 
 [project.scripts]
 apex-forensic = "apex_forensic.cli:main"

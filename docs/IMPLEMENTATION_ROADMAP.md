@@ -102,16 +102,17 @@ Acceptance Gate:
 
 ## Phase 5. Images/Videos와 Browser Communications MVP
 
-Images/Videos:
+Images/Videos/Audio:
 
-- 이미지/영상 분류, EXIF/GPS, Thumbnail, Codec, Duration
+- 이미지/영상/음성 후보 분류, EXIF/GPS, Thumbnail Metadata, Codec, Duration
 - 생성/수정 시간과 삭제된 Multimedia File 표시
-- Thumbnail을 Hash 검증 가능한 Cache 파생물로 저장
+- Optional `ffprobe` 기반 Video / Audio Metadata와 Capability Error 보존
+- Thumbnail을 Hash 검증 가능한 Cache 파생물 Metadata로 저장
 
 Browser Communications:
 
 - Browser Profile, 방문 URL/History, Search History, Download History/File
-- Profile/DB/Table/Row Provenance와 시간 기준 조회
+- SQLite Snapshot / WAL / SHM 보존, Profile/DB/Table/Row Provenance와 시간 기준 조회
 
 Email, Discord, Telegram, KakaoTalk 및 기타 Messenger는 후순위 Plugin이며 이 Phase의 완료
 조건이 아니다.
@@ -121,6 +122,17 @@ Acceptance Gate:
 - GPS/시간 원본 값과 정규화 값을 동시 보존
 - AI 없이도 Media/Browser 결과를 JSON으로 완전히 조회 가능
 - 손상 Media/Browser DB가 전체 Job을 중단하지 않음
+
+Implementation Note:
+
+- `MediaMetadataAnalyzer`는 이미지/영상/음성 분류, JPEG EXIF/GPS, 파일 생성/수정/삭제 상태,
+  MP4 Codec/Duration, Optional `ffprobe` Video/Audio Metadata, Thumbnail Cache 파생물
+  Metadata를 Artifact/`cache_entries`/`thumbnail_records`로 저장한다.
+- `BrowserHistoryAnalyzer`는 Chromium History와 Firefox `places.sqlite`를 읽기 전용 SQLite로
+  분석하고 Profile/DB/Table/Row Provenance를 각 Visit/Search/Download Artifact에 보존한다.
+- Email, Discord, Telegram, KakaoTalk 및 기타 Messenger, 실제 OCR/STT 실행, Raster Thumbnail
+  렌더링은 후순위 Plugin/Adapter 범위로 남긴다. Candidate Review와 기본 unavailable
+  OCR/STT Capability 계약은 Phase 5에 포함된다.
 
 ## Phase 6. GUI Context, View와 MCP Adapter Interface
 
@@ -328,8 +340,8 @@ filesystem index.
 - SQLite/Schema/CLI/Tests/Docs: Phase 3 tables, JSON Schema updates, artifact CLI commands, synthetic
   fixtures, SQLite reopen/resume coverage, and design validation support.
 
-Deferred to later phases: timeline integration, FTS/search engine, parallel workers/cache, raw byte
-view API, GUI, MCP, OCR/STT, LLM/AI flows, browser/media analyzers, and report rendering.
+Deferred to later phases: raw byte view API, GUI, MCP, OCR/STT, LLM/AI flows, messenger plugins,
+pixel thumbnail rendering, and report rendering.
 
 The next phase should connect native/disk-image providers through the existing provider port and add artifact/timeline/search integrations. E01/RAW/DD/IMG/VHD/VHDX internal parsing, deleted file recovery, FTS/full text search, and artifact parser execution remain intentionally out of scope.
 

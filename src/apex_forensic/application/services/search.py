@@ -436,9 +436,7 @@ class SearchService:
                 limit=limit + 1,
             )
             has_more = len(rows) > limit
-            cache_results = [
-                self._result_from_row(row, query_id=query.query_id) for row in rows
-            ]
+            cache_results = [self._result_from_row(row, query_id=query.query_id) for row in rows]
             results = cache_results[:limit]
             result_count = self._search_index.count_search_documents(query)
             cache_hit = False

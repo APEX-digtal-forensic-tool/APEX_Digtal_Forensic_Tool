@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/browser-profile.schema.json",
+  "title": "APEX Browser Profile",
+  "$ref": "#/$defs/browserProfile",
+  "$defs": {
+    "browserProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "case_id",
+        "evidence_id",
+        "browser_family",
+        "browser_name",
+        "profile_name",
+        "profile_path",
+        "source_node_id",
+        "operating_system",
+        "user_candidate",
+        "discovery_method",
+        "source_revision",
+        "raw_locator",
+        "citations",
+        "warnings",
+        "is_partial",
+        "discovered_at"
+      ],
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "browser_family": {
+          "enum": [
+            "CHROMIUM",
+            "FIREFOX",
+            "UNKNOWN"
+          ]
+        },
+        "browser_name": {
+          "enum": [
+            "GOOGLE_CHROME",
+            "MICROSOFT_EDGE",
+            "CHROMIUM",
+            "BRAVE",
+            "OPERA",
+            "FIREFOX",
+            "UNKNOWN"
+          ]
+        },
+        "profile_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operating_system": {
+          "enum": [
+            "WINDOWS",
+            "LINUX",
+            "UNKNOWN"
+          ]
+        },
+        "user_candidate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discovery_method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "raw_locator": {
+          "$ref": "citation.schema.json#/$defs/rawLocator"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "discovered_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

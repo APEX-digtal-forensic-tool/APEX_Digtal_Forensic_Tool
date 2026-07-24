@@ -215,6 +215,9 @@ class ArtifactSource:
     discovered_at: datetime
     analyzed_at: datetime | None
     updated_at: datetime
+    source_fingerprint: str | None = None
+    source_checkpoint: dict[str, Any] = field(default_factory=dict)
+    inspected_count: int = 0
 
     def to_schema_dict(self) -> dict[str, Any]:
         return {
@@ -243,6 +246,9 @@ class ArtifactSource:
             "discovered_at": to_json_timestamp(self.discovered_at),
             "analyzed_at": _nullable_timestamp(self.analyzed_at),
             "updated_at": to_json_timestamp(self.updated_at),
+            "source_fingerprint": self.source_fingerprint,
+            "source_checkpoint": self.source_checkpoint,
+            "inspected_count": self.inspected_count,
         }
 
 
@@ -313,6 +319,11 @@ class ArtifactQuery:
     event_id: int | None = None
     registry_path: str | None = None
     executable_name: str | None = None
+    media_kind: str | None = None
+    browser_profile: str | None = None
+    browser_database: str | None = None
+    browser_table: str | None = None
+    browser_row_id: int | None = None
     observed_from: datetime | None = None
     observed_to: datetime | None = None
     parse_status: ArtifactParseStatus | None = None
@@ -350,8 +361,13 @@ class ArtifactAnalysisResult:
     artifacts: tuple[ArtifactRecord, ...] = ()
     warnings: tuple[ArtifactIssue, ...] = ()
     errors: tuple[ArtifactIssue, ...] = ()
+    cache_entries: tuple[dict[str, Any], ...] = ()
     coverage: dict[str, Any] = field(default_factory=dict)
     parse_status: ArtifactParseStatus = ArtifactParseStatus.SUCCESS
+    source_checkpoint: dict[str, Any] | None = None
+    source_complete: bool = True
+    inspected_count: int = 0
+    source_fingerprint: str | None = None
 
     def is_partial(self) -> bool:
         return self.parse_status in {

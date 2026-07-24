@@ -70,6 +70,12 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _fs(args, services)
     if args.command == "artifact":
         return _artifact(args, services)
+    if args.command == "browser":
+        return _browser(args, services)
+    if args.command == "media":
+        return _media(args, services)
+    if args.command == "candidate":
+        return _candidate(args, services)
     if args.command == "search":
         return _search(args, services)
     if args.command == "keyword-set":
@@ -254,7 +260,192 @@ def _artifact(args: Namespace, services: Any) -> Any:
             ArtifactType.PREFETCH_EXECUTION,
         )
         return services.artifacts.list_artifacts(query).to_schema_dict()
+    if args.artifact_command == "media":
+        if args.media_command == "show":
+            return services.artifacts.get_artifact(args.artifact_id).to_schema_dict()
+        query = _artifact_query(args)
+        if query.media_kind == "VIDEO":
+            query = _replace_query_artifact_type(query, ArtifactType.MEDIA_VIDEO)
+        elif query.media_kind == "AUDIO":
+            query = _replace_query_artifact_type(query, ArtifactType.MEDIA_AUDIO)
+        elif query.media_kind == "IMAGE":
+            query = _replace_query_artifact_type(query, ArtifactType.MEDIA_IMAGE)
+        return services.artifacts.list_artifacts(query).to_schema_dict()
+    if args.artifact_command == "browser":
+        if args.browser_command == "show":
+            return services.artifacts.get_artifact(args.artifact_id).to_schema_dict()
+        type_by_command = {
+            "profiles": ArtifactType.BROWSER_PROFILE,
+            "visits": ArtifactType.BROWSER_VISIT,
+            "searches": ArtifactType.BROWSER_SEARCH,
+            "downloads": ArtifactType.BROWSER_DOWNLOAD,
+        }
+        query = _replace_query_artifact_type(
+            _artifact_query(args),
+            type_by_command[args.browser_command],
+        )
+        return services.artifacts.list_artifacts(query).to_schema_dict()
     raise ValidationError("Unknown artifact command.", target="artifact_command")
+
+
+def _browser(args: Namespace, services: Any) -> Any:
+    if args.browser_command == "discover":
+        return services.artifacts.discover_sources(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_type=AnalysisProfileType(args.profile),
+            analyzers=_default_analyzers(args.analyzer, "browser.history"),
+            artifact_types=_parse_artifact_types(args.artifact_type),
+            selected_paths=args.selected_path,
+            selected_node_ids=args.selected_node_id,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+            batch_size=args.batch_size,
+        )
+    if args.browser_command == "analyze":
+        job, coverage = services.artifacts.analyze_evidence(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_type=AnalysisProfileType(args.profile),
+            item_budget=args.item_budget,
+            batch_size=args.batch_size,
+            analyzers=_default_analyzers(args.analyzer, "browser.history"),
+            artifact_types=_parse_artifact_types(args.artifact_type),
+            selected_paths=args.selected_path,
+            selected_node_ids=args.selected_node_id,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.browser_command == "status":
+        return services.artifacts.artifact_status(args.job_id)
+    if args.browser_command == "resume":
+        job, coverage = services.artifacts.resume_artifact_job(
+            args.job_id, item_budget=args.item_budget
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.browser_command == "cancel":
+        return services.artifacts.cancel_artifact_job(args.job_id).to_schema_dict()
+    if args.browser_command == "show":
+        return services.artifacts.get_artifact(args.artifact_id).to_schema_dict()
+    if args.browser_command == "warnings":
+        return services.artifacts.list_warnings(
+            job_id=args.job_id,
+            artifact_id=args.artifact_id,
+            evidence_id=args.evidence_id,
+        )
+    type_by_command = {
+        "profiles": ArtifactType.BROWSER_PROFILE,
+        "history": ArtifactType.BROWSER_VISIT,
+        "searches": ArtifactType.BROWSER_SEARCH,
+        "downloads": ArtifactType.BROWSER_DOWNLOAD,
+    }
+    if args.browser_command in type_by_command:
+        query = _replace_query_artifact_type(
+            _artifact_query(args), type_by_command[args.browser_command]
+        )
+        return services.artifacts.list_artifacts(query).to_schema_dict()
+    raise ValidationError("Unknown browser command.", target="browser_command")
+
+
+def _media(args: Namespace, services: Any) -> Any:
+    if args.media_command == "discover":
+        return services.artifacts.discover_sources(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_type=AnalysisProfileType(args.profile),
+            analyzers=_default_analyzers(args.analyzer, "media.metadata"),
+            artifact_types=_parse_artifact_types(args.artifact_type),
+            selected_paths=args.selected_path,
+            selected_node_ids=args.selected_node_id,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+            batch_size=args.batch_size,
+        )
+    if args.media_command == "analyze":
+        job, coverage = services.artifacts.analyze_evidence(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_type=AnalysisProfileType(args.profile),
+            item_budget=args.item_budget,
+            batch_size=args.batch_size,
+            analyzers=_default_analyzers(args.analyzer, "media.metadata"),
+            artifact_types=_parse_artifact_types(args.artifact_type),
+            selected_paths=args.selected_path,
+            selected_node_ids=args.selected_node_id,
+            include_patterns=args.include,
+            exclude_patterns=args.exclude,
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.media_command == "status":
+        return services.artifacts.artifact_status(args.job_id)
+    if args.media_command == "resume":
+        job, coverage = services.artifacts.resume_artifact_job(
+            args.job_id, item_budget=args.item_budget
+        )
+        return {"job": job.to_schema_dict(), "coverage": coverage.to_schema_dict()}
+    if args.media_command == "cancel":
+        return services.artifacts.cancel_artifact_job(args.job_id).to_schema_dict()
+    if args.media_command == "list":
+        query = _artifact_query(args)
+        if query.media_kind == "VIDEO":
+            query = _replace_query_artifact_type(query, ArtifactType.MEDIA_VIDEO)
+        elif query.media_kind == "AUDIO":
+            query = _replace_query_artifact_type(query, ArtifactType.MEDIA_AUDIO)
+        elif query.media_kind == "IMAGE":
+            query = _replace_query_artifact_type(query, ArtifactType.MEDIA_IMAGE)
+        return services.artifacts.list_artifacts(query).to_schema_dict()
+    if args.media_command == "show":
+        return services.artifacts.get_artifact(args.artifact_id).to_schema_dict()
+    if args.media_command == "thumbnail":
+        artifact = services.artifacts.get_artifact(args.artifact_id)
+        return {
+            "artifact_id": artifact.artifact_id,
+            "thumbnail": artifact.fields.get("thumbnail_cache"),
+            "thumbnail_status": artifact.fields.get("thumbnail_status")
+            or ("GENERATED" if artifact.fields.get("thumbnail_cache") else "NOT_REQUESTED"),
+        }
+    if args.media_command == "warnings":
+        return services.artifacts.list_warnings(
+            job_id=args.job_id,
+            artifact_id=args.artifact_id,
+            evidence_id=args.evidence_id,
+        )
+    raise ValidationError("Unknown media command.", target="media_command")
+
+
+def _candidate(args: Namespace, services: Any) -> Any:
+    if args.candidate_command == "capabilities":
+        return [
+            item.to_schema_dict()
+            for item in services.candidates.capabilities(capability_type=args.type)
+        ]
+    if args.candidate_command == "list":
+        return services.candidates.list_candidates(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            review_status=args.review_status,
+            cursor=args.cursor,
+            limit=args.limit,
+        ).to_schema_dict()
+    if args.candidate_command == "show":
+        return services.candidates.get_candidate(args.candidate_id)
+    if args.candidate_command == "review":
+        return services.candidates.review_candidate(
+            candidate_id=args.candidate_id,
+            review_status=args.status,
+            reviewed_by=args.reviewed_by,
+            reason=args.reason,
+        ).to_schema_dict()
+    if args.candidate_command == "correct":
+        return services.candidates.review_candidate(
+            candidate_id=args.candidate_id,
+            review_status="CORRECTED",
+            reviewed_by=args.reviewed_by,
+            correction_text=args.correction_text,
+            reason=args.reason,
+        ).to_schema_dict()
+    raise ValidationError("Unknown candidate command.", target="candidate_command")
 
 
 def _custody(args: Namespace, services: Any) -> Any:
@@ -460,6 +651,10 @@ def _parse_algorithm(value: str) -> HashAlgorithm:
         raise ValidationError("Unsupported hash algorithm.", target="algorithm") from error
 
 
+def _default_analyzers(values: list[str], default_analyzer: str) -> list[str]:
+    return values if values else [default_analyzer]
+
+
 def _parse_artifact_types(values: list[str]) -> list[ArtifactType]:
     artifact_types: list[ArtifactType] = []
     for value in values:
@@ -571,6 +766,11 @@ def _artifact_query(args: Namespace) -> ArtifactQuery:
         event_id=getattr(args, "event_id", None),
         registry_path=getattr(args, "registry_path", None),
         executable_name=getattr(args, "executable_name", None),
+        media_kind=_parse_media_kind(getattr(args, "media_kind", None)),
+        browser_profile=getattr(args, "browser_profile", None),
+        browser_database=getattr(args, "browser_database", None),
+        browser_table=getattr(args, "browser_table", None),
+        browser_row_id=getattr(args, "browser_row_id", None),
         observed_from=_parse_timestamp_arg(getattr(args, "observed_from", None), "observed_from"),
         observed_to=_parse_timestamp_arg(getattr(args, "observed_to", None), "observed_to"),
         parse_status=_parse_parse_status(getattr(args, "parse_status", None)),
@@ -593,6 +793,11 @@ def _replace_query_artifact_type(
         event_id=query.event_id,
         registry_path=query.registry_path,
         executable_name=query.executable_name,
+        media_kind=query.media_kind,
+        browser_profile=query.browser_profile,
+        browser_database=query.browser_database,
+        browser_table=query.browser_table,
+        browser_row_id=query.browser_row_id,
         observed_from=query.observed_from,
         observed_to=query.observed_to,
         parse_status=query.parse_status,
@@ -600,6 +805,15 @@ def _replace_query_artifact_type(
         limit=query.limit,
         cursor=query.cursor,
     )
+
+
+def _parse_media_kind(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.replace("-", "_").replace(".", "_").upper()
+    if normalized not in {"IMAGE", "VIDEO", "AUDIO"}:
+        raise ValidationError("Unsupported media kind.", target="media_kind")
+    return normalized
 
 
 def _json_requested(args: Namespace) -> bool:
