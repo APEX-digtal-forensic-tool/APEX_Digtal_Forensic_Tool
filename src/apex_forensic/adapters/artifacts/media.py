@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import selectors
 import shutil
 import struct
 import subprocess
-import time
+import threading
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -462,60 +461,88 @@ def _run_bounded_process(
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout = bytearray()
     stderr = bytearray()
-    deadline = time.monotonic() + timeout
-    selector = selectors.DefaultSelector()
-    try:
-        if process.stdout is not None:
-            selector.register(process.stdout, selectors.EVENT_READ, "stdout")
-        if process.stderr is not None:
-            selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-        while selector.get_map():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                process.kill()
-                process.communicate()
-                return _BoundedProcessResult(
-                    process.returncode,
-                    bytes(stdout),
-                    bytes(stderr),
-                    timed_out=True,
-                )
-            events = selector.select(remaining)
-            if not events:
-                continue
-            for key, _ in events:
-                chunk = os.read(key.fd, 64 * 1024)
-                if not chunk:
-                    selector.unregister(key.fileobj)
-                    continue
-                if key.data == "stdout":
-                    stdout.extend(chunk)
-                    if len(stdout) > max_bytes:
-                        process.kill()
-                        process.communicate()
-                        return _BoundedProcessResult(
-                            process.returncode,
-                            bytes(stdout[:max_bytes]),
-                            bytes(stderr),
-                            limit_stream="stdout",
-                        )
-                else:
-                    stderr.extend(chunk)
-                    if len(stderr) > max_bytes:
-                        process.kill()
-                        process.communicate()
-                        return _BoundedProcessResult(
-                            process.returncode,
-                            bytes(stdout),
-                            bytes(stderr[:max_bytes]),
-                            limit_stream="stderr",
-                        )
-        return _BoundedProcessResult(process.wait(), bytes(stdout), bytes(stderr))
-    finally:
-        selector.close()
-        if process.poll() is None:
+    state: dict[str, bool | str | None] = {"timed_out": False, "limit_stream": None}
+    lock = threading.Lock()
+
+    def kill_process() -> None:
+        with suppress(OSError):
             process.kill()
-            process.communicate()
+
+    def wait_after_kill() -> int | None:
+        try:
+            return process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            return process.poll()
+
+    def read_stream(stream: Any, stream_name: str, buffer: bytearray) -> None:
+        try:
+            while True:
+                chunk = stream.read(64 * 1024)
+                if not chunk:
+                    return
+                should_kill = False
+                with lock:
+                    if state["timed_out"] or state["limit_stream"] is not None:
+                        should_kill = True
+                    else:
+                        remaining = max(0, max_bytes - len(buffer))
+                        if len(chunk) > remaining:
+                            buffer.extend(chunk[:remaining])
+                            state["limit_stream"] = stream_name
+                            should_kill = True
+                        else:
+                            buffer.extend(chunk)
+                if should_kill:
+                    kill_process()
+                    return
+        finally:
+            with suppress(OSError):
+                stream.close()
+
+    threads: list[threading.Thread] = []
+    if process.stdout is not None:
+        threads.append(
+            threading.Thread(
+                target=read_stream,
+                args=(process.stdout, "stdout", stdout),
+                daemon=True,
+            )
+        )
+    if process.stderr is not None:
+        threads.append(
+            threading.Thread(
+                target=read_stream,
+                args=(process.stderr, "stderr", stderr),
+                daemon=True,
+            )
+        )
+    for thread in threads:
+        thread.start()
+
+    returncode: int | None
+    try:
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        with lock:
+            state["timed_out"] = True
+        kill_process()
+        returncode = wait_after_kill()
+    finally:
+        if process.poll() is None:
+            kill_process()
+            wait_after_kill()
+        for thread in threads:
+            thread.join(timeout=1)
+
+    return _BoundedProcessResult(
+        returncode,
+        bytes(stdout),
+        bytes(stderr),
+        timed_out=bool(state["timed_out"]),
+        limit_stream=None
+        if state["limit_stream"] is None
+        else str(state["limit_stream"]),
+    )
 
 
 def _ffprobe_metadata(*, file_path: Path, media_kind: str) -> dict[str, Any]:

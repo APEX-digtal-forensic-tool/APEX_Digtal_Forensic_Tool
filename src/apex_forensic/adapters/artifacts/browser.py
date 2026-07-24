@@ -7,12 +7,12 @@ import shutil
 import sqlite3
 import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 from apex_forensic._time import to_json_timestamp
 from apex_forensic.adapters.artifacts.windows.common import (
@@ -76,6 +76,15 @@ class _BrowserStreamPage:
     artifacts: tuple[ArtifactRecord, ...]
     last_row_id: int | None
     has_more: bool
+
+
+class _BrowserSQLiteSnapshotCleanupError(OSError):
+    """Snapshot cleanup failed after the copied database was analyzed."""
+
+    def __init__(self, snapshot_directory: Path, original_error: OSError) -> None:
+        super().__init__(str(original_error))
+        self.snapshot_directory = snapshot_directory
+        self.original_error = original_error
 
 
 class BrowserHistoryAnalyzer:
@@ -190,10 +199,13 @@ class BrowserHistoryAnalyzer:
                 ),
                 parse_status=ArtifactParseStatus.UNSUPPORTED,
             )
+        cleanup_warning: ArtifactIssue | None = None
+        page: _BrowserExtractionPage | None = None
+        db_kind = "UNKNOWN"
         try:
             with _browser_sqlite_snapshot(file_path) as snapshot:
                 profile = profile | {"snapshot": snapshot.metadata}
-                with _connect_read_only(snapshot.database_path) as connection:
+                with closing(_connect_read_only(snapshot.database_path)) as connection:
                     connection.row_factory = sqlite3.Row
                     tables = _table_columns(connection)
                     db_kind = _database_kind(tables)
@@ -233,6 +245,41 @@ class BrowserHistoryAnalyzer:
                         tables=tables,
                         item_budget=item_budget,
                     )
+        except _BrowserSQLiteSnapshotCleanupError as error:
+            if page is None:
+                return ArtifactAnalysisResult(
+                    errors=(
+                        issue(
+                            severity="ERROR",
+                            code="BROWSER_SNAPSHOT_CLEANUP_FAILED",
+                            message_key="error.browser.snapshot_cleanup_failed",
+                            developer_message=(
+                                "Browser SQLite snapshot cleanup failed before analysis results "
+                                "could be returned."
+                            ),
+                            node=node,
+                            details={
+                                "error": str(error.original_error),
+                                "snapshot_directory": str(error.snapshot_directory),
+                            },
+                        ),
+                    ),
+                    parse_status=ArtifactParseStatus.FAILED,
+                )
+            cleanup_warning = issue(
+                severity="WARNING",
+                code="BROWSER_SNAPSHOT_CLEANUP_FAILED",
+                message_key="warning.browser.snapshot_cleanup_failed",
+                developer_message=(
+                    "Browser SQLite snapshot cleanup failed after extraction; analysis results "
+                    "were preserved."
+                ),
+                node=node,
+                details={
+                    "error": str(error.original_error),
+                    "snapshot_directory": str(error.snapshot_directory),
+                },
+            )
         except sqlite3.DatabaseError as error:
             artifact = _corrupt_db_artifact(
                 evidence=evidence,
@@ -258,9 +305,13 @@ class BrowserHistoryAnalyzer:
                 parse_status=ArtifactParseStatus.FAILED,
             )
 
+        if page is None:
+            return ArtifactAnalysisResult(parse_status=ArtifactParseStatus.FAILED)
         warnings = tuple(
             warning for artifact in page.artifacts for warning in _artifact_warnings(artifact, node)
         )
+        if cleanup_warning is not None:
+            warnings = (*warnings, cleanup_warning)
         status = (
             ArtifactParseStatus.PARTIAL
             if warnings or not page.source_complete
@@ -283,14 +334,15 @@ class BrowserHistoryAnalyzer:
 
 def _connect_read_only(path: Path) -> sqlite3.Connection:
     resolved = path.resolve(strict=True)
-    uri = f"file:{quote(str(resolved), safe='/:')}?mode=ro"
+    uri = f"{resolved.as_uri()}?mode=ro"
     return sqlite3.connect(uri, uri=True)
 
 
 @contextmanager
 def _browser_sqlite_snapshot(path: Path) -> Iterator[_BrowserSQLiteSnapshot]:
-    with tempfile.TemporaryDirectory(prefix="apex-browser-snapshot-", dir="/tmp") as directory:
-        temp_dir = Path(directory)
+    temporary_directory = tempfile.TemporaryDirectory(prefix="apex-browser-snapshot-")
+    temp_dir = Path(temporary_directory.name)
+    try:
         snapshot_main = temp_dir / path.name
         shutil.copy2(path, snapshot_main)
         component_hashes = {"main": _sha256_file(path)}
@@ -325,11 +377,20 @@ def _browser_sqlite_snapshot(path: Path) -> Iterator[_BrowserSQLiteSnapshot]:
                 "component_sizes": component_sizes,
                 "wal_preserved": wal_preserved,
                 "shm_preserved": shm_preserved,
-                "snapshot_location": "/tmp",
+                "snapshot_location": str(temp_dir.parent),
                 "cleanup_policy": "temporary_directory_cleanup_after_analysis",
                 "read_policy": "copied_snapshot_read_only_selects",
             },
         )
+    except BaseException:
+        with suppress(OSError):
+            temporary_directory.cleanup()
+        raise
+    else:
+        try:
+            temporary_directory.cleanup()
+        except OSError as error:
+            raise _BrowserSQLiteSnapshotCleanupError(temp_dir, error) from error
 
 
 def _sha256_file(path: Path) -> str:
