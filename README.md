@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 Forensic Core Engine은 **Phase 5 Browser·Media MVP 구현 완료** 상태입니다.
-> Phase 1~4의 Case·Evidence·Hash·SQLite·Chain of Custody, Job, Logical File System Indexing, Windows Artifact Analysis, SQLite FTS5 Metadata·Artifact Search, Keyword Set Versioning, Search Reproduction·Cache, Timeline Projection·Query, Timestamp Normalization, UTC·Case Timezone 표시, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 관련 CLI 기반 위에 Browser History/Search/Download와 Media Metadata Artifact가 구현되었습니다.
+> 현재 Forensic Core Engine은 **Phase 5 Browser Communications & Media Metadata MVP 구현 및 Windows 호환성 검증 완료** 상태입니다.
+> Phase 1~4의 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline 및 Timezone 기반 위에 Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata, Thumbnail Derived Data 계약, Machine-extracted Candidate Review 및 관련 CLI·Schema가 구현되었습니다.
 >
-> Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, File Body Full Text Indexing, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, GUI, MCP, AI, OCR/STT 실행 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> Browser SQLite는 원본 DB·WAL·SHM을 수정하지 않는 read-only Snapshot과 Source Revision을 사용하며, Binary Registry·EVTX, Pillow, ffprobe·ffmpeg는 Optional Capability로 분리합니다. File Body Full Text Indexing, Disk Image 내부 File System Parsing, 삭제 파일 복구, Live 수집, Credential·Secret 추출, 실제 OCR·STT, GUI, MCP, AI 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
 
 ---
 
@@ -542,6 +542,39 @@ AI Keyword Recommendation, LLM/agent loop, GUI/web/MCP server, report renderer, 
 parser, deleted/slack/unallocated search, live acquisition, credential/secret extraction, broad
 Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 주장입니다.
 
+### Phase 5 — Browser Communications & Media Metadata MVP
+
+- Phase 2 File System Index 기반 Chromium·Firefox Profile 후보 발견
+- Windows·Linux Path Allowlist와 한글·Unicode Profile Path 보존
+- Chromium `History`의 Visit·Search Term·Download 분석
+- Firefox `places.sqlite` Visit와 Download Annotation Candidate 분석
+- Firefox `moz_inputhistory`를 확인된 Search가 아닌 URL-bar Input Candidate로 분리
+- 원본 Main DB·WAL·SHM을 수정하지 않는 Platform Temporary Snapshot
+- Main DB·WAL·SHM을 포함한 Effective Source Fingerprint와 Revision 기반 재분석
+- SQLite Connection 명시적 Close 후 Snapshot Cleanup
+- Source별 Deterministic Checkpoint와 Item Budget 기반 Resume
+- 대형 Browser DB 내부 Cooperative Pause·Cancel과 Stable Cursor Query
+- Browser Artifact의 Search Index·Cache Invalidation·Timeline Projection 연동
+- JPEG·PNG·GIF·BMP·TIFF·WEBP Header Metadata와 JPEG EXIF·GPS Candidate
+- Optional Pillow 기반 안전한 Image Metadata Capability
+- MP4 기본 Metadata와 Optional `ffprobe` 기반 Video·Audio Metadata Capability
+- argv-only Process 실행, Timeout, stdout·stderr Size Limit 및 Cross-platform Cleanup
+- Hash 검증 가능한 Thumbnail Derived Metadata와 원본·파생 데이터 분리
+- Machine-extracted Candidate Domain과 Append-only Review History
+- OCR·STT Provider Port 및 기본 `CAPABILITY_UNAVAILABLE` 동작
+- Browser·Media·Candidate CLI, JSON Schema 및 Unit·Integration Test
+- Windows·Linux Runtime 회귀 검증
+
+현재 제한:
+
+- Browser Password·Credential·Cookie Value 복호화와 DPAPI 분석 미지원
+- Browser Cache Body, Incognito, 삭제 Record, SQLite Free Page Carving 미지원
+- Firefox Search Term은 직접 재현 가능한 Source가 없으면 완료 기능으로 표시하지 않음
+- Reverse Geocoding, 얼굴·객체·내용 의미 분석 미지원
+- 실제 OCR·STT Engine, Subtitle 추출, Audio Transcription 미지원
+- Video 전체 Frame Sampling과 자동 대량 Thumbnail Rendering 미지원
+- `ffprobe`·`ffmpeg`가 없으면 구조화된 `CAPABILITY_UNAVAILABLE` 반환
+
 ---
 
 ## 주요 기능
@@ -682,24 +715,28 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 
 현재 구현:
 
-- File System Index 기반 Chromium / Firefox Profile 후보 발견
-- Windows / Linux Path Allowlist, Unicode Path 보존, Profile 중복 방지
+- File System Index 기반 Chromium·Firefox Profile 후보 발견
+- Windows·Linux Path Allowlist, Unicode Path 보존 및 Profile 중복 방지
 - Profile 발견과 Browser 사용 확정을 분리하고 `user_candidate`는 후보로만 보존
-- Chromium `History` SQLite의 방문, 검색어, 다운로드 추출
-- Firefox `places.sqlite` 방문 및 Download Annotation Candidate 추출
-- 원본 DB를 직접 수정하지 않는 `/tmp` Snapshot Reader와 WAL / SHM 조합 보존
-- Source Fingerprint, Snapshot Hash, Profile / DB / Table / Row Logical Raw Locator 기록
-- Raw Timestamp Semantics, UTC 정규화 근거, Case Timezone 표시 분리
-- Stable Cursor 기반 조회, Search / Timeline Projection, Checkpoint / Resume / Pause / Cancel
+- Chromium `History` SQLite의 Visit·Search Term·Download 분석
+- Firefox `places.sqlite` Visit와 Download Annotation Candidate 분석
+- Firefox `moz_inputhistory`를 확인된 Search가 아닌 URL-bar Input Candidate로 분리
+- 원본 DB를 직접 수정하지 않는 Platform Temporary Snapshot Reader
+- Main DB·WAL·SHM 조합 보존과 Component Hash 기반 Effective Source Fingerprint
+- SQLite Read-only URI와 명시적 Connection Close 후 Snapshot Cleanup
+- DB·Table·Column Introspection과 DB·Table·Row Logical Raw Locator
+- Source별 Cursor·Inspected Count를 저장하는 Checkpoint / Resume
+- Item Budget, Batch Iteration 및 Browser DB 내부 Cooperative Pause·Cancel
+- Raw Timestamp Semantics, UTC 정규화 근거 및 Case Timezone 표시 분리
+- Stable Cursor Query, Repository Reopen, Search Revision·Cache Invalidation 및 Timeline Projection
 
 현재 제한:
 
-- Password / Secret / Cookie 복호화, Cache Body 복원, 삭제 Record Carving, Incognito 복원,
-  Cloud Sync 분석은 구현하지 않음
-- Firefox Search Term은 재현 가능한 Source가 없으면 완료 기능으로 표시하지 않음
-- Firefox `moz_inputhistory`는 URL-bar 입력 Candidate로 보존하며, 확인된 Search Term이나
-  Browser Search Timeline Event로 투영하지 않음
-- `danger_type` 등 다운로드 상태 값만으로 악성 여부를 확정하지 않음
+- Password·Secret·Cookie 복호화, DPAPI, Cache Body 복원, 삭제 Record Carving, Incognito 복원 및 Cloud Sync 분석 미지원
+- Firefox Search Term은 직접 재현 가능한 Source가 없으면 완료 기능으로 표시하지 않음
+- Firefox `moz_inputhistory`는 확인된 Search Term이나 Browser Search Timeline Event로 투영하지 않음
+- `danger_type`, Download State 또는 URL만으로 악성 여부를 확정하지 않음
+- Snapshot Cleanup 실패는 분석 결과와 분리된 구조화 Warning으로 기록
 
 후순위 Plugin 범위:
 
@@ -731,7 +768,7 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 
 현재 구현:
 
-- File Name·Path·Metadata·Artifact Field 대상 SQLite FTS5 Keyword Search
+- File Name·Path·Metadata와 Registry·Event Log·Prefetch·Browser·Media Artifact Field 대상 SQLite FTS5 Keyword Search
 - Case·Evidence Scope와 Filter 기반 조회
 - Opaque Stable Cursor Pagination
 - Search Result Cache와 Revision 기반 무효화
@@ -877,52 +914,52 @@ AI는 다음 동작을 수행할 수 없습니다.
 
 ## Images / Videos 및 Machine Extraction
 
-### Media MVP
+### Media Metadata MVP
 
 현재 구현:
 
-- Image / Video / Audio File 후보 분류
-- JPEG / PNG / GIF / BMP / TIFF / WEBP Header Metadata와 JPEG EXIF / GPS Candidate
-- MP4 Container Duration / Codec Metadata 및 Optional `ffprobe` 기반 Video / Audio Metadata
-- `ffprobe` 미설치 또는 실패 시 `CAPABILITY_UNAVAILABLE` / Warning을 기록하고 가짜 성공 금지
-- Decompression Bomb, 손상 File, Read Limit, File Size Limit 보호
-- Timezone 없는 EXIF / Media Timestamp를 UTC로 임의 확정하지 않음
-- Source Revision, Raw Locator, Citation, Search / Timeline Projection, Stable Cursor 조회
-- Hash 검증 가능한 Thumbnail Derivative Metadata를 `cache_entries`와 `thumbnail_records`에 저장
+- Image·Video·Audio File Candidate 분류
+- JPEG·PNG·GIF·BMP·TIFF·WEBP Header Metadata
+- JPEG EXIF Make·Model·Software·Orientation·DateTime Candidate
+- EXIF GPS Latitude·Longitude·Altitude Candidate와 Rational·Hemisphere 안전 변환
+- Decompression Bomb, Corrupt File, File Size·Pixel·Read Limit 보호
+- Timezone 없는 EXIF Timestamp를 UTC로 임의 확정하지 않음
+- MP4 Container 기본 Duration·Codec Metadata
+- Optional `ffprobe` 기반 Video·Audio Container·Stream Metadata
+- `Z`, 명시적 Offset 및 Fractional Second Timestamp의 UTC 정규화
+- argv-only Process 실행, `shell=True` 금지, Timeout 및 stdout·stderr Streaming Size Limit
+- Windows·Linux에서 동작하는 Bounded Subprocess Reader와 Process Cleanup
+- Source Revision, Raw Locator, Citation, Search Index 및 Timeline Projection
+- Hash 검증 가능한 Thumbnail Derived Metadata와 Source 관계 저장
 
 현재 제한:
 
-- Pixel 자동 회전, 원본 Media 수정, Reverse Geocoding, 자동 대량 Thumbnail Rendering은 구현하지 않음
-- Video 전체 Frame Sampling, Subtitle 추출, OCR/STT 실행은 구현하지 않음
+- Pixel 자동 회전과 원본 Media 수정 금지
+- Reverse Geocoding, 얼굴 인식, 객체 탐지 및 Media 내용 의미 분석 미지원
+- Video 전체 Frame Sampling, Subtitle 추출, Audio Transcription 미지원
+- 자동 대량 Raster Thumbnail Rendering 미지원
+- `ffprobe`·`ffmpeg`가 없으면 `CAPABILITY_UNAVAILABLE`을 반환하고 가짜 Metadata를 생성하지 않음
 
 ### Machine-extracted Candidate
 
-OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
-Provider Port와 Candidate Review Workflow는 구현되어 있으며 기본 OCR/STT Provider는
-`CAPABILITY_UNAVAILABLE`을 반환합니다. 실제 OCR/STT Engine은 실행하지 않습니다.
+OCR·STT·Subtitle·Screen Text 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
 
-Review 상태:
+현재 구현:
 
-- `UNREVIEWED`
-- `ACCEPTED`
-- `REJECTED`
-- `CORRECTED`
+- Provider-neutral OCR·STT Provider Port
+- Provider·Model·Language·Confidence·Source Revision 계약
+- `UNREVIEWED`, `ACCEPTED`, `REJECTED`, `CORRECTED` Review 상태
+- `CORRECTED` 상태의 Correction Text 검증
+- 기존 Candidate 직접 덮어쓰기 금지
+- SQLite Append-only Review Event와 Update·Delete 방지 Trigger
+- 기본 Provider의 구조화된 `CAPABILITY_UNAVAILABLE` 반환
+- Candidate List·Show·Review·Correct·Capabilities CLI
 
-Candidate에는 다음 정보를 포함합니다.
+현재 제한:
 
-- Confidence
-- Language
-- Engine 및 Version
-- Frame Number
-- Timestamp Offset
-- Source Region
-- Raw Locator
-- Citation
-- Analyst Review Status
-
-AI는 검토되지 않은 Candidate를 확정 사실로 표현할 수 없습니다.
-
----
+- 실제 OCR·STT Engine 실행 미지원
+- Candidate를 Observed Fact로 자동 승격하지 않음
+- 검토되지 않은 Candidate를 확정 사실로 표현하지 않음
 
 ## Chain of Custody
 
@@ -1153,6 +1190,8 @@ APEX/
 │   └── apex_forensic/
 │       ├── adapters/
 │       │   ├── artifacts/
+│       │   │   ├── browser.py
+│       │   │   ├── media.py
 │       │   │   └── windows/
 │       │   ├── filesystem/
 │       │   ├── hashing/
@@ -1162,6 +1201,7 @@ APEX/
 │       │   └── services/
 │       │       ├── artifact_analysis.py
 │       │       ├── file_system_index.py
+│       │       ├── machine_extraction.py
 │       │       ├── search.py
 │       │       └── timeline.py
 │       ├── cli/
@@ -1169,6 +1209,7 @@ APEX/
 │       ├── domain/
 │       │   └── models/
 │       │       ├── artifact.py
+│       │       ├── browser_media.py
 │       │       ├── filesystem.py
 │       │       ├── search.py
 │       │       └── timeline.py
@@ -1176,17 +1217,27 @@ APEX/
 │       └── ports/
 │           ├── artifact_analyzer.py
 │           ├── artifact_repository.py
+│           ├── browser_analyzer.py
 │           ├── file_system_repository.py
 │           ├── filesystem_provider.py
+│           ├── machine_extraction.py
+│           ├── media_analyzer.py
 │           ├── search_index.py
 │           └── timeline_repository.py
 │
 ├── schemas/
 │   └── v1/
+│       ├── browser-artifact.schema.json
+│       ├── browser-profile.schema.json
+│       ├── machine-extracted-candidate.schema.json
+│       ├── media-artifact.schema.json
+│       ├── provider-capability.schema.json
+│       └── thumbnail.schema.json
 │
 ├── tests/
 │   ├── integration/
 │   └── unit/
+│       └── test_phase5_media_browser.py
 │
 └── tools/
     ├── validate_design.mjs
@@ -1283,6 +1334,21 @@ APEX/
 - [x] Search / Timeline Opaque Stable Cursor Pagination
 - [x] Search Index / Timeline Build Checkpoint / Resume / Pause / Cancel
 - [x] Search / Keyword Set / Timeline CLI·Schema·Test
+- [x] Phase 5 Browser Communications & Media Metadata MVP
+- [x] Chromium / Firefox Profile Discovery
+- [x] Chromium Visit / Search Term / Download 분석
+- [x] Firefox Visit / Download Candidate 및 URL-bar Input Candidate 분리
+- [x] Browser SQLite Main DB / WAL / SHM Snapshot과 Source Revision
+- [x] Browser Source Checkpoint / Resume / Pause / Cancel
+- [x] Browser Stable Cursor / Search / Timeline 연동
+- [x] Image Metadata / JPEG EXIF / GPS Candidate
+- [x] Video / Audio Metadata 및 Optional ffprobe Capability
+- [x] Bounded Cross-platform Subprocess와 Windows Snapshot Cleanup
+- [x] Thumbnail Derived Metadata 계약
+- [x] Machine-extracted Candidate Domain 및 Append-only Review History
+- [x] OCR / STT Provider Port와 `CAPABILITY_UNAVAILABLE` 기본 동작
+- [x] Browser / Media / Candidate CLI·Schema·Test
+- [x] Windows·Linux Runtime 회귀 검증
 
 ### 구현 예정
 
@@ -1292,9 +1358,10 @@ APEX/
 - [ ] Prefetch MAM Compression 해제
 - [ ] Event Message DLL Rendering
 - [ ] 광범위한 Windows Timezone Resolver 및 Timestamp Normalizer 확장
-- [x] Browser Communications Analyzer
-- [x] Images / Videos / Audio Analyzer
-- [x] OCR/STT Provider Port 및 Candidate Review
+- [ ] Browser Credential / Cookie Decryption 및 Deleted Record Recovery
+- [ ] Email / Discord / Telegram / KakaoTalk Plugin
+- [ ] Raster Thumbnail Rendering 및 제한된 Video Frame Sampling
+- [ ] 실제 OCR / STT Provider 및 Candidate Extraction
 - [ ] GUI Context 및 Scope별 Analysis Context 실행 구현
 - [ ] Simple / Detailed / Raw View 실행 구현
 - [ ] MCP Adapter용 공개 Interface
@@ -1388,12 +1455,26 @@ APEX/
 - [x] Checkpoint / Resume / Pause / Cancel
 - [x] CLI / JSON Schema / Unit·Integration Test
 
-### Phase 5 — Browser와 Media
+### Phase 5 — Browser Communications & Media Metadata — 완료
 
-- Browser Communications MVP
-- Image / Video Metadata
-- OCR/STT Contract
-- Machine-extracted Candidate Schema
+- [x] Chromium / Firefox Profile Discovery
+- [x] Chromium History / Search Term / Download
+- [x] Firefox Visit / Download Candidate
+- [x] Firefox URL-bar Input Candidate 분리
+- [x] Read-only Browser SQLite Snapshot
+- [x] Main DB / WAL / SHM Source Fingerprint와 Reanalysis
+- [x] Source Checkpoint / Resume / Pause / Cancel
+- [x] Browser Stable Cursor / Search / Timeline 연동
+- [x] Image Header Metadata / JPEG EXIF / GPS Candidate
+- [x] Decompression Bomb / Corrupt File 보호
+- [x] Video / Audio Metadata와 Optional ffprobe Capability
+- [x] Cross-platform Bounded Subprocess / Timeout / Output Limit
+- [x] Thumbnail Derived Metadata 계약
+- [x] Machine-extracted Candidate / Append-only Review History
+- [x] OCR / STT Provider Port와 Unavailable Capability
+- [x] Browser / Media / Candidate CLI
+- [x] JSON Schema / Unit·Integration Test
+- [x] Windows·Linux Runtime 검증
 
 ### Phase 6 — GUI Context 및 View
 
