@@ -6,9 +6,12 @@ import base64
 import json
 import re
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apex_forensic._time import parse_timestamp, to_json_timestamp, utc_now
 from apex_forensic.domain.enums import (
@@ -44,6 +47,9 @@ from apex_forensic.domain.models import (
     ArtifactQuery,
     ArtifactRecord,
     ArtifactSource,
+    BrowserArtifact,
+    BrowserProfile,
+    CandidateReviewEvent,
     Case,
     CustodyEvent,
     Evidence,
@@ -56,12 +62,16 @@ from apex_forensic.domain.models import (
     JobProgress,
     Keyword,
     KeywordSet,
+    MachineExtractedCandidate,
+    MediaArtifact,
+    ProviderCapability,
     SearchCacheEntry,
     SearchDocument,
     SearchExecution,
     SearchIndexCapability,
     SearchQuery,
     SearchResult,
+    ThumbnailRecord,
     TimelineBuildCoverage,
     TimelineEvent,
     TimelineQuery,
@@ -107,6 +117,48 @@ _ARTIFACT_FIELD_ALLOWLIST = {
     "prefetch_hash",
     "referenced_path_candidates",
     "source_path",
+    "media_kind",
+    "media_type",
+    "classification",
+    "format",
+    "mime",
+    "mime_candidate",
+    "width",
+    "height",
+    "codec",
+    "video_codec",
+    "audio_codec",
+    "frame_rate",
+    "sample_rate",
+    "channels",
+    "bit_rate",
+    "codec_candidates",
+    "duration_seconds",
+    "gps_normalized",
+    "camera_make",
+    "camera_model",
+    "software",
+    "orientation",
+    "gps_raw",
+    "thumbnail_cache",
+    "browser",
+    "browser_family",
+    "browser_name",
+    "domain",
+    "browser_profile",
+    "browser_profile_name",
+    "database_path",
+    "table",
+    "row_id",
+    "url",
+    "title",
+    "visit_count",
+    "search_term",
+    "download_path",
+    "download_url",
+    "referrer_url",
+    "mime_type",
+    "state_label",
 }
 _TIMELINE_FIELD_ALLOWLIST = {
     "path",
@@ -225,7 +277,161 @@ def _artifact_document_type(artifact_type: str) -> SearchDocumentType:
         return SearchDocumentType.EVENT_LOG
     if artifact_type == ArtifactType.PREFETCH_EXECUTION.value:
         return SearchDocumentType.PREFETCH
+    if artifact_type in {
+        ArtifactType.MEDIA_IMAGE.value,
+        ArtifactType.MEDIA_VIDEO.value,
+        ArtifactType.MEDIA_AUDIO.value,
+    }:
+        return SearchDocumentType.MEDIA
+    if artifact_type in {
+        ArtifactType.BROWSER_PROFILE.value,
+        ArtifactType.BROWSER_VISIT.value,
+        ArtifactType.BROWSER_SEARCH.value,
+        ArtifactType.BROWSER_DOWNLOAD.value,
+    }:
+        return SearchDocumentType.BROWSER
     return SearchDocumentType.OTHER
+
+
+def _dict_value(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _list_value(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _str_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _duration_ms(value: Any) -> int | None:
+    parsed = _float_or_none(value)
+    if parsed is None:
+        return None
+    if parsed > 10_000_000:
+        return int(parsed)
+    return int(parsed * 1000)
+
+
+def _phase5_id(*parts: str) -> str:
+    return canonical_sha256(list(parts))
+
+
+def _domain_from_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    parsed = urlparse(value)
+    return parsed.hostname
+
+
+def _phase5_browser_artifact_type(artifact_type: ArtifactType) -> str:
+    if artifact_type is ArtifactType.BROWSER_VISIT:
+        return "HISTORY_VISIT"
+    if artifact_type is ArtifactType.BROWSER_SEARCH:
+        return "SEARCH_TERM"
+    if artifact_type is ArtifactType.BROWSER_DOWNLOAD:
+        return "DOWNLOAD"
+    return "UNKNOWN"
+
+
+def _browser_source_fingerprint(artifact: ArtifactRecord) -> str:
+    database = _dict_value(artifact.fields.get("database"))
+    snapshot = _dict_value(artifact.fields.get("snapshot"))
+    return str(
+        snapshot.get("source_fingerprint")
+        or database.get("content_sha256")
+        or artifact.raw_locator.get("content_sha256")
+        or artifact.dedup_key
+    )
+
+
+def _displayed_case_time(
+    value: datetime | None,
+    case_timezone: str,
+) -> tuple[str | None, str, dict[str, Any] | None]:
+    if value is None:
+        return None, case_timezone, None
+    normalized = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    try:
+        zone = ZoneInfo(case_timezone)
+    except ZoneInfoNotFoundError:
+        return (
+            to_json_timestamp(normalized.astimezone(UTC)),
+            "UTC",
+            {
+                "code": "INVALID_CASE_TIMEZONE_FALLBACK",
+                "message_key": "warning.browser.invalid_case_timezone_fallback",
+                "developer_message": (
+                    "Case timezone was invalid while projecting browser case time; UTC was used."
+                ),
+                "details": {"case_timezone": case_timezone, "fallback_timezone": "UTC"},
+            },
+        )
+    return normalized.astimezone(zone).isoformat(timespec="microseconds"), case_timezone, None
+
+
+def _media_source_fingerprint(artifact: ArtifactRecord) -> str:
+    thumbnail = _dict_value(artifact.fields.get("thumbnail_cache"))
+    return str(
+        thumbnail.get("source_content_sha256")
+        or artifact.raw_locator.get("content_sha256")
+        or artifact.dedup_key
+    )
+
+
+def _thumbnail_status(fields: dict[str, Any]) -> str:
+    thumbnail = _dict_value(fields.get("thumbnail_cache"))
+    if thumbnail.get("status") is not None:
+        return str(thumbnail["status"])
+    if thumbnail.get("cache_key") is not None:
+        return "GENERATED"
+    return "NOT_REQUESTED"
+
+
+def _first_timestamp_candidate(candidates: list[Any]) -> tuple[str | None, Any]:
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        raw = candidate.get("raw_value")
+        normalized = candidate.get("normalized_utc")
+        if isinstance(normalized, str):
+            try:
+                return (None if raw is None else str(raw), parse_timestamp(normalized))
+            except ValueError:
+                return (None if raw is None else str(raw), None)
+        if raw is not None:
+            return (str(raw), None)
+    return (None, None)
+
+
+def _first_file_timestamp_candidate(candidates: list[Any], source_name: str) -> str | None:
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate.get("source") == source_name:
+            raw = candidate.get("raw_value")
+            return None if raw is None else str(raw)
+    return None
 
 
 def _timeline_source_artifact_types(source_type: str) -> list[str]:
@@ -233,6 +439,19 @@ def _timeline_source_artifact_types(source_type: str) -> list[str]:
         return [ArtifactType.EVENT_LOG_RECORD.value]
     if source_type == TimelineSourceType.PREFETCH_ARTIFACT.value:
         return [ArtifactType.PREFETCH_EXECUTION.value]
+    if source_type == TimelineSourceType.MEDIA_ARTIFACT.value:
+        return [
+            ArtifactType.MEDIA_IMAGE.value,
+            ArtifactType.MEDIA_VIDEO.value,
+            ArtifactType.MEDIA_AUDIO.value,
+        ]
+    if source_type == TimelineSourceType.BROWSER_ARTIFACT.value:
+        return [
+            ArtifactType.BROWSER_PROFILE.value,
+            ArtifactType.BROWSER_VISIT.value,
+            ArtifactType.BROWSER_SEARCH.value,
+            ArtifactType.BROWSER_DOWNLOAD.value,
+        ]
     return [
         ArtifactType.REGISTRY_KEY.value,
         ArtifactType.REGISTRY_VALUE.value,
@@ -567,6 +786,9 @@ class SQLiteRepository:
                     parser_backend TEXT NOT NULL,
                     parser_backend_version TEXT NOT NULL,
                     option_fingerprint TEXT NOT NULL,
+                    source_fingerprint TEXT,
+                    source_checkpoint_json TEXT,
+                    inspected_count INTEGER NOT NULL DEFAULT 0,
                     status TEXT NOT NULL,
                     priority INTEGER NOT NULL,
                     source_order INTEGER NOT NULL,
@@ -697,6 +919,305 @@ class SQLiteRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_artifact_coverage_evidence
                     ON artifact_coverage(evidence_id, updated_at, job_id);
+
+                CREATE TABLE IF NOT EXISTS browser_profiles (
+                    profile_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    browser_family TEXT NOT NULL,
+                    browser_name TEXT NOT NULL,
+                    profile_name TEXT NOT NULL,
+                    profile_path TEXT NOT NULL,
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    operating_system TEXT NOT NULL,
+                    user_candidate TEXT,
+                    discovery_method TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    discovered_at TEXT NOT NULL,
+                    UNIQUE(case_id, evidence_id, browser_family, browser_name, profile_path)
+                );
+                CREATE INDEX IF NOT EXISTS idx_browser_profiles_case
+                    ON browser_profiles(case_id, evidence_id, browser_family, browser_name);
+
+                CREATE TABLE IF NOT EXISTS browser_analysis_jobs (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    profile_type TEXT NOT NULL,
+                    options_json TEXT NOT NULL,
+                    option_fingerprint TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    pause_requested INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS browser_checkpoints (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    current_profile_id TEXT,
+                    current_source_node_id TEXT,
+                    current_path TEXT,
+                    pending_items INTEGER NOT NULL,
+                    processed_items INTEGER NOT NULL,
+                    artifact_count INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS browser_source_revisions (
+                    source_revision_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_path TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    source_fingerprint TEXT NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    observed_at TEXT NOT NULL,
+                    UNIQUE(evidence_id, source_node_id, source_revision, analyzer_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS browser_snapshot_records (
+                    snapshot_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_path TEXT NOT NULL,
+                    source_fingerprint TEXT NOT NULL,
+                    snapshot_hash TEXT NOT NULL,
+                    component_hashes_json TEXT NOT NULL,
+                    wal_preserved INTEGER NOT NULL,
+                    shm_preserved INTEGER NOT NULL,
+                    cleanup_policy TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS browser_artifacts (
+                    artifact_id TEXT PRIMARY KEY REFERENCES artifacts(artifact_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    profile_id TEXT NOT NULL,
+                    browser_family TEXT NOT NULL,
+                    browser_name TEXT NOT NULL,
+                    artifact_type TEXT NOT NULL,
+                    artifact_subtype TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    url TEXT,
+                    domain TEXT,
+                    search_term TEXT,
+                    download_url TEXT,
+                    download_path TEXT,
+                    referrer_url TEXT,
+                    visit_count INTEGER,
+                    typed_count INTEGER,
+                    transition TEXT,
+                    raw_timestamp TEXT,
+                    timestamp_semantics TEXT NOT NULL,
+                    normalized_utc TEXT,
+                    case_timezone TEXT NOT NULL,
+                    displayed_case_time TEXT,
+                    fields_json TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_revision INTEGER NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_browser_artifacts_case_profile
+                    ON browser_artifacts(
+                        case_id, profile_id, artifact_type, normalized_utc, artifact_id
+                    );
+
+                CREATE TABLE IF NOT EXISTS media_analysis_jobs (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    profile_type TEXT NOT NULL,
+                    options_json TEXT NOT NULL,
+                    option_fingerprint TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    pause_requested INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS media_checkpoints (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(job_id),
+                    current_source_node_id TEXT,
+                    current_path TEXT,
+                    pending_items INTEGER NOT NULL,
+                    processed_items INTEGER NOT NULL,
+                    artifact_count INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS media_source_revisions (
+                    source_revision_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_path TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    source_fingerprint TEXT NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    observed_at TEXT NOT NULL,
+                    UNIQUE(evidence_id, source_node_id, source_revision, analyzer_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS media_artifacts (
+                    media_artifact_id TEXT PRIMARY KEY REFERENCES artifacts(artifact_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_path TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    format TEXT,
+                    mime_candidate TEXT,
+                    size_bytes INTEGER,
+                    width INTEGER,
+                    height INTEGER,
+                    duration_ms INTEGER,
+                    frame_rate TEXT,
+                    video_codec TEXT,
+                    audio_codec TEXT,
+                    sample_rate INTEGER,
+                    channels INTEGER,
+                    bit_rate INTEGER,
+                    creation_time_raw TEXT,
+                    creation_time_utc TEXT,
+                    modified_time_raw TEXT,
+                    gps_latitude REAL,
+                    gps_longitude REAL,
+                    gps_altitude REAL,
+                    camera_make TEXT,
+                    camera_model TEXT,
+                    software TEXT,
+                    orientation TEXT,
+                    metadata_json TEXT NOT NULL,
+                    thumbnail_status TEXT NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    backend_id TEXT NOT NULL,
+                    backend_version TEXT NOT NULL,
+                    source_revision INTEGER NOT NULL,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_media_artifacts_case_type
+                    ON media_artifacts(case_id, media_type, source_path, media_artifact_id);
+
+                CREATE TABLE IF NOT EXISTS thumbnail_records (
+                    thumbnail_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_artifact_id TEXT REFERENCES artifacts(artifact_id),
+                    source_fingerprint TEXT NOT NULL,
+                    cache_key TEXT NOT NULL,
+                    relative_path TEXT NOT NULL,
+                    output_format TEXT NOT NULL,
+                    width INTEGER,
+                    height INTEGER,
+                    size_bytes INTEGER NOT NULL,
+                    content_sha256 TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    analyzer_id TEXT NOT NULL,
+                    analyzer_version TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(case_id, source_node_id, cache_key)
+                );
+
+                CREATE TABLE IF NOT EXISTS machine_extracted_candidates (
+                    candidate_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    source_node_id TEXT NOT NULL REFERENCES fs_nodes(node_id),
+                    source_type TEXT NOT NULL,
+                    extraction_type TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    language TEXT,
+                    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    model_id TEXT,
+                    region_json TEXT,
+                    frame_number INTEGER,
+                    media_timestamp_ms INTEGER,
+                    audio_start_ms INTEGER,
+                    audio_end_ms INTEGER,
+                    raw_locator_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    review_status TEXT NOT NULL,
+                    reviewed_by TEXT,
+                    reviewed_at TEXT,
+                    correction_text TEXT,
+                    source_revision INTEGER NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    CHECK (review_status <> 'CORRECTED' OR correction_text IS NOT NULL)
+                );
+                CREATE INDEX IF NOT EXISTS idx_machine_candidates_case
+                    ON machine_extracted_candidates(case_id, review_status, candidate_id);
+
+                CREATE TABLE IF NOT EXISTS candidate_review_events (
+                    review_event_id TEXT PRIMARY KEY,
+                    candidate_id TEXT NOT NULL
+                        REFERENCES machine_extracted_candidates(candidate_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    review_status TEXT NOT NULL,
+                    reviewed_by TEXT NOT NULL,
+                    reviewed_at TEXT NOT NULL,
+                    correction_text TEXT,
+                    previous_review_status TEXT,
+                    reason TEXT,
+                    CHECK (review_status <> 'CORRECTED' OR correction_text IS NOT NULL)
+                );
+                CREATE INDEX IF NOT EXISTS idx_candidate_review_events_candidate
+                    ON candidate_review_events(candidate_id, reviewed_at, review_event_id);
+
+                CREATE TABLE IF NOT EXISTS provider_capabilities (
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    capability_type TEXT NOT NULL,
+                    is_available INTEGER NOT NULL,
+                    supported_inputs_json TEXT NOT NULL,
+                    supported_outputs_json TEXT NOT NULL,
+                    unavailable_reason TEXT,
+                    warnings_json TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (provider_id, provider_version, capability_type)
+                );
+
+                CREATE TABLE IF NOT EXISTS cache_entries (
+                    key_sha256 TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    kind TEXT NOT NULL,
+                    relative_path TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    content_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    last_accessed_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    producer_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_cache_entries_case_kind_lru
+                    ON cache_entries(case_id, kind, last_accessed_at);
+                CREATE INDEX IF NOT EXISTS idx_cache_entries_expires
+                    ON cache_entries(expires_at);
 
                 CREATE TABLE IF NOT EXISTS search_index_metadata (
                     case_id TEXT PRIMARY KEY REFERENCES cases(case_id),
@@ -1027,10 +1548,27 @@ class SQLiteRepository:
                 BEGIN
                     SELECT RAISE(ABORT, 'custody_events are append-only');
                 END;
+
+                CREATE TRIGGER IF NOT EXISTS candidate_review_events_no_update
+                BEFORE UPDATE ON candidate_review_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'candidate_review_events are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS candidate_review_events_no_delete
+                BEFORE DELETE ON candidate_review_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'candidate_review_events are append-only');
+                END;
                 """
             )
             self._ensure_column("jobs", "job_revision", "INTEGER NOT NULL DEFAULT 1")
             self._ensure_column("jobs", "index_revision", "INTEGER")
+            self._ensure_column("artifact_sources", "source_fingerprint", "TEXT")
+            self._ensure_column("artifact_sources", "source_checkpoint_json", "TEXT")
+            self._ensure_column(
+                "artifact_sources", "inspected_count", "INTEGER NOT NULL DEFAULT 0"
+            )
             self.connection.execute(
                 """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
@@ -1071,6 +1609,13 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("phase4-search-keyword-timeline", to_json_timestamp(utc_now())),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("phase5-browser-media-metadata", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -2072,6 +2617,28 @@ class SQLiteRepository:
                     created_at,
                 ),
             )
+            for table in ("browser_analysis_jobs", "media_analysis_jobs"):
+                self.connection.execute(
+                    f"""
+                    INSERT OR IGNORE INTO {table} (
+                        job_id, case_id, evidence_id, profile_type, options_json,
+                        option_fingerprint, source_revision, status, pause_requested,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                    """,
+                    (
+                        job_id,
+                        case_id,
+                        evidence_id,
+                        profile_type,
+                        self._json(options),
+                        option_fingerprint,
+                        index_revision,
+                        status,
+                        created_at,
+                        created_at,
+                    ),
+                )
 
     def update_artifact_analysis_job_status(
         self,
@@ -2093,6 +2660,11 @@ class SQLiteRepository:
                 f"UPDATE artifact_analysis_jobs SET {', '.join(assignments)} WHERE job_id = ?",
                 tuple(params),
             )
+            for table in ("browser_analysis_jobs", "media_analysis_jobs"):
+                self.connection.execute(
+                    f"UPDATE {table} SET {', '.join(assignments)} WHERE job_id = ?",
+                    tuple(params),
+                )
 
     def get_artifact_analysis_job(self, job_id: str) -> dict[str, Any] | None:
         """Return artifact analysis job metadata."""
@@ -2116,13 +2688,14 @@ class SQLiteRepository:
                 INSERT INTO artifact_sources (
                     source_id, job_id, case_id, evidence_id, source_file_node_id,
                     source_path, source_kind, comparison_key, analyzer_id, analyzer_version,
-                    parser_backend, parser_backend_version, option_fingerprint, status,
+                    parser_backend, parser_backend_version, option_fingerprint,
+                    source_fingerprint, source_checkpoint_json, inspected_count, status,
                     priority, source_order, is_partial, warning_count, error_count,
-                    artifact_count, parse_status, last_error_json, discovered_at,
-                    analyzed_at, updated_at
+                    artifact_count, parse_status, last_error_json, discovered_at, analyzed_at,
+                    updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 ON CONFLICT(source_id) DO UPDATE SET
                     job_id = excluded.job_id,
@@ -2130,6 +2703,16 @@ class SQLiteRepository:
                     priority = excluded.priority,
                     source_order = excluded.source_order,
                     is_partial = excluded.is_partial,
+                    source_fingerprint = excluded.source_fingerprint,
+                    source_checkpoint_json = excluded.source_checkpoint_json,
+                    inspected_count = excluded.inspected_count,
+                    warning_count = excluded.warning_count,
+                    error_count = excluded.error_count,
+                    artifact_count = excluded.artifact_count,
+                    parse_status = excluded.parse_status,
+                    last_error_json = excluded.last_error_json,
+                    discovered_at = excluded.discovered_at,
+                    analyzed_at = excluded.analyzed_at,
                     updated_at = excluded.updated_at
                 """,
                 [self._artifact_source_values(source) for source in sources],
@@ -2186,28 +2769,50 @@ class SQLiteRepository:
         artifact_count: int,
         last_error: dict[str, Any] | None,
         analyzed_at: str | None,
+        source_checkpoint: dict[str, Any] | None = None,
+        inspected_count: int | None = None,
+        source_fingerprint: str | None = None,
     ) -> None:
         """Persist final source queue state."""
 
+        assignments = [
+            "status = ?",
+            "parse_status = ?",
+            "warning_count = ?",
+            "error_count = ?",
+            "artifact_count = ?",
+            "last_error_json = ?",
+            "analyzed_at = ?",
+            "updated_at = ?",
+        ]
+        params: list[Any] = [
+            status,
+            parse_status,
+            warning_count,
+            error_count,
+            artifact_count,
+            self._json(last_error) if last_error is not None else None,
+            analyzed_at,
+            to_json_timestamp(utc_now()),
+        ]
+        if source_checkpoint is not None:
+            assignments.append("source_checkpoint_json = ?")
+            params.append(self._json(source_checkpoint) if source_checkpoint else None)
+        if inspected_count is not None:
+            assignments.append("inspected_count = ?")
+            params.append(inspected_count)
+        if source_fingerprint is not None:
+            assignments.append("source_fingerprint = ?")
+            params.append(source_fingerprint)
+        params.append(source_id)
         with self.connection:
             self.connection.execute(
-                """
+                f"""
                 UPDATE artifact_sources
-                SET status = ?, parse_status = ?, warning_count = ?, error_count = ?,
-                    artifact_count = ?, last_error_json = ?, analyzed_at = ?, updated_at = ?
+                SET {", ".join(assignments)}
                 WHERE source_id = ?
                 """,
-                (
-                    status,
-                    parse_status,
-                    warning_count,
-                    error_count,
-                    artifact_count,
-                    self._json(last_error) if last_error is not None else None,
-                    analyzed_at,
-                    to_json_timestamp(utc_now()),
-                    source_id,
-                ),
+                tuple(params),
             )
 
     def count_pending_artifact_sources(self, job_id: str) -> int:
@@ -2231,11 +2836,23 @@ class SQLiteRepository:
         analyzer_id: str,
         analyzer_version: str,
         option_fingerprint: str,
+        source_fingerprint: str | None = None,
     ) -> bool:
         """Return whether the same source/analyzer/options already completed."""
 
+        fingerprint_clause = ""
+        params: list[Any] = [
+            evidence_id,
+            source_file_node_id,
+            analyzer_id,
+            analyzer_version,
+            option_fingerprint,
+        ]
+        if source_fingerprint is not None:
+            fingerprint_clause = "AND source_fingerprint = ?"
+            params.append(source_fingerprint)
         row = self.connection.execute(
-            """
+            f"""
             SELECT 1
             FROM artifact_sources
             WHERE evidence_id = ?
@@ -2243,16 +2860,11 @@ class SQLiteRepository:
               AND analyzer_id = ?
               AND analyzer_version = ?
               AND option_fingerprint = ?
+              {fingerprint_clause}
               AND status IN ('SUCCEEDED', 'PARTIAL')
             LIMIT 1
             """,
-            (
-                evidence_id,
-                source_file_node_id,
-                analyzer_id,
-                analyzer_version,
-                option_fingerprint,
-            ),
+            tuple(params),
         ).fetchone()
         return row is not None
 
@@ -2282,7 +2894,766 @@ class SQLiteRepository:
                     self._artifact_values(artifact),
                 )
                 inserted += cursor.rowcount
+                if cursor.rowcount:
+                    self._save_phase5_artifact_projection(artifact)
         return inserted
+
+    def _case_timezone(self, case_id: str) -> str:
+        row = self.connection.execute(
+            "SELECT timezone FROM cases WHERE case_id = ?",
+            (case_id,),
+        ).fetchone()
+        return "UTC" if row is None else str(row["timezone"])
+
+    def _save_phase5_artifact_projection(self, artifact: ArtifactRecord) -> None:
+        if artifact.artifact_type is ArtifactType.BROWSER_PROFILE:
+            profile = self._browser_profile_from_artifact(artifact)
+            self._save_browser_profile_projection(profile)
+            self._save_browser_source_revision(artifact)
+            self._save_browser_snapshot_record(artifact)
+            return
+        if artifact.artifact_type in {
+            ArtifactType.BROWSER_VISIT,
+            ArtifactType.BROWSER_SEARCH,
+            ArtifactType.BROWSER_DOWNLOAD,
+        }:
+            browser_artifact = self._browser_artifact_from_artifact(artifact)
+            self._save_browser_artifact_projection(browser_artifact)
+            self._save_browser_source_revision(artifact)
+            self._save_browser_snapshot_record(artifact)
+            return
+        if artifact.artifact_type in {
+            ArtifactType.MEDIA_IMAGE,
+            ArtifactType.MEDIA_VIDEO,
+            ArtifactType.MEDIA_AUDIO,
+        }:
+            media_artifact = self._media_artifact_from_artifact(artifact)
+            self._save_media_artifact_projection(media_artifact)
+            self._save_media_source_revision(artifact)
+            thumbnail = self._thumbnail_record_from_artifact(artifact)
+            if thumbnail is not None:
+                self._save_thumbnail_projection(thumbnail)
+
+    def _browser_profile_from_artifact(self, artifact: ArtifactRecord) -> BrowserProfile:
+        fields = artifact.fields
+        profile = _dict_value(fields.get("browser_profile"))
+        profile_path = str(
+            profile.get("path") or profile.get("profile_path") or artifact.source_path
+        )
+        browser_family = str(
+            profile.get("browser_family")
+            or fields.get("browser_family")
+            or profile.get("family")
+            or "UNKNOWN"
+        )
+        browser_name = str(
+            profile.get("browser_name")
+            or fields.get("browser_name")
+            or profile.get("browser")
+            or fields.get("browser")
+            or "UNKNOWN"
+        )
+        return BrowserProfile(
+            profile_id=str(
+                profile.get("profile_id")
+                or _phase5_id(
+                    "browser-profile",
+                    artifact.case_id,
+                    artifact.evidence_id,
+                    profile_path,
+                    browser_name,
+                )
+            ),
+            case_id=artifact.case_id,
+            evidence_id=artifact.evidence_id,
+            browser_family=browser_family,
+            browser_name=browser_name,
+            profile_name=str(profile.get("name") or profile.get("profile_name") or "UNKNOWN"),
+            profile_path=profile_path,
+            source_node_id=artifact.source_file_node_id,
+            operating_system=str(
+                profile.get("operating_system") or fields.get("operating_system") or "UNKNOWN"
+            ),
+            user_candidate=None
+            if profile.get("user_candidate") is None
+            else str(profile.get("user_candidate")),
+            discovery_method=str(
+                profile.get("discovery_method")
+                or fields.get("discovery_method")
+                or "FS_NODE_BROWSER_ALLOWLIST"
+            ),
+            source_revision=artifact.index_revision,
+            raw_locator=artifact.raw_locator,
+            citations=artifact.citations,
+            warnings=artifact.warnings,
+            is_partial=artifact.is_partial,
+            discovered_at=artifact.created_at,
+        )
+
+    def _browser_artifact_from_artifact(self, artifact: ArtifactRecord) -> BrowserArtifact:
+        fields = dict(artifact.fields)
+        profile = _dict_value(fields.get("browser_profile"))
+        profile_path = str(
+            profile.get("path") or profile.get("profile_path") or artifact.source_path
+        )
+        browser_name = str(
+            profile.get("browser_name")
+            or fields.get("browser_name")
+            or profile.get("browser")
+            or fields.get("browser")
+            or "UNKNOWN"
+        )
+        url = _str_or_none(fields.get("url"))
+        download_url = _str_or_none(fields.get("download_url"))
+        referrer_url = _str_or_none(fields.get("referrer_url") or fields.get("tab_referrer_url"))
+        timestamp = artifact.observed_at_utc
+        case_timezone = self._case_timezone(artifact.case_id)
+        displayed_case_time, effective_timezone, timezone_warning = _displayed_case_time(
+            timestamp, case_timezone
+        )
+        if timezone_warning is not None:
+            fields["projection_warnings"] = [
+                *_list_value(fields.get("projection_warnings")),
+                timezone_warning,
+            ]
+        return BrowserArtifact(
+            artifact_id=artifact.artifact_id,
+            case_id=artifact.case_id,
+            evidence_id=artifact.evidence_id,
+            profile_id=str(
+                profile.get("profile_id")
+                or _phase5_id(
+                    "browser-profile",
+                    artifact.case_id,
+                    artifact.evidence_id,
+                    profile_path,
+                    browser_name,
+                )
+            ),
+            browser_family=str(
+                profile.get("browser_family")
+                or fields.get("browser_family")
+                or profile.get("family")
+                or "UNKNOWN"
+            ),
+            browser_name=browser_name,
+            artifact_type=_phase5_browser_artifact_type(artifact.artifact_type),
+            artifact_subtype=artifact.artifact_subtype,
+            title=artifact.title,
+            url=url,
+            domain=_domain_from_url(url or download_url),
+            search_term=_str_or_none(fields.get("search_term")),
+            download_url=download_url,
+            download_path=_str_or_none(fields.get("download_path")),
+            referrer_url=referrer_url,
+            visit_count=_int_or_none(fields.get("visit_count")),
+            typed_count=_int_or_none(fields.get("typed_count")),
+            transition=_str_or_none(fields.get("transition")),
+            raw_timestamp=artifact.observed_at_raw,
+            timestamp_semantics=str(
+                fields.get("timestamp_semantics") or "browser_native_timestamp"
+            ),
+            normalized_utc=timestamp,
+            case_timezone=effective_timezone,
+            displayed_case_time=displayed_case_time,
+            fields=fields,
+            source_path=artifact.source_path,
+            source_node_id=artifact.source_file_node_id,
+            source_revision=artifact.index_revision,
+            analyzer_id=artifact.analyzer_id,
+            analyzer_version=artifact.analyzer_version,
+            raw_locator=artifact.raw_locator,
+            citations=artifact.citations,
+            is_partial=artifact.is_partial,
+            created_at=artifact.created_at,
+        )
+
+    def _media_artifact_from_artifact(self, artifact: ArtifactRecord) -> MediaArtifact:
+        fields = artifact.fields
+        classification = _dict_value(fields.get("classification"))
+        exif = _dict_value(fields.get("exif"))
+        gps = _dict_value(fields.get("gps_normalized"))
+        media_times = _list_value(fields.get("media_timestamps"))
+        file_times = _list_value(fields.get("file_timestamps"))
+        creation = _first_timestamp_candidate(media_times)
+        modified = _first_file_timestamp_candidate(file_times, "FILESYSTEM:modified")
+        media_type = str(fields.get("media_type") or fields.get("media_kind") or "UNKNOWN")
+        codec = _str_or_none(fields.get("codec"))
+        thumbnail_status = _thumbnail_status(fields)
+        return MediaArtifact(
+            media_artifact_id=artifact.artifact_id,
+            case_id=artifact.case_id,
+            evidence_id=artifact.evidence_id,
+            source_node_id=artifact.source_file_node_id,
+            source_path=artifact.source_path,
+            media_type=media_type,
+            format=_str_or_none(fields.get("format") or classification.get("format")),
+            mime_candidate=_str_or_none(fields.get("mime") or classification.get("mime")),
+            size_bytes=_int_or_none(fields.get("file_size") or fields.get("size_bytes")),
+            width=_int_or_none(fields.get("width")),
+            height=_int_or_none(fields.get("height")),
+            duration_ms=_duration_ms(fields.get("duration_seconds") or fields.get("duration_ms")),
+            frame_rate=_str_or_none(fields.get("frame_rate")),
+            video_codec=codec if media_type == "VIDEO" else _str_or_none(fields.get("video_codec")),
+            audio_codec=codec if media_type == "AUDIO" else _str_or_none(fields.get("audio_codec")),
+            sample_rate=_int_or_none(fields.get("sample_rate")),
+            channels=_int_or_none(fields.get("channels")),
+            bit_rate=_int_or_none(fields.get("bit_rate")),
+            creation_time_raw=creation[0],
+            creation_time_utc=creation[1],
+            modified_time_raw=modified,
+            gps_latitude=_float_or_none(gps.get("latitude")),
+            gps_longitude=_float_or_none(gps.get("longitude")),
+            gps_altitude=_float_or_none(gps.get("altitude_meters") or gps.get("altitude")),
+            camera_make=_str_or_none(exif.get("camera_make")),
+            camera_model=_str_or_none(exif.get("camera_model")),
+            software=_str_or_none(exif.get("software")),
+            orientation=_str_or_none(exif.get("orientation")),
+            metadata=fields,
+            thumbnail_status=thumbnail_status,
+            analyzer_id=artifact.analyzer_id,
+            analyzer_version=artifact.analyzer_version,
+            backend_id=artifact.parser_backend,
+            backend_version=artifact.parser_backend_version,
+            source_revision=artifact.index_revision,
+            raw_locator=artifact.raw_locator,
+            citations=artifact.citations,
+            is_partial=artifact.is_partial,
+            created_at=artifact.created_at,
+        )
+
+    def _thumbnail_record_from_artifact(self, artifact: ArtifactRecord) -> ThumbnailRecord | None:
+        thumbnail = _dict_value(artifact.fields.get("thumbnail_cache"))
+        cache_key = _str_or_none(thumbnail.get("cache_key"))
+        if cache_key is None:
+            return None
+        producer = _dict_value(thumbnail.get("producer"))
+        return ThumbnailRecord(
+            thumbnail_id=_phase5_id("thumbnail", artifact.case_id, artifact.artifact_id, cache_key),
+            case_id=artifact.case_id,
+            evidence_id=artifact.evidence_id,
+            source_node_id=artifact.source_file_node_id,
+            source_artifact_id=artifact.artifact_id,
+            source_fingerprint=str(
+                thumbnail.get("source_content_sha256")
+                or producer.get("source_content_sha256")
+                or artifact.dedup_key
+            ),
+            cache_key=cache_key,
+            relative_path=str(thumbnail.get("relative_path") or ""),
+            output_format=str(thumbnail.get("output_format") or "JSON_CONTRACT"),
+            width=_int_or_none(artifact.fields.get("width")),
+            height=_int_or_none(artifact.fields.get("height")),
+            size_bytes=int(thumbnail.get("size_bytes") or 0),
+            content_sha256=str(thumbnail.get("content_sha256") or artifact.dedup_key),
+            status=str(thumbnail.get("status") or "GENERATED"),
+            analyzer_id=artifact.analyzer_id,
+            analyzer_version=artifact.analyzer_version,
+            created_at=artifact.created_at,
+        )
+
+    def _save_browser_profile_projection(self, profile: BrowserProfile) -> None:
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO browser_profiles (
+                profile_id, case_id, evidence_id, browser_family, browser_name, profile_name,
+                profile_path, source_node_id, operating_system, user_candidate, discovery_method,
+                source_revision, raw_locator_json, citations_json, warnings_json, is_partial,
+                discovered_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                profile.profile_id,
+                profile.case_id,
+                profile.evidence_id,
+                profile.browser_family,
+                profile.browser_name,
+                profile.profile_name,
+                profile.profile_path,
+                profile.source_node_id,
+                profile.operating_system,
+                profile.user_candidate,
+                profile.discovery_method,
+                profile.source_revision,
+                self._json(profile.raw_locator),
+                self._json(profile.citations),
+                self._json(profile.warnings),
+                int(profile.is_partial),
+                to_json_timestamp(profile.discovered_at or utc_now()),
+            ),
+        )
+
+    def _save_browser_artifact_projection(self, artifact: BrowserArtifact) -> None:
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO browser_artifacts (
+                artifact_id, case_id, evidence_id, profile_id, browser_family, browser_name,
+                artifact_type, artifact_subtype, title, url, domain, search_term, download_url,
+                download_path, referrer_url, visit_count, typed_count, transition, raw_timestamp,
+                timestamp_semantics, normalized_utc, case_timezone, displayed_case_time,
+                fields_json, source_path, source_node_id, source_revision, analyzer_id,
+                analyzer_version, raw_locator_json, citations_json, is_partial, created_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                artifact.artifact_id,
+                artifact.case_id,
+                artifact.evidence_id,
+                artifact.profile_id,
+                artifact.browser_family,
+                artifact.browser_name,
+                artifact.artifact_type,
+                artifact.artifact_subtype,
+                artifact.title,
+                artifact.url,
+                artifact.domain,
+                artifact.search_term,
+                artifact.download_url,
+                artifact.download_path,
+                artifact.referrer_url,
+                artifact.visit_count,
+                artifact.typed_count,
+                artifact.transition,
+                artifact.raw_timestamp,
+                artifact.timestamp_semantics,
+                self._nullable_timestamp(artifact.normalized_utc),
+                artifact.case_timezone,
+                artifact.displayed_case_time,
+                self._json(artifact.fields),
+                artifact.source_path,
+                artifact.source_node_id,
+                artifact.source_revision,
+                artifact.analyzer_id,
+                artifact.analyzer_version,
+                self._json(artifact.raw_locator),
+                self._json(artifact.citations),
+                int(artifact.is_partial),
+                to_json_timestamp(artifact.created_at or utc_now()),
+            ),
+        )
+
+    def _save_media_artifact_projection(self, artifact: MediaArtifact) -> None:
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO media_artifacts (
+                media_artifact_id, case_id, evidence_id, source_node_id, source_path, media_type,
+                format, mime_candidate, size_bytes, width, height, duration_ms, frame_rate,
+                video_codec, audio_codec, sample_rate, channels, bit_rate, creation_time_raw,
+                creation_time_utc, modified_time_raw, gps_latitude, gps_longitude, gps_altitude,
+                camera_make, camera_model, software, orientation, metadata_json,
+                thumbnail_status, analyzer_id, analyzer_version, backend_id, backend_version,
+                source_revision, raw_locator_json, citations_json, is_partial, created_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                artifact.media_artifact_id,
+                artifact.case_id,
+                artifact.evidence_id,
+                artifact.source_node_id,
+                artifact.source_path,
+                artifact.media_type,
+                artifact.format,
+                artifact.mime_candidate,
+                artifact.size_bytes,
+                artifact.width,
+                artifact.height,
+                artifact.duration_ms,
+                artifact.frame_rate,
+                artifact.video_codec,
+                artifact.audio_codec,
+                artifact.sample_rate,
+                artifact.channels,
+                artifact.bit_rate,
+                artifact.creation_time_raw,
+                self._nullable_timestamp(artifact.creation_time_utc),
+                artifact.modified_time_raw,
+                artifact.gps_latitude,
+                artifact.gps_longitude,
+                artifact.gps_altitude,
+                artifact.camera_make,
+                artifact.camera_model,
+                artifact.software,
+                artifact.orientation,
+                self._json(artifact.metadata),
+                artifact.thumbnail_status,
+                artifact.analyzer_id,
+                artifact.analyzer_version,
+                artifact.backend_id,
+                artifact.backend_version,
+                artifact.source_revision,
+                self._json(artifact.raw_locator),
+                self._json(artifact.citations),
+                int(artifact.is_partial),
+                to_json_timestamp(artifact.created_at or utc_now()),
+            ),
+        )
+
+    def _save_thumbnail_projection(self, thumbnail: ThumbnailRecord) -> None:
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO thumbnail_records (
+                thumbnail_id, case_id, evidence_id, source_node_id, source_artifact_id,
+                source_fingerprint, cache_key, relative_path, output_format, width, height,
+                size_bytes, content_sha256, status, analyzer_id, analyzer_version, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                thumbnail.thumbnail_id,
+                thumbnail.case_id,
+                thumbnail.evidence_id,
+                thumbnail.source_node_id,
+                thumbnail.source_artifact_id,
+                thumbnail.source_fingerprint,
+                thumbnail.cache_key,
+                thumbnail.relative_path,
+                thumbnail.output_format,
+                thumbnail.width,
+                thumbnail.height,
+                thumbnail.size_bytes,
+                thumbnail.content_sha256,
+                thumbnail.status,
+                thumbnail.analyzer_id,
+                thumbnail.analyzer_version,
+                to_json_timestamp(thumbnail.created_at or utc_now()),
+            ),
+        )
+
+    def _save_browser_source_revision(self, artifact: ArtifactRecord) -> None:
+        fingerprint = _browser_source_fingerprint(artifact)
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO browser_source_revisions (
+                source_revision_id, case_id, evidence_id, source_node_id, source_path,
+                source_revision, source_fingerprint, analyzer_id, analyzer_version, observed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _phase5_id(
+                    "browser-source-revision",
+                    artifact.evidence_id,
+                    artifact.source_file_node_id,
+                    str(artifact.index_revision),
+                    artifact.analyzer_id,
+                ),
+                artifact.case_id,
+                artifact.evidence_id,
+                artifact.source_file_node_id,
+                artifact.source_path,
+                artifact.index_revision,
+                fingerprint,
+                artifact.analyzer_id,
+                artifact.analyzer_version,
+                to_json_timestamp(artifact.created_at),
+            ),
+        )
+
+    def _save_media_source_revision(self, artifact: ArtifactRecord) -> None:
+        fingerprint = _media_source_fingerprint(artifact)
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO media_source_revisions (
+                source_revision_id, case_id, evidence_id, source_node_id, source_path,
+                source_revision, source_fingerprint, analyzer_id, analyzer_version, observed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _phase5_id(
+                    "media-source-revision",
+                    artifact.evidence_id,
+                    artifact.source_file_node_id,
+                    str(artifact.index_revision),
+                    artifact.analyzer_id,
+                ),
+                artifact.case_id,
+                artifact.evidence_id,
+                artifact.source_file_node_id,
+                artifact.source_path,
+                artifact.index_revision,
+                fingerprint,
+                artifact.analyzer_id,
+                artifact.analyzer_version,
+                to_json_timestamp(artifact.created_at),
+            ),
+        )
+
+    def _save_browser_snapshot_record(self, artifact: ArtifactRecord) -> None:
+        snapshot = _dict_value(artifact.fields.get("snapshot"))
+        if not snapshot:
+            return
+        component_hashes = _dict_value(snapshot.get("component_hashes"))
+        snapshot_hash = str(snapshot.get("snapshot_hash") or canonical_sha256(component_hashes))
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO browser_snapshot_records (
+                snapshot_id, case_id, evidence_id, source_node_id, source_path,
+                source_fingerprint, snapshot_hash, component_hashes_json, wal_preserved,
+                shm_preserved, cleanup_policy, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _phase5_id(
+                    "browser-snapshot", artifact.case_id, artifact.artifact_id, snapshot_hash
+                ),
+                artifact.case_id,
+                artifact.evidence_id,
+                artifact.source_file_node_id,
+                artifact.source_path,
+                _browser_source_fingerprint(artifact),
+                snapshot_hash,
+                self._json(component_hashes),
+                int(bool(snapshot.get("wal_preserved"))),
+                int(bool(snapshot.get("shm_preserved"))),
+                str(snapshot.get("cleanup_policy") or "temporary_directory_cleanup_after_analysis"),
+                to_json_timestamp(artifact.created_at),
+            ),
+        )
+
+    def save_cache_entries(self, entries: list[dict[str, Any]]) -> int:
+        """Persist generic content-addressed cache metadata."""
+
+        inserted = 0
+        with self.connection:
+            for entry in entries:
+                cursor = self.connection.execute(
+                    """
+                    INSERT OR IGNORE INTO cache_entries (
+                        key_sha256, case_id, kind, relative_path, size_bytes,
+                        content_sha256, created_at, last_accessed_at, expires_at,
+                        producer_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(entry["key_sha256"]),
+                        str(entry["case_id"]),
+                        str(entry["kind"]),
+                        str(entry["relative_path"]),
+                        int(entry["size_bytes"]),
+                        str(entry["content_sha256"]),
+                        str(entry["created_at"]),
+                        str(entry["last_accessed_at"]),
+                        None if entry.get("expires_at") is None else str(entry["expires_at"]),
+                        self._json(dict(entry.get("producer", {}))),
+                    ),
+                )
+                inserted += cursor.rowcount
+        return inserted
+
+    def save_provider_capability(self, capability: ProviderCapability) -> None:
+        """Persist a Phase 5 optional provider capability statement."""
+
+        updated_at = to_json_timestamp(capability.updated_at or utc_now())
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO provider_capabilities (
+                    provider_id, provider_version, capability_type, is_available,
+                    supported_inputs_json, supported_outputs_json, unavailable_reason,
+                    warnings_json, metadata_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider_id, provider_version, capability_type) DO UPDATE SET
+                    is_available = excluded.is_available,
+                    supported_inputs_json = excluded.supported_inputs_json,
+                    supported_outputs_json = excluded.supported_outputs_json,
+                    unavailable_reason = excluded.unavailable_reason,
+                    warnings_json = excluded.warnings_json,
+                    metadata_json = excluded.metadata_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    capability.provider_id,
+                    capability.provider_version,
+                    capability.capability_type,
+                    int(capability.is_available),
+                    self._json(capability.supported_inputs),
+                    self._json(capability.supported_outputs),
+                    capability.unavailable_reason,
+                    self._json(capability.warnings),
+                    self._json(capability.metadata),
+                    updated_at,
+                ),
+            )
+
+    def list_provider_capabilities(
+        self,
+        *,
+        capability_type: str | None = None,
+    ) -> list[ProviderCapability]:
+        """Return stored provider capabilities."""
+
+        if capability_type is None:
+            rows = self.connection.execute(
+                """
+                SELECT * FROM provider_capabilities
+                ORDER BY capability_type, provider_id, provider_version
+                """
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """
+                SELECT * FROM provider_capabilities
+                WHERE capability_type = ?
+                ORDER BY provider_id, provider_version
+                """,
+                (capability_type,),
+            ).fetchall()
+        return [self._row_to_provider_capability(row) for row in rows]
+
+    def save_machine_candidate(self, candidate: MachineExtractedCandidate) -> None:
+        """Insert one immutable machine-extracted candidate."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO machine_extracted_candidates (
+                    candidate_id, case_id, evidence_id, source_node_id, source_type,
+                    extraction_type, text, language, confidence, provider_id, provider_version,
+                    model_id, region_json, frame_number, media_timestamp_ms, audio_start_ms,
+                    audio_end_ms, raw_locator_json, citations_json, review_status, reviewed_by,
+                    reviewed_at, correction_text, source_revision, is_partial, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    candidate.candidate_id,
+                    candidate.case_id,
+                    candidate.evidence_id,
+                    candidate.source_node_id,
+                    candidate.source_type,
+                    candidate.extraction_type,
+                    candidate.text,
+                    candidate.language,
+                    candidate.confidence,
+                    candidate.provider_id,
+                    candidate.provider_version,
+                    candidate.model_id,
+                    None if candidate.region is None else self._json(candidate.region),
+                    candidate.frame_number,
+                    candidate.media_timestamp_ms,
+                    candidate.audio_start_ms,
+                    candidate.audio_end_ms,
+                    self._json(candidate.raw_locator),
+                    self._json(candidate.citations),
+                    candidate.review_status,
+                    candidate.reviewed_by,
+                    self._nullable_timestamp(candidate.reviewed_at),
+                    candidate.correction_text,
+                    candidate.source_revision,
+                    int(candidate.is_partial),
+                    to_json_timestamp(candidate.created_at or utc_now()),
+                ),
+            )
+
+    def get_machine_candidate(self, candidate_id: str) -> MachineExtractedCandidate | None:
+        """Return one machine-extracted candidate."""
+
+        row = self.connection.execute(
+            "SELECT * FROM machine_extracted_candidates WHERE candidate_id = ?",
+            (candidate_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_machine_candidate(row)
+
+    def list_machine_candidates(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str | None = None,
+        review_status: str | None = None,
+        after_candidate_id: str | None = None,
+        limit: int = 100,
+    ) -> list[MachineExtractedCandidate]:
+        """List machine candidates using stable candidate_id pagination."""
+
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if evidence_id is not None:
+            clauses.append("evidence_id = ?")
+            params.append(evidence_id)
+        if review_status is not None:
+            clauses.append("review_status = ?")
+            params.append(review_status)
+        if after_candidate_id is not None:
+            clauses.append("candidate_id > ?")
+            params.append(after_candidate_id)
+        params.append(limit)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM machine_extracted_candidates
+            WHERE {" AND ".join(clauses)}
+            ORDER BY candidate_id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+        return [self._row_to_machine_candidate(row) for row in rows]
+
+    def append_candidate_review(
+        self,
+        event: CandidateReviewEvent,
+        *,
+        correction_text: str | None,
+    ) -> MachineExtractedCandidate:
+        """Append a review event and update the current review projection."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO candidate_review_events (
+                    review_event_id, candidate_id, case_id, review_status, reviewed_by,
+                    reviewed_at, correction_text, previous_review_status, reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.review_event_id,
+                    event.candidate_id,
+                    event.case_id,
+                    event.review_status,
+                    event.reviewed_by,
+                    to_json_timestamp(event.reviewed_at),
+                    event.correction_text,
+                    event.previous_review_status,
+                    event.reason,
+                ),
+            )
+            self.connection.execute(
+                """
+                UPDATE machine_extracted_candidates
+                SET review_status = ?, reviewed_by = ?, reviewed_at = ?, correction_text = ?
+                WHERE candidate_id = ?
+                """,
+                (
+                    event.review_status,
+                    event.reviewed_by,
+                    to_json_timestamp(event.reviewed_at),
+                    correction_text,
+                    event.candidate_id,
+                ),
+            )
+        candidate = self.get_machine_candidate(event.candidate_id)
+        if candidate is None:
+            raise sqlite3.IntegrityError("candidate disappeared after review insert")
+        return candidate
+
+    def list_candidate_reviews(self, candidate_id: str) -> list[CandidateReviewEvent]:
+        """Return append-only review events for one candidate."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM candidate_review_events
+            WHERE candidate_id = ?
+            ORDER BY reviewed_at, review_event_id
+            """,
+            (candidate_id,),
+        ).fetchall()
+        return [self._row_to_candidate_review(row) for row in rows]
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
         """Return one artifact by ID."""
@@ -2328,6 +3699,51 @@ class SQLiteRepository:
         if query.executable_name is not None:
             clauses.append("executable_name_key LIKE ?")
             params.append(f"%{query.executable_name.casefold()}%")
+        if query.media_kind is not None:
+            clauses.append("json_extract(fields_json, '$.media_kind') = ?")
+            params.append(query.media_kind.upper())
+        if query.browser_profile is not None:
+            clauses.append(
+                """
+                (
+                    lower(json_extract(fields_json, '$.browser_profile.name')) LIKE ?
+                    OR lower(json_extract(fields_json, '$.browser_profile_name')) LIKE ?
+                )
+                """
+            )
+            profile = f"%{query.browser_profile.casefold()}%"
+            params.extend([profile, profile])
+        if query.browser_database is not None:
+            clauses.append(
+                """
+                (
+                    lower(json_extract(fields_json, '$.database.path')) LIKE ?
+                    OR lower(json_extract(fields_json, '$.database_path')) LIKE ?
+                )
+                """
+            )
+            database = f"%{query.browser_database.casefold()}%"
+            params.extend([database, database])
+        if query.browser_table is not None:
+            clauses.append(
+                """
+                (
+                    json_extract(fields_json, '$.row_provenance.table') = ?
+                    OR json_extract(fields_json, '$.table') = ?
+                )
+                """
+            )
+            params.extend([query.browser_table, query.browser_table])
+        if query.browser_row_id is not None:
+            clauses.append(
+                """
+                (
+                    CAST(json_extract(fields_json, '$.row_provenance.row_id') AS INTEGER) = ?
+                    OR CAST(json_extract(fields_json, '$.row_id') AS INTEGER) = ?
+                )
+                """
+            )
+            params.extend([query.browser_row_id, query.browser_row_id])
         if query.observed_from is not None:
             clauses.append("sort_timestamp >= ?")
             params.append(to_json_timestamp(query.observed_from))
@@ -2548,6 +3964,54 @@ class SQLiteRepository:
                     current_source_path = excluded.current_source_path,
                     pending_source_count = excluded.pending_source_count,
                     processed_sources = excluded.processed_sources,
+                    artifact_count = excluded.artifact_count,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    job_id,
+                    current_source_id,
+                    current_source_path,
+                    pending_source_count,
+                    processed_sources,
+                    artifact_count,
+                    now,
+                ),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO browser_checkpoints (
+                    job_id, current_profile_id, current_source_node_id, current_path,
+                    pending_items, processed_items, artifact_count, updated_at
+                ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    current_source_node_id = excluded.current_source_node_id,
+                    current_path = excluded.current_path,
+                    pending_items = excluded.pending_items,
+                    processed_items = excluded.processed_items,
+                    artifact_count = excluded.artifact_count,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    job_id,
+                    current_source_id,
+                    current_source_path,
+                    pending_source_count,
+                    processed_sources,
+                    artifact_count,
+                    now,
+                ),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO media_checkpoints (
+                    job_id, current_source_node_id, current_path,
+                    pending_items, processed_items, artifact_count, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    current_source_node_id = excluded.current_source_node_id,
+                    current_path = excluded.current_path,
+                    pending_items = excluded.pending_items,
+                    processed_items = excluded.processed_items,
                     artifact_count = excluded.artifact_count,
                     updated_at = excluded.updated_at
                 """,
@@ -3054,10 +4518,12 @@ class SQLiteRepository:
                 SearchSourceType.WINDOWS_ARTIFACT.value,
             }
         rows: list[dict[str, Any]] = []
-        for source_type in (
-            SearchSourceType.FILE_SYSTEM_NODE.value,
-            SearchSourceType.WINDOWS_ARTIFACT.value,
-            SearchSourceType.TIMELINE_EVENT.value,
+        for source_type in sorted(
+            (
+                SearchSourceType.FILE_SYSTEM_NODE.value,
+                SearchSourceType.WINDOWS_ARTIFACT.value,
+                SearchSourceType.TIMELINE_EVENT.value,
+            )
         ):
             if source_type not in selected or len(rows) >= limit:
                 continue
@@ -3718,13 +5184,19 @@ class SQLiteRepository:
                 TimelineSourceType.REGISTRY_ARTIFACT.value,
                 TimelineSourceType.EVENT_LOG_ARTIFACT.value,
                 TimelineSourceType.PREFETCH_ARTIFACT.value,
+                TimelineSourceType.MEDIA_ARTIFACT.value,
+                TimelineSourceType.BROWSER_ARTIFACT.value,
             }
         rows: list[dict[str, Any]] = []
-        for source_type in (
-            TimelineSourceType.FILE_SYSTEM_NODE.value,
-            TimelineSourceType.REGISTRY_ARTIFACT.value,
-            TimelineSourceType.EVENT_LOG_ARTIFACT.value,
-            TimelineSourceType.PREFETCH_ARTIFACT.value,
+        for source_type in sorted(
+            (
+                TimelineSourceType.FILE_SYSTEM_NODE.value,
+                TimelineSourceType.REGISTRY_ARTIFACT.value,
+                TimelineSourceType.EVENT_LOG_ARTIFACT.value,
+                TimelineSourceType.PREFETCH_ARTIFACT.value,
+                TimelineSourceType.MEDIA_ARTIFACT.value,
+                TimelineSourceType.BROWSER_ARTIFACT.value,
+            )
         ):
             if source_type not in selected or len(rows) >= limit:
                 continue
@@ -3803,9 +5275,7 @@ class SQLiteRepository:
             clauses.append("evidence_id = ?")
             params.append(query.evidence_id)
         if query.source_types:
-            clauses.append(
-                "source_type IN (" + ", ".join("?" for _ in query.source_types) + ")"
-            )
+            clauses.append("source_type IN (" + ", ".join("?" for _ in query.source_types) + ")")
             params.extend(item.value for item in query.source_types)
         if query.event_types:
             clauses.append("event_type IN (" + ", ".join("?" for _ in query.event_types) + ")")
@@ -4286,9 +5756,7 @@ class SQLiteRepository:
             "document_type": SearchDocumentType.TIMELINE.value,
             "title": str(row["title"]),
             "path": fields.get("path") or fields.get("source_path"),
-            "normalized_path": None
-            if row["path_key"] is None
-            else str(row["path_key"]),
+            "normalized_path": None if row["path_key"] is None else str(row["path_key"]),
             "searchable_text": _join_search_text(structured.values()),
             "structured_fields": structured,
             "observed_at_utc": row["normalized_utc"],
@@ -4562,6 +6030,9 @@ class SQLiteRepository:
             source.parser_backend,
             source.parser_backend_version,
             source.option_fingerprint,
+            source.source_fingerprint,
+            self._json(source.source_checkpoint) if source.source_checkpoint else None,
+            source.inspected_count,
             source.status,
             source.priority,
             source.source_order,
@@ -4717,6 +6188,71 @@ class SQLiteRepository:
             if row.get("analyzed_at") is None
             else parse_timestamp(str(row["analyzed_at"])),
             updated_at=parse_timestamp(str(row["updated_at"])),
+            source_fingerprint=row.get("source_fingerprint"),
+            source_checkpoint={}
+            if row.get("source_checkpoint_json") is None
+            else dict(json.loads(str(row["source_checkpoint_json"]))),
+            inspected_count=int(row.get("inspected_count") or 0),
+        )
+
+    def _row_to_provider_capability(self, row: sqlite3.Row) -> ProviderCapability:
+        return ProviderCapability(
+            provider_id=str(row["provider_id"]),
+            provider_version=str(row["provider_version"]),
+            capability_type=str(row["capability_type"]),
+            is_available=bool(row["is_available"]),
+            supported_inputs=list(json.loads(str(row["supported_inputs_json"]))),
+            supported_outputs=list(json.loads(str(row["supported_outputs_json"]))),
+            unavailable_reason=row["unavailable_reason"],
+            warnings=list(json.loads(str(row["warnings_json"]))),
+            metadata=dict(json.loads(str(row["metadata_json"]))),
+            updated_at=parse_timestamp(str(row["updated_at"])),
+        )
+
+    def _row_to_machine_candidate(self, row: sqlite3.Row) -> MachineExtractedCandidate:
+        region_json = row["region_json"]
+        reviewed_at = row["reviewed_at"]
+        return MachineExtractedCandidate(
+            candidate_id=str(row["candidate_id"]),
+            case_id=str(row["case_id"]),
+            evidence_id=str(row["evidence_id"]),
+            source_node_id=str(row["source_node_id"]),
+            source_type=str(row["source_type"]),
+            extraction_type=str(row["extraction_type"]),
+            text=str(row["text"]),
+            language=row["language"],
+            confidence=float(row["confidence"]),
+            provider_id=str(row["provider_id"]),
+            provider_version=str(row["provider_version"]),
+            model_id=row["model_id"],
+            region=None if region_json is None else dict(json.loads(str(region_json))),
+            frame_number=row["frame_number"],
+            media_timestamp_ms=row["media_timestamp_ms"],
+            audio_start_ms=row["audio_start_ms"],
+            audio_end_ms=row["audio_end_ms"],
+            raw_locator=dict(json.loads(str(row["raw_locator_json"]))),
+            citations=list(json.loads(str(row["citations_json"]))),
+            review_status=str(row["review_status"]),
+            reviewed_by=row["reviewed_by"],
+            reviewed_at=None if reviewed_at is None else parse_timestamp(str(reviewed_at)),
+            correction_text=row["correction_text"],
+            source_revision=int(row["source_revision"]),
+            is_partial=bool(row["is_partial"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
+
+    @staticmethod
+    def _row_to_candidate_review(row: sqlite3.Row) -> CandidateReviewEvent:
+        return CandidateReviewEvent(
+            review_event_id=str(row["review_event_id"]),
+            candidate_id=str(row["candidate_id"]),
+            case_id=str(row["case_id"]),
+            review_status=str(row["review_status"]),
+            reviewed_by=str(row["reviewed_by"]),
+            reviewed_at=parse_timestamp(str(row["reviewed_at"])),
+            correction_text=row["correction_text"],
+            previous_review_status=row["previous_review_status"],
+            reason=row["reason"],
         )
 
     def _row_to_artifact(self, row: sqlite3.Row) -> ArtifactRecord:
@@ -4818,8 +6354,7 @@ class SQLiteRepository:
             case_id=str(row["case_id"]),
             evidence_ids=tuple(str(item) for item in json.loads(str(row["evidence_ids_json"]))),
             source_types=tuple(
-                SearchSourceType(str(item))
-                for item in json.loads(str(row["source_types_json"]))
+                SearchSourceType(str(item)) for item in json.loads(str(row["source_types_json"]))
             ),
             document_types=tuple(
                 SearchDocumentType(str(item))
@@ -4900,9 +6435,7 @@ class SQLiteRepository:
             created_at=parse_timestamp(str(row["created_at"])),
             expires_at=None if expires_at is None else parse_timestamp(str(expires_at)),
             hit_count=int(row["hit_count"]),
-            invalidated_at=None
-            if invalidated_at is None
-            else parse_timestamp(str(invalidated_at)),
+            invalidated_at=None if invalidated_at is None else parse_timestamp(str(invalidated_at)),
         )
 
     def _row_to_keyword_set(self, row: sqlite3.Row) -> KeywordSet:

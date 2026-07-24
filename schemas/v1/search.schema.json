@@ -40,6 +40,8 @@
         "REGISTRY",
         "EVENT_LOG",
         "PREFETCH",
+        "MEDIA",
+        "BROWSER",
         "TIMELINE",
         "OTHER"
       ]

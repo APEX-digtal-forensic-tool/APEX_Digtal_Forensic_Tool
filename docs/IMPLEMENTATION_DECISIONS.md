@@ -54,3 +54,14 @@ Foundation. The implementation keeps Phase 2+ behavior out of runtime code.
 | Raw/UTC/case timeline times are separate fields | Original timestamps must not be overwritten or silently reinterpreted. | Timeline events persist raw timestamp/timezone, normalized UTC when justified, case display time, source/confidence, semantics, and precision. |
 | Windows timezone mapping is candidate-only | TimeZoneKeyName is not enough to confirm every IANA zone automatically. | Phase 4 stores candidate mapping support but does not auto-confirm broad Windows timezone decisions. |
 | Search and Timeline schemas were expanded in existing files | They are core Phase 4 DTOs, not separate product-specific schemas. | `search.schema.json` and `timeline-event.schema.json` were replaced with Phase 4 DTO definitions. |
+
+## Phase 5 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| Media parsing stays metadata-only and bounded | Phase 5 needs image/video/audio classification, EXIF/GPS, codec, duration, and time preservation without full decode risk. | `MediaMetadataAnalyzer` parses safe image headers and MP4 boxes, streams hashes, limits reads, uses optional `ffprobe` for video/audio, and reports unavailable/corrupt states instead of faking success. |
+| Thumbnail support is derivative metadata first | The design requires source-linked thumbnails, but raster rendering backends are optional and should not run automatically. | `cache_entries` and `thumbnail_records` store deterministic `THUMBNAIL` derivative metadata keyed by source SHA-256; original media is not modified. |
+| Browser MVP uses snapshot SQLite readers | Browser history/search/download evidence is commonly SQLite and may require WAL/SHM state for a consistent read. | `BrowserHistoryAnalyzer` creates safe `/tmp` snapshots, preserves WAL/SHM hashes, uses read-only SELECTs with table introspection, and records profile/database/table/row provenance. |
+| Candidate review is implemented without OCR/STT execution | OCR/STT output must stay provider-neutral and cannot become observed fact automatically. | `MachineExtractionService` persists unavailable OCR/STT capabilities, immutable candidates, append-only review events, and requires correction text for `CORRECTED`. |
+| Corrupt media/browser sources produce partial facts | One damaged file or SQLite database must not stop the whole artifact job. | Damaged media and browser DBs return `CORRUPT`/`UNSUPPORTED` artifacts with warnings; the coordinator continues remaining sources and marks coverage partial. |
+| Email and messengers remain plugin scope | The Phase 5 roadmap explicitly excludes Email, Discord, Telegram, KakaoTalk, and other messengers from completion criteria. | No messenger parser is registered in core; browser cache bodies, passwords, deleted records, and cloud sync stay unsupported. |

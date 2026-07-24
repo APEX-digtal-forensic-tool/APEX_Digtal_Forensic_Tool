@@ -23,6 +23,8 @@
         "REGISTRY_ARTIFACT",
         "EVENT_LOG_ARTIFACT",
         "PREFETCH_ARTIFACT",
+        "MEDIA_ARTIFACT",
+        "BROWSER_ARTIFACT",
         "ANALYST_ANNOTATION"
       ]
     },
@@ -45,6 +47,18 @@
         "SERVICE_INSTALLED",
         "EVENT_LOG_CLEARED",
         "PREFETCH_LAST_RUN",
+        "MEDIA_CREATED",
+        "MEDIA_MODIFIED",
+        "MEDIA_CAPTURED",
+        "MEDIA_METADATA_TIMESTAMP",
+        "MEDIA_CAPTURED_CANDIDATE",
+        "BROWSER_PROFILE_OBSERVED",
+        "BROWSER_VISIT",
+        "BROWSER_SEARCH",
+        "BROWSER_DOWNLOAD",
+        "BROWSER_DOWNLOAD_STARTED",
+        "BROWSER_DOWNLOAD_COMPLETED",
+        "BROWSER_DOWNLOAD_OBSERVED",
         "OTHER"
       ]
     },

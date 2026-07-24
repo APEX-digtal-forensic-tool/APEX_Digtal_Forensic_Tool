@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import fnmatch
+import hashlib
 import json
 import os
 import time
@@ -19,6 +20,7 @@ from apex_forensic.domain.enums import (
     AnalysisProfileType,
     ArtifactCoverageStatus,
     ArtifactParseStatus,
+    ArtifactSourceKind,
     ArtifactType,
     JobStatus,
     JobType,
@@ -543,7 +545,7 @@ class ArtifactAnalysisService:
                 node=node,
                 source=source,
                 file_path=file_path,
-                item_budget=None,
+                item_budget=self._analyzer_item_budget(state, source),
             )
         except Exception as analyzer_error:
             issue_data = ArtifactIssue(
@@ -573,18 +575,43 @@ class ArtifactAnalysisService:
             state.coverage.processed_sources += 1
             return
         all_artifacts = list(result.artifacts)
+        for artifact in all_artifacts:
+            artifact.index_revision = state.job.index_revision or artifact.index_revision
         artifacts = all_artifacts
-        source_complete = True
-        if state.options.item_budget is not None:
+        source_complete = result.source_complete
+        inspected_increment = result.inspected_count or len(all_artifacts)
+        if result.source_checkpoint is None and state.options.item_budget is not None:
             remaining_budget = max(0, state.options.item_budget - state.artifacts_this_run)
             if len(all_artifacts) > remaining_budget:
                 artifacts = all_artifacts[:remaining_budget]
                 source_complete = False
+                inspected_increment = len(artifacts)
         inserted = 0
         for start in range(0, len(artifacts), state.options.batch_size):
             inserted += self._artifact_repository.save_artifacts(
                 artifacts[start : start + state.options.batch_size]
             )
+        if result.cache_entries:
+            try:
+                self._artifact_repository.save_cache_entries(list(result.cache_entries))
+            except Exception as cache_error:
+                self._record_issue_for_state(
+                    state.job,
+                    state.coverage,
+                    state.evidence,
+                    source,
+                    ArtifactIssue(
+                        severity="WARNING",
+                        code="ARTIFACT_CACHE_METADATA_SAVE_FAILED",
+                        message_key="warning.artifact.cache_metadata_save_failed",
+                        developer_message=(
+                            "Artifact cache metadata could not be persisted; analysis continued."
+                        ),
+                        source_file_node_id=source.source_file_node_id,
+                        source_path=source.source_path,
+                        details={"error": str(cache_error)},
+                    ),
+                )
         for warning in result.warnings:
             self._record_issue_for_state(state.job, state.coverage, state.evidence, source, warning)
         for artifact in artifacts:
@@ -597,9 +624,7 @@ class ArtifactAnalysisService:
                     ArtifactIssue(
                         severity="WARNING",
                         code=str(artifact_warning.get("code", "ARTIFACT_WARNING")),
-                        message_key=str(
-                            artifact_warning.get("message_key", "warning.artifact")
-                        ),
+                        message_key=str(artifact_warning.get("message_key", "warning.artifact")),
                         developer_message=str(artifact_warning.get("developer_message", "")),
                         source_file_node_id=source.source_file_node_id,
                         artifact_id=artifact.artifact_id,
@@ -611,25 +636,30 @@ class ArtifactAnalysisService:
             self._record_issue_for_state(
                 state.job, state.coverage, state.evidence, source, result_error
             )
+        source_artifact_count = source.artifact_count + inserted
+        source_inspected_count = source.inspected_count + inspected_increment
         state.coverage.artifact_count += inserted
         if source_complete:
             state.coverage.processed_sources += 1
-        state.artifacts_this_run += inserted
+        state.artifacts_this_run += inspected_increment
         status = "QUEUED" if not source_complete else _source_status(result.parse_status)
         parse_status = (
-            ArtifactParseStatus.PARTIAL.value
-            if not source_complete
-            else result.parse_status.value
+            ArtifactParseStatus.PARTIAL.value if not source_complete else result.parse_status.value
         )
         self._artifact_repository.mark_artifact_source_done(
             source.source_id,
             status=status,
             parse_status=parse_status,
-            warning_count=len(result.warnings) + sum(len(item.warnings) for item in artifacts),
-            error_count=len(result.errors),
-            artifact_count=inserted,
+            warning_count=source.warning_count
+            + len(result.warnings)
+            + sum(len(item.warnings) for item in artifacts),
+            error_count=source.error_count + len(result.errors),
+            artifact_count=source_artifact_count,
             last_error=result.errors[0].to_error_dict() if result.errors else None,
             analyzed_at=to_json_timestamp(self._clock.now()),
+            source_checkpoint=result.source_checkpoint if not source_complete else {},
+            inspected_count=source_inspected_count,
+            source_fingerprint=result.source_fingerprint,
         )
 
     def _discover_candidate_sources(
@@ -693,11 +723,17 @@ class ArtifactAnalysisService:
                 source.option_fingerprint = option_fingerprint
                 source.job_id = job_id
                 source.source_order = source_order
+                source.source_fingerprint = self._effective_source_fingerprint(
+                    evidence=evidence,
+                    node=node,
+                    source=source,
+                )
                 source.source_id = source_id_for(
                     node=node,
                     analyzer_id=source.analyzer_id,
                     analyzer_version=source.analyzer_version,
                     option_fingerprint=option_fingerprint,
+                    source_fingerprint=source.source_fingerprint,
                 )
                 source.is_partial = source.is_partial or node.is_partial or fs_partial
                 source.status = "QUEUED"
@@ -709,16 +745,17 @@ class ArtifactAnalysisService:
                     analyzer_id=source.analyzer_id,
                     analyzer_version=source.analyzer_version,
                     option_fingerprint=option_fingerprint,
+                    source_fingerprint=source.source_fingerprint,
                 ):
                     warnings.append(
                         ArtifactIssue(
                             severity="WARNING",
-                    code="DUPLICATE_ANALYSIS_SKIPPED",
-                    message_key="warning.artifact.duplicate_analysis_skipped",
-                    developer_message=(
-                        "Completed analysis with the same analyzer version and options already "
-                        "exists."
-                    ),
+                            code="DUPLICATE_ANALYSIS_SKIPPED",
+                            message_key="warning.artifact.duplicate_analysis_skipped",
+                            developer_message=(
+                                "Completed analysis with the same analyzer version and options "
+                                "already exists."
+                            ),
                             source_file_node_id=source.source_file_node_id,
                             source_path=source.source_path,
                             details={"analyzer_id": source.analyzer_id},
@@ -749,6 +786,38 @@ class ArtifactAnalysisService:
                 options=options.to_dict(),
                 created_at=to_json_timestamp(self._clock.now()),
             )
+
+    def _analyzer_item_budget(
+        self,
+        state: _ArtifactRunState,
+        source: ArtifactSource,
+    ) -> int | None:
+        if source.source_kind is ArtifactSourceKind.BROWSER_SQLITE_DB:
+            if state.options.item_budget is not None:
+                return max(1, state.options.item_budget - state.artifacts_this_run)
+            return state.options.batch_size
+        return None
+
+    def _effective_source_fingerprint(
+        self,
+        *,
+        evidence: Evidence,
+        node: Any,
+        source: ArtifactSource,
+    ) -> str | None:
+        try:
+            file_path = self._path_for_node(evidence, node)
+            if source.source_kind is ArtifactSourceKind.BROWSER_SQLITE_DB:
+                return _browser_sqlite_source_fingerprint(file_path)
+            if source.source_kind in {
+                ArtifactSourceKind.IMAGE_FILE,
+                ArtifactSourceKind.VIDEO_FILE,
+                ArtifactSourceKind.AUDIO_FILE,
+            }:
+                return _sha256_file(file_path)
+        except (OSError, ValidationError):
+            return None
+        return None
 
     def _record_issue_for_state(
         self,
@@ -1075,6 +1144,11 @@ class ArtifactAnalysisService:
                 "event_id": query.event_id,
                 "registry_path": self._comparison_text(query.registry_path),
                 "executable_name": self._comparison_text(query.executable_name),
+                "media_kind": self._comparison_text(query.media_kind),
+                "browser_profile": self._comparison_text(query.browser_profile),
+                "browser_database": self._comparison_text(query.browser_database),
+                "browser_table": self._comparison_text(query.browser_table),
+                "browser_row_id": query.browser_row_id,
                 "observed_from": None
                 if query.observed_from is None
                 else to_json_timestamp(query.observed_from),
@@ -1130,3 +1204,29 @@ def _source_status(parse_status: ArtifactParseStatus) -> str:
     if parse_status is ArtifactParseStatus.FAILED:
         return "FAILED"
     return parse_status.value
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _browser_sqlite_source_fingerprint(path: Path) -> str:
+    component_hashes = {"main": _sha256_file(path)}
+    component_sizes = {"main": path.stat().st_size}
+    for suffix, key in (("-wal", "wal"), ("-shm", "shm")):
+        component_path = path.with_name(path.name + suffix)
+        if not component_path.exists():
+            continue
+        component_hashes[key] = _sha256_file(component_path)
+        component_sizes[key] = component_path.stat().st_size
+    return canonical_sha256(
+        {
+            "source_path": str(path),
+            "component_hashes": component_hashes,
+            "component_sizes": component_sizes,
+        }
+    )

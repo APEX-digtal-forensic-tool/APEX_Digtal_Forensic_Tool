@@ -578,33 +578,40 @@ All commands keep `--db` and `--json`. File tree pagination uses an opaque curso
 
 ## Phase 3 CLI/Application Interface
 
-Phase 3 exposes Windows artifact analysis through the application service and CLI. No backend web
-server is added.
+Phase 3 exposes Windows artifacts through the shared artifact CLI. Phase 5 keeps those helpers and
+adds top-level Browser, Media, and Candidate commands. No backend web server is added.
 
-CLI-equivalent commands:
+Shared artifact commands:
 
 - `apex-forensic artifact discover --case-id CASE --evidence-id EVIDENCE`
 - `apex-forensic artifact analyze --case-id CASE --evidence-id EVIDENCE`
-- `apex-forensic artifact status --job-id JOB`
-- `apex-forensic artifact resume --job-id JOB`
-- `apex-forensic artifact cancel --job-id JOB`
+- `apex-forensic artifact status|resume|cancel --job-id JOB`
 - `apex-forensic artifact list --case-id CASE [--evidence-id EVIDENCE]`
 - `apex-forensic artifact show --artifact-id ARTIFACT`
 - `apex-forensic artifact warnings [--job-id JOB] [--artifact-id ARTIFACT]`
 - `apex-forensic artifact registry autoruns|usb|timezone|userassist`
 - `apex-forensic artifact eventlog list|show`
 - `apex-forensic artifact prefetch list|show`
+- `apex-forensic artifact media list|show`
+- `apex-forensic artifact browser profiles|visits|searches|downloads|show`
 
-Supported command options include `--json`, `--profile`, `--item-budget`, `--batch-size`,
-`--analyzer`, `--artifact-type`, `--selected-path`, `--selected-node-id`, `--include`, `--exclude`,
-`--cursor`, `--limit`, time range filters, parse status, event ID, registry path, executable name,
-source node, and warning filters.
+Phase 5 top-level commands:
 
-Artifact list queries use opaque stable cursors bound to the query fingerprint and explicit
-`observed_or_created_at, artifact_id` ordering. Cursor/query mismatches return structured validation
-errors. Capability gaps such as missing `python-registry`, missing `python-evtx`, unsupported Prefetch
-versions, and MAM compression are reported as warnings or unsupported parse status, not successful
-facts.
+- `apex-forensic browser discover|analyze|status|resume|cancel|profiles|history|searches|downloads|show|warnings`
+- `apex-forensic media discover|analyze|status|resume|cancel|list|show|thumbnail|warnings`
+- `apex-forensic candidate list|show|review|correct|capabilities`
+
+Supported options include `--db`, `--json`, `--case-id`, `--evidence-id`, `--profile`,
+`--item-budget`, `--batch-size`, `--analyzer`, `--artifact-type`, `--selected-path`,
+`--selected-node-id`, `--include`, `--exclude`, `--cursor`, `--limit`, time range filters, parse
+status, media kind, browser profile/database/table/row, source node, review status, and warning
+filters.
+
+Artifact and candidate list queries use opaque stable cursors bound to query state and explicit sort
+keys. Cursor/query mismatches return structured validation errors. Capability gaps such as missing
+`python-registry`, missing `python-evtx`, unsupported Prefetch versions, missing `ffprobe`, OCR/STT
+engines, and MAM compression are reported as warnings or unsupported capability status, not
+successful facts.
 
 ## Phase 4 CLI Interface
 

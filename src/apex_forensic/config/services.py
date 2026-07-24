@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from apex_forensic.adapters.artifacts import (
+    BrowserHistoryAnalyzer,
+    MediaMetadataAnalyzer,
     WindowsEventLogAnalyzer,
     WindowsPrefetchAnalyzer,
     WindowsRegistryAnalyzer,
@@ -20,6 +22,7 @@ from apex_forensic.application.services import (
     CustodyLedger,
     EvidenceManager,
     FileSystemIndexService,
+    MachineExtractionService,
     SearchService,
     TimelineService,
 )
@@ -37,6 +40,7 @@ class ServiceBundle:
     artifacts: ArtifactAnalysisService
     search: SearchService
     timeline: TimelineService
+    candidates: MachineExtractionService
 
     def close(self) -> None:
         """Close underlying resources."""
@@ -84,6 +88,8 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
             WindowsRegistryAnalyzer(),
             WindowsEventLogAnalyzer(),
             WindowsPrefetchAnalyzer(),
+            MediaMetadataAnalyzer(),
+            BrowserHistoryAnalyzer(),
         ),
         clock=clock,
         id_generator=ids,
@@ -101,6 +107,12 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         clock=clock,
         id_generator=ids,
     )
+    candidates = MachineExtractionService(
+        case_repository=repository,
+        repository=repository,
+        clock=clock,
+        id_generator=ids,
+    )
     cases = CaseManager(repository=repository, clock=clock, id_generator=ids)
     return ServiceBundle(
         repository=repository,
@@ -111,4 +123,5 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         artifacts=artifacts,
         search=search,
         timeline=timeline,
+        candidates=candidates,
     )

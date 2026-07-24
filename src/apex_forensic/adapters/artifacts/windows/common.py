@@ -26,6 +26,7 @@ def source_id_for(
     analyzer_id: str,
     analyzer_version: str,
     option_fingerprint: str,
+    source_fingerprint: str | None = None,
 ) -> str:
     key = ":".join(
         [
@@ -36,6 +37,7 @@ def source_id_for(
             analyzer_id,
             analyzer_version,
             option_fingerprint,
+            source_fingerprint or "",
         ]
     )
     return str(uuid5(NAMESPACE_URL, key))
@@ -85,6 +87,9 @@ def source_shell(
         discovered_at=now,
         analyzed_at=None,
         updated_at=now,
+        source_fingerprint=None,
+        source_checkpoint={},
+        inspected_count=0,
     )
 
 

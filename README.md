@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 Forensic Core Engine은 **Phase 4 Search·Keyword Set·Timeline 구현 완료** 상태입니다.
-> Phase 1~3의 Case·Evidence·Hash·SQLite·Chain of Custody, Job, Logical File System Indexing 및 Windows Artifact Analysis 기반 위에 SQLite FTS5 Metadata·Artifact Search, Keyword Set Versioning, Search Reproduction·Cache, Timeline Projection·Query, Timestamp Normalization, UTC·Case Timezone 표시, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 관련 CLI가 구현되었습니다.
+> 현재 Forensic Core Engine은 **Phase 5 Browser·Media MVP 구현 완료** 상태입니다.
+> Phase 1~4의 Case·Evidence·Hash·SQLite·Chain of Custody, Job, Logical File System Indexing, Windows Artifact Analysis, SQLite FTS5 Metadata·Artifact Search, Keyword Set Versioning, Search Reproduction·Cache, Timeline Projection·Query, Timestamp Normalization, UTC·Case Timezone 표시, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 관련 CLI 기반 위에 Browser History/Search/Download와 Media Metadata Artifact가 구현되었습니다.
 >
-> Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, File Body Full Text Indexing, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, Browser·Media 분석, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, File Body Full Text Indexing, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, GUI, MCP, AI, OCR/STT 실행 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
 
 ---
 
@@ -505,8 +505,9 @@ Metadata/Artifact Search, 수동 Keyword Set, Search Reproduction/Cache, Timelin
 
 Search 대상 Field는 파일명, 상대/표시 경로, 확장자, MIME 후보, 안전한 provider metadata,
 artifact title/summary/type/subtype/source path, registry path/value, Event provider/channel/ID,
-EventData/UserData, Prefetch executable name과 referenced path candidate입니다. 파일 본문 전체,
-PDF/DOCX/OCR/STT 추출물, unallocated/slack, deleted file body는 인덱싱하지 않습니다.
+EventData/UserData, Prefetch executable name과 referenced path candidate, Media metadata,
+Browser URL/Search/Download/Profile provenance입니다. 파일 본문 전체, PDF/DOCX/OCR/STT 추출물,
+unallocated/slack, deleted file body는 인덱싱하지 않습니다.
 
 Keyword Set은 `DRAFT`, `ACTIVE`, `ARCHIVED` 상태와 immutable version을 보존합니다. 활성 Set을
 수정하면 새 version이 생성되고 이전 version은 검색 재현을 위해 유지됩니다. Search Execution은
@@ -677,18 +678,28 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 - Prefetch만으로 사용자가 직접 프로그램을 실행했다고 단정하지 않음
 - Volume 및 Referenced File Path는 안전하게 파싱 가능한 범위만 제공
 
-### Browser Communications MVP (예정)
+### Browser Communications MVP
 
-초기 Communications 분석은 Browser Artifact 중심으로 구현할 예정입니다.
+현재 구현:
 
-- 방문 History
-- 검색 History
-- 다운로드 History
-- URL
-- 다운로드 File
-- Browser Profile
-- 시간 범위 조회
-- 사용자 Profile별 Filter
+- File System Index 기반 Chromium / Firefox Profile 후보 발견
+- Windows / Linux Path Allowlist, Unicode Path 보존, Profile 중복 방지
+- Profile 발견과 Browser 사용 확정을 분리하고 `user_candidate`는 후보로만 보존
+- Chromium `History` SQLite의 방문, 검색어, 다운로드 추출
+- Firefox `places.sqlite` 방문 및 Download Annotation Candidate 추출
+- 원본 DB를 직접 수정하지 않는 `/tmp` Snapshot Reader와 WAL / SHM 조합 보존
+- Source Fingerprint, Snapshot Hash, Profile / DB / Table / Row Logical Raw Locator 기록
+- Raw Timestamp Semantics, UTC 정규화 근거, Case Timezone 표시 분리
+- Stable Cursor 기반 조회, Search / Timeline Projection, Checkpoint / Resume / Pause / Cancel
+
+현재 제한:
+
+- Password / Secret / Cookie 복호화, Cache Body 복원, 삭제 Record Carving, Incognito 복원,
+  Cloud Sync 분석은 구현하지 않음
+- Firefox Search Term은 재현 가능한 Source가 없으면 완료 기능으로 표시하지 않음
+- Firefox `moz_inputhistory`는 URL-bar 입력 Candidate로 보존하며, 확인된 Search Term이나
+  Browser Search Timeline Event로 투영하지 않음
+- `danger_type` 등 다운로드 상태 값만으로 악성 여부를 확정하지 않음
 
 후순위 Plugin 범위:
 
@@ -702,7 +713,7 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 
 현재 구현:
 
-- File System Timestamp와 Registry·Event Log·Prefetch Artifact Timestamp 투영
+- File System Timestamp와 Registry·Event Log·Prefetch·Browser·Media Artifact Timestamp 투영
 - Raw Timestamp·Raw Timezone 보존
 - UTC 정규화 및 Case Timezone 표시
 - Timezone Source·Confidence와 Timestamp Semantics 기록
@@ -713,7 +724,6 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 
 추후 구현:
 
-- Browser Activity 및 Download Timeline
 - 광범위한 Windows Timezone 자동 판별
 - AI 기반 사건 흐름 요약
 
@@ -869,29 +879,27 @@ AI는 다음 동작을 수행할 수 없습니다.
 
 ### Media MVP
 
-- Image / Video File 분류
-- Image Metadata
-- Video Metadata
-- EXIF
-- GPS
-- Thumbnail
-- Codec
-- Duration
-- 생성·수정 시간
-- 삭제된 Media File 표시
+현재 구현:
 
-### 확장 기능
+- Image / Video / Audio File 후보 분류
+- JPEG / PNG / GIF / BMP / TIFF / WEBP Header Metadata와 JPEG EXIF / GPS Candidate
+- MP4 Container Duration / Codec Metadata 및 Optional `ffprobe` 기반 Video / Audio Metadata
+- `ffprobe` 미설치 또는 실패 시 `CAPABILITY_UNAVAILABLE` / Warning을 기록하고 가짜 성공 금지
+- Decompression Bomb, 손상 File, Read Limit, File Size Limit 보호
+- Timezone 없는 EXIF / Media Timestamp를 UTC로 임의 확정하지 않음
+- Source Revision, Raw Locator, Citation, Search / Timeline Projection, Stable Cursor 조회
+- Hash 검증 가능한 Thumbnail Derivative Metadata를 `cache_entries`와 `thumbnail_records`에 저장
 
-- Image OCR
-- Video Frame Sampling
-- Frame OCR
-- Subtitle 추출
-- Audio Speech-to-Text
-- Screen Text 추출
-- 추출 Text의 Search Index 연동
-- Frame 또는 Audio Time Position Citation
+현재 제한:
+
+- Pixel 자동 회전, 원본 Media 수정, Reverse Geocoding, 자동 대량 Thumbnail Rendering은 구현하지 않음
+- Video 전체 Frame Sampling, Subtitle 추출, OCR/STT 실행은 구현하지 않음
+
+### Machine-extracted Candidate
 
 OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
+Provider Port와 Candidate Review Workflow는 구현되어 있으며 기본 OCR/STT Provider는
+`CAPABILITY_UNAVAILABLE`을 반환합니다. 실제 OCR/STT Engine은 실행하지 않습니다.
 
 Review 상태:
 
@@ -1230,7 +1238,7 @@ APEX/
 - [x] Append-only Chain of Custody 설계
 - [x] Simple / Detailed / Raw View 설계
 - [x] Browser Communications MVP 설계
-- [x] Images / Videos MVP 설계
+- [x] Images / Videos / Audio MVP 설계
 - [x] OCR/STT Machine-extracted Candidate 계약
 - [x] Report Human Review 및 Approval 설계
 - [x] 한국어 및 Localization 설계
@@ -1284,9 +1292,9 @@ APEX/
 - [ ] Prefetch MAM Compression 해제
 - [ ] Event Message DLL Rendering
 - [ ] 광범위한 Windows Timezone Resolver 및 Timestamp Normalizer 확장
-- [ ] Browser Communications Analyzer
-- [ ] Images / Videos Analyzer
-- [ ] OCR/STT Provider 및 Candidate Review
+- [x] Browser Communications Analyzer
+- [x] Images / Videos / Audio Analyzer
+- [x] OCR/STT Provider Port 및 Candidate Review
 - [ ] GUI Context 및 Scope별 Analysis Context 실행 구현
 - [ ] Simple / Detailed / Raw View 실행 구현
 - [ ] MCP Adapter용 공개 Interface
@@ -1385,7 +1393,7 @@ APEX/
 - Browser Communications MVP
 - Image / Video Metadata
 - OCR/STT Contract
-- Machine-extracted Candidate
+- Machine-extracted Candidate Schema
 
 ### Phase 6 — GUI Context 및 View
 

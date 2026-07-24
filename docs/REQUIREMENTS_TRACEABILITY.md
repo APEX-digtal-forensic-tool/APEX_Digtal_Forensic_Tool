@@ -192,9 +192,9 @@
 | VIEW-001 | 동일 Finding에 Simple, Detailed, Raw View를 제공해야 한다 | View Contract | Frontend/API Interface | Existing Result + Raw API | Live UI Context | ui-context | 6 | 동일 Source/View 전환 Contract |
 | VIEW-002 | Raw View는 Source Offset, Length와 Citation을 제공해야 한다 | Raw Evidence Locator | Raw Evidence Locator | raw endpoints | Artifact/File Provenance | citation, artifact | 3/6 | Locator Bounds/Resolve Test |
 | VIEW-003 | Raw View는 원본을 수정하거나 전체 파일을 적재해서는 안 된다 | Read-only Range Reader | Evidence Manager | raw-ranges | `audit_events` | citation | 6 | Write Attempt/1 MiB Limit/RSS |
-| MEDIA-006 | OCR/STT 결과는 Machine-extracted Candidate로 분류해야 한다 | Machine Extraction Port | Media Extraction Candidate Store | media-extraction API | `machine_extractions` | machine-extraction | 5 | Fact 혼합 거부 |
-| MEDIA-007 | Candidate는 Confidence, Engine Version, Source Locator와 Citation을 포함해야 한다 | Candidate Contract | Media Extraction Candidate Store | machine-extractions GET | `machine_extractions` | machine-extraction, citation | 5 | Required Field Contract |
-| MEDIA-008 | 분석자는 Candidate를 Accept, Reject, Correct할 수 있어야 한다 | Candidate Review | Media Extraction Candidate Store | accept/reject/correct | `machine_extraction_reviews` | machine-extraction | 5/6 | 원 Candidate 불변/Review Test |
+| MEDIA-006 | OCR/STT 결과는 Machine-extracted Candidate로 분류해야 한다 | Machine Extraction Port | Media Extraction Candidate Store | candidate list/show | `machine_extracted_candidates` | machine-extracted-candidate | 5 | Fact 혼합 거부 |
+| MEDIA-007 | Candidate는 Confidence, Provider Version, Source Locator와 Citation을 포함해야 한다 | Candidate Contract | Media Extraction Candidate Store | candidate show | `machine_extracted_candidates` | machine-extracted-candidate, citation | 5 | Required Field Contract |
+| MEDIA-008 | 분석자는 Candidate를 Accept, Reject, Correct할 수 있어야 한다 | Candidate Review | Media Extraction Candidate Store | candidate review/correct | `candidate_review_events` | machine-extracted-candidate | 5 | 원 Candidate 불변/Review Test |
 
 ### AI Scope와 Human Verification
 
@@ -284,3 +284,27 @@ analyzers, and report rendering.
   recommendation, LLM/agent loops, GUI/web/MCP, report rendering, disk image internals,
   deleted/slack/unallocated search, live acquisition, credential/secret extraction, full Windows
   timezone auto-confirmation, compromise assertions, and benchmark superiority remain unimplemented.
+
+### Phase 5 Browser and Media Trace
+
+- Implementation: `MediaMetadataAnalyzer`, `BrowserHistoryAnalyzer`, and `MachineExtractionService`
+  are registered in `build_services()` and reuse existing artifact/job/search/timeline persistence.
+- Media coverage: image/video/audio source detection, JPEG EXIF/GPS raw and normalized values,
+  filesystem created/modified/deleted metadata, MP4 codec/duration, optional `ffprobe` video/audio
+  metadata, corrupt media warnings, `cache_entries`, and `thumbnail_records` derivative metadata.
+- Browser coverage: browser profile/database artifacts plus Chromium visit/search/download rows,
+  Firefox visit/download candidate rows, native timestamp normalization, SQLite Snapshot/WAL/SHM
+  fingerprints, and profile/database/table/row provenance.
+- Candidate coverage: immutable machine-extracted candidates, unavailable OCR/STT provider
+  capabilities, stable candidate cursor pagination, append-only review events, and required
+  correction text for `CORRECTED` decisions.
+- Interface: existing `artifact discover/analyze/list/show/warnings` JSON commands, legacy
+  `artifact media` / `artifact browser` helpers, and top-level `browser`, `media`, and `candidate`
+  command groups.
+- Verification: `tests/unit/test_phase5_media_browser.py` covers synthetic media metadata, audio
+  capability/corrupt handling, GPS/time raw+normalized preservation, thumbnail cache rows, browser
+  visit/search/download provenance queries, corrupt media/browser resilience, candidate review
+  immutability, and top-level CLI smoke coverage.
+- Unsupported boundaries: raster thumbnail pixel rendering, actual OCR/STT execution, Email,
+  Discord, Telegram, KakaoTalk, other messenger parsers, deleted/slack/unallocated recovery, live
+  browser acquisition, GUI/web/MCP, AI/LLM flows, and report rendering remain outside Phase 5.

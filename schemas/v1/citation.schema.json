@@ -210,7 +210,9 @@
             "LOGICAL_PATH",
             "LOGICAL_REGISTRY",
             "LOGICAL_EVENT_RECORD",
-            "PREFETCH_FIELD"
+            "PREFETCH_FIELD",
+            "MEDIA_METADATA",
+            "SQLITE_ROW"
           ]
         },
         "encoding": {

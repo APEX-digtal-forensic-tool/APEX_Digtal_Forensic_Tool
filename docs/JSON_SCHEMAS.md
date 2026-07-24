@@ -27,7 +27,13 @@
 | `analysis-profile.schema.json` | AnalysisProfile | Quick/Selected/Full/Custom Profile |
 | `keyword-recommendation.schema.json` | KeywordCandidate, KeywordSet, KeywordApproval | AI/수동 Keyword 검토와 Set Version |
 | `chain-of-custody.schema.json` | CustodyEvent, HashVerification, CustodySnapshot, CustodyApproval | Append-only Evidence Custody Ledger |
-| `machine-extraction.schema.json` | MachineExtraction, ExtractionReview | OCR/STT Candidate와 분석자 검토 |
+| `machine-extraction.schema.json` | MachineExtraction, ExtractionReview | 기존 Machine Extraction 계약 |
+| `browser-profile.schema.json` | BrowserProfile | Browser Profile 후보와 Source Revision / Locator |
+| `browser-artifact.schema.json` | BrowserArtifact | Browser History / Search / Download Projection |
+| `media-artifact.schema.json` | MediaArtifact | Image / Video / Audio Metadata Projection |
+| `machine-extracted-candidate.schema.json` | MachineExtractedCandidate, CandidateReviewEvent | Phase 5 OCR/STT Candidate와 Review 이력 |
+| `provider-capability.schema.json` | ProviderCapability | Optional OCR/STT / ffprobe / ffmpeg Capability 상태 |
+| `thumbnail.schema.json` | ThumbnailRecord | Hash 검증 가능한 Thumbnail Derivative Metadata |
 
 ## 3. 공통 규칙
 
@@ -71,6 +77,12 @@ Timezone과 Template Version을 Hash하며 승인/Export 시각, Export 목록�
 3. Timeline Projector 여부
 4. Search Document Mapper
 5. 실제/손상 Fixture 기반 Contract Test
+
+Phase 5는 Browser, Media, Thumbnail, Provider Capability, Machine-extracted Candidate를 별도
+Schema로 분리한다. 이 Schema들은 Raw Timestamp / UTC / Case Time을 구분하고, Source Revision과
+Provider Version을 요구하며, Unsupported Capability를 성공 결과처럼 표현하지 않는다. 기존
+`artifact.schema.json`과 `timeline-event.schema.json`은 `MEDIA_AUDIO`, `AUDIO_FILE`, Browser
+Download/Media Metadata Timeline Event를 포함하도록 확장한다.
 
 예를 들어 `windows.eventlog.record@1.0.0` Payload는 Event ID, Provider, Channel, Record ID,
 Computer, Event Data를 정의하며 공통 `Artifact`의 `payload`에 들어간다.
@@ -249,7 +261,7 @@ Filesystem nodes explicitly require provider id/version, original path strings, 
 
 ## Phase 3 Schema Contracts
 
-`artifact.schema.json` now defines the concrete Phase 3 Windows artifact DTO. It requires
+`artifact.schema.json` now defines the concrete Windows, Media, and Browser artifact DTO. It requires
 `artifact_id`, `case_id`, `evidence_id`, `source_file_node_id`, artifact type/subtype,
 analyzer/backend IDs and versions, raw and UTC observed timestamps, timezone source/confidence,
 fields, raw locator, citations, warnings, parse status, confidence, partial flag, index revision,
@@ -265,6 +277,12 @@ Artifact type enum values are:
 - `REGISTRY_USERASSIST`
 - `EVENT_LOG_RECORD`
 - `PREFETCH_EXECUTION`
+- `MEDIA_IMAGE`
+- `MEDIA_VIDEO`
+- `BROWSER_PROFILE`
+- `BROWSER_VISIT`
+- `BROWSER_SEARCH`
+- `BROWSER_DOWNLOAD`
 - `UNKNOWN_WINDOWS_ARTIFACT`
 
 Parse status enum values are `SUCCESS`, `PARTIAL`, `UNSUPPORTED`, `CORRUPT`, and `FAILED`. Unsupported

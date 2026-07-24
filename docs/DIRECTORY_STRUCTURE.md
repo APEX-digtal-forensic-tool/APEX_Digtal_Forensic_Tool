@@ -1,7 +1,8 @@
 # 제안 디렉터리 구조
 
-이 문서는 구현 단계에서 생성할 구조를 정의한다. 현재 설계 단계에서는 문서와 Schema만
-생성하며 아래 Python 파일은 아직 구현하지 않는다.
+이 문서는 설계 구조와 현재 구현 구조를 함께 기록한다. Phase 1~5 실행 코드는
+`src/apex_forensic` 패키지 아래에 있으며, 초기 `src/apex` 다이어그램은 책임 분리를 설명하는
+참고 구조다.
 
 ```text
 APEX/
@@ -187,7 +188,7 @@ src/apex/
 │   ├── analysis_profiles/
 │   ├── custody/
 │   ├── keywords/
-│   ├── machine_extractions/
+│   ├── machine_extraction/
 │   └── timezones/
 ├── application/services/
 │   ├── progressive_indexing_coordinator.py
@@ -282,3 +283,26 @@ tests/unit/test_phase4_search_timeline.py
 Existing files extended in place include the SQLite repository, service factory, CLI parser/commands,
 domain enum exports, model exports, `search.schema.json`, `timeline-event.schema.json`,
 `keyword-recommendation.schema.json`, and `job.schema.json`.
+
+## Phase 5 Added Files
+
+```text
+src/apex_forensic/domain/models/browser_media.py
+src/apex_forensic/ports/browser_analyzer.py
+src/apex_forensic/ports/media_analyzer.py
+src/apex_forensic/ports/machine_extraction.py
+src/apex_forensic/application/services/machine_extraction.py
+src/apex_forensic/adapters/artifacts/browser.py
+src/apex_forensic/adapters/artifacts/media.py
+schemas/v1/browser-profile.schema.json
+schemas/v1/browser-artifact.schema.json
+schemas/v1/media-artifact.schema.json
+schemas/v1/machine-extracted-candidate.schema.json
+schemas/v1/provider-capability.schema.json
+schemas/v1/thumbnail.schema.json
+tests/unit/test_phase5_media_browser.py
+```
+
+Phase 5 keeps Browser and Media analyzers under the existing artifact adapter boundary and adds only
+provider-neutral ports for Browser, Media, and Machine Extraction. It does not add GUI, MCP, LLM,
+OCR/STT engine, browser credential, or report-renderer execution directories.

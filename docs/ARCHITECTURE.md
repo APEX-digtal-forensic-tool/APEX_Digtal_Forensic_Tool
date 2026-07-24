@@ -335,12 +335,16 @@ Case 기본값은 `locale=ko-KR`, `timezone=Asia/Seoul`이다.
 
 ## 17. Browser Communications와 Media
 
-Browser Communications MVP는 Browser Profile, 방문 URL/History, 검색 History, Download
-History/File과 시간 기준 조회다. Email, Discord, Telegram, KakaoTalk 및 기타 Messenger는
-공통 Analyzer Plugin 계약을 사용하는 후순위 확장 범위이며 MVP 완료 조건이 아니다.
+Browser Communications MVP는 Browser Profile, 방문 URL/History, 검색 History,
+Download History/File과 시간 기준 조회다. 구현은 Phase 2 File System Index에서 후보를 찾고,
+SQLite History/places Snapshot을 `/tmp`에 생성해 WAL / SHM 조합과 Snapshot Hash를 보존한 뒤
+읽기 전용 SELECT로 분석한다. Email, Discord, Telegram, KakaoTalk 및 기타 Messenger는 공통
+Analyzer Plugin 계약을 사용하는 후순위 확장 범위이며 MVP 완료 조건이 아니다.
 
-Media MVP는 Image/Video 분류, EXIF/GPS, Thumbnail, Codec, Duration, 생성/수정 시간과 삭제
-상태 표시를 포함한다. Thumbnail은 Cache 파생물이며 원본 Media를 수정하지 않는다. AI는
+Media MVP는 Image/Video/Audio 분류, EXIF/GPS, Optional `ffprobe` Video/Audio Metadata,
+Thumbnail Derivative Metadata, Codec, Duration, 생성/수정 시간과 삭제 상태 표시를 포함한다.
+Thumbnail은 Cache 파생물이며 원본 Media를 수정하지 않는다. OCR/STT는 Provider Port와
+Candidate Review 계약만 구현하고 기본 Provider는 `CAPABILITY_UNAVAILABLE`을 반환한다. AI는
 선택된 Media의 저장된 Metadata와 Citation만 요약하고 사건 관련성 설명/보고서 문구를 제안할
 수 있으나 원본을 변경하거나 관련성을 Observed Fact로 확정할 수 없다.
 

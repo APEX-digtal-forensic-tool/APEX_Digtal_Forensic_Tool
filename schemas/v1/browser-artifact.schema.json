@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/browser-artifact.schema.json",
+  "title": "APEX Browser Artifact",
+  "$ref": "#/$defs/browserArtifact",
+  "$defs": {
+    "browserArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "case_id",
+        "evidence_id",
+        "profile_id",
+        "browser_family",
+        "browser_name",
+        "artifact_type",
+        "artifact_subtype",
+        "title",
+        "url",
+        "domain",
+        "search_term",
+        "download_url",
+        "download_path",
+        "referrer_url",
+        "visit_count",
+        "typed_count",
+        "transition",
+        "raw_timestamp",
+        "timestamp_semantics",
+        "normalized_utc",
+        "case_timezone",
+        "displayed_case_time",
+        "fields",
+        "source_path",
+        "source_node_id",
+        "source_revision",
+        "analyzer_id",
+        "analyzer_version",
+        "raw_locator",
+        "citations",
+        "is_partial",
+        "created_at"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "browser_family": {
+          "enum": [
+            "CHROMIUM",
+            "FIREFOX",
+            "UNKNOWN"
+          ]
+        },
+        "browser_name": {
+          "enum": [
+            "GOOGLE_CHROME",
+            "MICROSOFT_EDGE",
+            "CHROMIUM",
+            "BRAVE",
+            "OPERA",
+            "FIREFOX",
+            "UNKNOWN"
+          ]
+        },
+        "artifact_type": {
+          "enum": [
+            "HISTORY_VISIT",
+            "SEARCH_TERM",
+            "DOWNLOAD"
+          ]
+        },
+        "artifact_subtype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "domain": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "search_term": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "download_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "download_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "referrer_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visit_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "typed_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "transition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw_timestamp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timestamp_semantics": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized_utc": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "case_timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayed_case_time": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "source_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "analyzer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "analyzer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_locator": {
+          "$ref": "citation.schema.json#/$defs/rawLocator"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

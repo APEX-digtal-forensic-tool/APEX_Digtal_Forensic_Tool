@@ -66,6 +66,9 @@ class ArtifactRepository(Protocol):
         artifact_count: int,
         last_error: dict[str, Any] | None,
         analyzed_at: str | None,
+        source_checkpoint: dict[str, Any] | None = None,
+        inspected_count: int | None = None,
+        source_fingerprint: str | None = None,
     ) -> None: ...
     def count_pending_artifact_sources(self, job_id: str) -> int: ...
     def has_completed_artifact_source(
@@ -76,8 +79,10 @@ class ArtifactRepository(Protocol):
         analyzer_id: str,
         analyzer_version: str,
         option_fingerprint: str,
+        source_fingerprint: str | None = None,
     ) -> bool: ...
     def save_artifacts(self, artifacts: list[ArtifactRecord]) -> int: ...
+    def save_cache_entries(self, entries: list[dict[str, Any]]) -> int: ...
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None: ...
     def query_artifacts(
         self,

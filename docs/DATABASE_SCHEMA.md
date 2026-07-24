@@ -992,47 +992,48 @@ Unique: `(evidence_id, immutable_revision)`. Application 권한과 SQLite Trigge
 
 전자서명 방식과 법적 효력은 관할 정책 검토 대상이며 DB 설계가 이를 보장하지 않는다.
 
-## 15. Machine Extraction
+## 15. Phase 5 Browser / Media / Candidate Tables
 
-### `machine_extractions`
+### Browser Tables
 
-| 컬럼 | 타입 | 제약 | 설명 |
-|---|---|---|---|
-| `id` | TEXT | PK | Extraction UUID |
-| `case_id` | TEXT | FK, NOT NULL | Case |
-| `evidence_id` | TEXT | FK, NOT NULL | Evidence |
-| `file_id` | TEXT | FK, NOT NULL | Media/File |
-| `media_type` | TEXT | NOT NULL | Image/Video/Audio/Document |
-| `extraction_type` | TEXT | NOT NULL | OCR/Frame OCR/Subtitle/STT 등 |
-| `extracted_text` | TEXT | NOT NULL | 원 Candidate Text |
-| `confidence` | REAL | NOT NULL CHECK 0..1 | Machine Confidence |
-| `language` | TEXT | NULL | 탐지 언어 |
-| `engine_id` | TEXT | NOT NULL | Provider-neutral Engine ID |
-| `engine_version` | TEXT | NOT NULL | Engine Version |
-| `frame_number` | INTEGER | NULL | Video Frame |
-| `timestamp_offset_ms` | INTEGER | NULL | Video/Audio Offset |
-| `source_region_json` | TEXT | NULL | 이미지 영역 |
-| `source_locator_json` | TEXT | NOT NULL | Raw Locator |
-| `citations_json` | TEXT | NOT NULL | Source Citation |
-| `analyst_status` | TEXT | NOT NULL | `UNREVIEWED`, `ACCEPTED`, `REJECTED`, `CORRECTED` |
-| `created_at` | TEXT | NOT NULL | 생성 UTC |
+| 테이블 | 목적 | 주요 제약 |
+|---|---|---|
+| `browser_profiles` | Profile 후보 Projection | `case_id/evidence_id/browser/profile_path` 중복 방지, `fs_nodes` 연결 |
+| `browser_analysis_jobs` | Browser 분석 Job Mirror | 기존 `jobs` FK, Profile/Options/Revision/Status 보존 |
+| `browser_checkpoints` | Browser Resume Checkpoint | 현재 Profile/Source/Path와 처리 Counter 저장 |
+| `browser_source_revisions` | Browser Source Revision | Source Fingerprint와 Analyzer Version의 Stable Unique Constraint |
+| `browser_snapshot_records` | SQLite Snapshot Audit | Main/WAL/SHM Hash, Snapshot Hash, Cleanup Policy 보존 |
+| `browser_artifacts` | History/Search/Download Projection | `artifacts` FK, Profile/DB/Table/Row Raw Locator와 Timestamp Semantics |
 
-Candidate 원문은 Update하지 않는다.
+Browser Snapshot은 원본 DB를 수정하지 않고 `/tmp` Snapshot과 WAL / SHM 조합을 기록한다.
+Application Layer Query는 `artifacts` Stable Cursor를 재사용하며 Browser Projection Table은
+Profile, Family, Name, URL, Domain, Search Term, Download Path, Source Revision 조회를 보조한다.
 
-### `machine_extraction_reviews`
+### Media Tables
 
-| 컬럼 | 타입 | 제약 | 설명 |
-|---|---|---|---|
-| `id` | TEXT | PK | Review UUID |
-| `extraction_id` | TEXT | FK, NOT NULL | Candidate |
-| `decision` | TEXT | NOT NULL | Accept/Reject/Correct |
-| `corrected_text` | TEXT | NULL | Correction Text |
-| `reason` | TEXT | NULL | 사유 |
-| `reviewed_by` | TEXT | NOT NULL | 분석자 |
-| `reviewed_at` | TEXT | NOT NULL | 검토 UTC |
+| 테이블 | 목적 | 주요 제약 |
+|---|---|---|
+| `media_analysis_jobs` | Media 분석 Job Mirror | 기존 `jobs` FK, Profile/Options/Revision/Status 보존 |
+| `media_checkpoints` | Media Resume Checkpoint | 현재 Source/Path와 처리 Counter 저장 |
+| `media_source_revisions` | Media Source Revision | Source Fingerprint와 Analyzer Version의 Stable Unique Constraint |
+| `media_artifacts` | Image/Video/Audio Metadata Projection | `artifacts` FK, Format/MIME/EXIF/GPS/Codec/Duration/Thumbnail Status 보존 |
+| `thumbnail_records` | Thumbnail Derivative Metadata | Source Fingerprint 기반 Cache Key와 Content SHA-256 보존 |
 
-Review는 Append-only이며 현재 상태는 최신 Review Projection이다. OCR/STT 결과는 승인 전에도
-Observed Fact가 아니며 Review 상태를 항상 함께 조회한다.
+Media Projection은 원본 Media를 수정하지 않는다. Thumbnail은 자동 대량 Pixel Rendering이 아니라
+Hash 검증 가능한 Derived Metadata와 Cache Reference로 저장한다.
+
+### Machine-extracted Candidate Tables
+
+| 테이블 | 목적 | 주요 제약 |
+|---|---|---|
+| `machine_extracted_candidates` | OCR/STT/Subtitle Candidate Projection | Confidence 0..1, Provider Version 필수, `CORRECTED` 시 Correction Text 필수 |
+| `candidate_review_events` | Append-only Review 이력 | Candidate FK, 이전 Review 상태와 사유 보존 |
+| `provider_capabilities` | Optional Provider Capability 상태 | Provider/Version/Capability Type 복합 PK, unavailable reason 보존 |
+
+Candidate 원문은 Update하지 않는다. Review는 별도 Event로 보존하고 최신 Review 상태만 Candidate
+Projection에 반영한다. 기본 OCR/STT Provider는 `CAPABILITY_UNAVAILABLE` 상태이며 실제 Engine을
+실행하지 않는다. OCR/STT Candidate는 승인 후에도 원 Source Citation과 Review 상태를 유지하며
+Observed Fact로 자동 승격되지 않는다.
 
 ## 16. Benchmark와 External Validation
 
@@ -1111,7 +1112,7 @@ Observed Fact가 아니며 Review 상태를 항상 함께 조회한다.
 | `search_executions`, `search_execution_options` | Search Reproduction Manager |
 | `custody_events` | Chain of Custody Ledger |
 | `custody_hash_verifications`, `custody_snapshots`, `custody_approvals` | Custody Verification Service |
-| `machine_extractions`, `machine_extraction_reviews` | Media Extraction Candidate Store |
+| `machine_extracted_candidates`, `candidate_review_events`, `provider_capabilities` | Media Extraction Candidate Store |
 | `benchmark_runs`, `benchmark_measurements`, `external_validation_reviews` | External Validation Plan |
 
 Live Progress와 Live GUI Context는 Session Store를 우선한다. 재현, Audit, Recovery와 Report에

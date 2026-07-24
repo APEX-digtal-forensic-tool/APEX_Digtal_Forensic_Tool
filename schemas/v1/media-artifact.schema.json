@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/media-artifact.schema.json",
+  "title": "APEX Media Artifact",
+  "$ref": "#/$defs/mediaArtifact",
+  "$defs": {
+    "mediaArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "media_artifact_id",
+        "case_id",
+        "evidence_id",
+        "source_node_id",
+        "source_path",
+        "media_type",
+        "format",
+        "mime_candidate",
+        "size_bytes",
+        "width",
+        "height",
+        "duration_ms",
+        "frame_rate",
+        "video_codec",
+        "audio_codec",
+        "sample_rate",
+        "channels",
+        "bit_rate",
+        "creation_time_raw",
+        "creation_time_utc",
+        "modified_time_raw",
+        "gps_latitude",
+        "gps_longitude",
+        "gps_altitude",
+        "camera_make",
+        "camera_model",
+        "software",
+        "orientation",
+        "metadata",
+        "thumbnail_status",
+        "analyzer_id",
+        "analyzer_version",
+        "backend_id",
+        "backend_version",
+        "source_revision",
+        "raw_locator",
+        "citations",
+        "is_partial",
+        "created_at"
+      ],
+      "properties": {
+        "media_artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "media_type": {
+          "enum": [
+            "IMAGE",
+            "VIDEO",
+            "AUDIO",
+            "UNKNOWN"
+          ]
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_candidate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "width": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "height": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "frame_rate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "video_codec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audio_codec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sample_rate": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "channels": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bit_rate": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "creation_time_raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "creation_time_utc": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "modified_time_raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gps_latitude": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gps_longitude": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gps_altitude": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "camera_make": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "camera_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "software": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "orientation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "thumbnail_status": {
+          "enum": [
+            "NOT_REQUESTED",
+            "GENERATED",
+            "UNSUPPORTED",
+            "FAILED",
+            "SKIPPED_LIMIT",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "analyzer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "analyzer_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "raw_locator": {
+          "$ref": "citation.schema.json#/$defs/rawLocator"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

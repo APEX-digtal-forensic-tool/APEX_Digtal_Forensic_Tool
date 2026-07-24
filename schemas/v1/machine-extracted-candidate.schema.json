@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/machine-extracted-candidate.schema.json",
+  "title": "APEX Machine-extracted Candidate",
+  "$ref": "#/$defs/machineExtractedCandidate",
+  "$defs": {
+    "machineExtractedCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "case_id",
+        "evidence_id",
+        "source_node_id",
+        "source_type",
+        "extraction_type",
+        "text",
+        "language",
+        "confidence",
+        "provider_id",
+        "provider_version",
+        "model_id",
+        "region",
+        "frame_number",
+        "media_timestamp_ms",
+        "audio_start_ms",
+        "audio_end_ms",
+        "raw_locator",
+        "citations",
+        "review_status",
+        "reviewed_by",
+        "reviewed_at",
+        "correction_text",
+        "source_revision",
+        "is_partial",
+        "created_at",
+        "candidate_semantics"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_type": {
+          "enum": [
+            "IMAGE",
+            "VIDEO_FRAME",
+            "AUDIO",
+            "DOCUMENT",
+            "OTHER"
+          ]
+        },
+        "extraction_type": {
+          "enum": [
+            "OCR",
+            "STT",
+            "SUBTITLE",
+            "SCREEN_TEXT",
+            "OTHER"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provider_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "region": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_number": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "media_timestamp_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "audio_start_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "audio_end_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "raw_locator": {
+          "$ref": "citation.schema.json#/$defs/rawLocator"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "citation.schema.json#/$defs/citation"
+          }
+        },
+        "review_status": {
+          "enum": [
+            "UNREVIEWED",
+            "ACCEPTED",
+            "REJECTED",
+            "CORRECTED"
+          ]
+        },
+        "reviewed_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewed_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "correction_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "is_partial": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_semantics": {
+          "const": "MACHINE_EXTRACTED_CANDIDATE_NOT_OBSERVED_FACT"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "review_status": {
+                "const": "CORRECTED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "correction_text": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
