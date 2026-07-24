@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import sys
 from contextlib import suppress
@@ -10,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from apex_forensic.adapters.artifacts import browser as browser_adapter
 from apex_forensic.adapters.artifacts import media as media_adapter
 from apex_forensic.config import build_services
 from apex_forensic.domain.enums import (
@@ -551,6 +551,156 @@ def test_phase5_browser_wal_reanalysis_reuse_and_reopen(tmp_path: Path) -> None:
             services.close()
 
 
+def test_phase5_browser_snapshot_does_not_require_posix_tmp(
+    services,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_temporary_directory = browser_adapter.tempfile.TemporaryDirectory
+    tempdir_locations: list[str | None] = []
+
+    def temporary_directory(*args, **kwargs):
+        tempdir_locations.append(kwargs.get("dir"))
+        if kwargs.get("dir") == "/tmp":
+            raise FileNotFoundError("simulated Windows environment without /tmp")
+        return original_temporary_directory(*args, **kwargs)
+
+    monkeypatch.setattr(browser_adapter.tempfile, "TemporaryDirectory", temporary_directory)
+
+    evidence_dir = tmp_path / "windows-temp-browser"
+    browser_dir = evidence_dir / "Chrome" / "Default"
+    browser_dir.mkdir(parents=True)
+    _create_chromium_history(browser_dir / "History")
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    job, _ = services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["browser.history"],
+    )
+
+    assert job.status == "SUCCEEDED"
+    assert tempdir_locations == [None]
+    visits = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.BROWSER_VISIT)
+    )
+    assert visits.returned == 1
+
+
+def test_phase5_browser_snapshot_connection_closes_before_cleanup(
+    services,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    original_temporary_directory = browser_adapter.tempfile.TemporaryDirectory
+
+    class TrackingTemporaryDirectory:
+        def __init__(self, *args, **kwargs) -> None:
+            self._inner = original_temporary_directory(*args, **kwargs)
+            self.name = self._inner.name
+
+        def __enter__(self) -> str:
+            return str(self._inner.__enter__())
+
+        def __exit__(self, *args) -> object:
+            events.append("cleanup")
+            assert "close" in events
+            assert events.index("close") < events.index("cleanup")
+            return self._inner.__exit__(*args)
+
+        def cleanup(self) -> None:
+            events.append("cleanup")
+            assert "close" in events
+            assert events.index("close") < events.index("cleanup")
+            self._inner.cleanup()
+
+    class TrackingConnection(sqlite3.Connection):
+        def close(self) -> None:
+            events.append("close")
+            super().close()
+
+    def connect_read_only(path: Path) -> sqlite3.Connection:
+        resolved = path.resolve(strict=True)
+        uri = f"{resolved.as_uri()}?mode=ro"
+        return sqlite3.connect(uri, uri=True, factory=TrackingConnection)
+
+    monkeypatch.setattr(browser_adapter.tempfile, "TemporaryDirectory", TrackingTemporaryDirectory)
+    monkeypatch.setattr(browser_adapter, "_connect_read_only", connect_read_only)
+
+    evidence_dir = tmp_path / "close-before-cleanup"
+    browser_dir = evidence_dir / "Chrome" / "Default"
+    browser_dir.mkdir(parents=True)
+    _create_chromium_history(browser_dir / "History")
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    job, _ = services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["browser.history"],
+    )
+
+    assert job.status == "SUCCEEDED"
+    assert events == ["close", "cleanup"]
+    visits = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.BROWSER_VISIT)
+    )
+    assert visits.returned == 1
+
+
+def test_phase5_browser_snapshot_cleanup_failure_is_reported_after_extraction(
+    services,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_temporary_directory = browser_adapter.tempfile.TemporaryDirectory
+
+    class CleanupFailureTemporaryDirectory:
+        def __init__(self, *args, **kwargs) -> None:
+            self._inner = original_temporary_directory(*args, **kwargs)
+            self.name = self._inner.name
+
+        def __enter__(self) -> str:
+            return str(self._inner.__enter__())
+
+        def __exit__(self, *args) -> object:
+            self._inner.__exit__(*args)
+            raise OSError("simulated snapshot cleanup failure")
+
+        def cleanup(self) -> None:
+            self._inner.cleanup()
+            raise OSError("simulated snapshot cleanup failure")
+
+    monkeypatch.setattr(
+        browser_adapter.tempfile,
+        "TemporaryDirectory",
+        CleanupFailureTemporaryDirectory,
+    )
+
+    evidence_dir = tmp_path / "cleanup-failure"
+    browser_dir = evidence_dir / "Chrome" / "Default"
+    browser_dir.mkdir(parents=True)
+    _create_chromium_history(browser_dir / "History")
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    job, _ = services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["browser.history"],
+    )
+
+    assert job.status == "PARTIAL"
+    assert {warning["code"] for warning in job.warnings} == {"BROWSER_SNAPSHOT_CLEANUP_FAILED"}
+    assert not job.errors
+    visits = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.BROWSER_VISIT)
+    )
+    assert visits.returned == 1
+
+
 def _browser_revision_count(services) -> int:
     row = services.repository.connection.execute(
         "SELECT COUNT(DISTINCT source_fingerprint) AS count FROM browser_source_revisions"
@@ -935,6 +1085,12 @@ def test_phase5_ffprobe_bounded_output_timeout_and_argv_safety(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    class SelectorSentinel:
+        def __getattr__(self, name: str):
+            raise AssertionError(f"selector-based pipe reader was used: {name}")
+
+    monkeypatch.setattr(media_adapter, "selectors", SelectorSentinel(), raising=False)
+
     stdout_limit = media_adapter._run_bounded_process(
         [sys.executable, "-c", "import sys; sys.stdout.write('x' * 2048)"],
         timeout=3,
@@ -961,20 +1117,30 @@ def test_phase5_ffprobe_bounded_output_timeout_and_argv_safety(
     )
     assert unavailable["warnings"][0]["code"] == "FFPROBE_CAPABILITY_UNAVAILABLE"
 
-    fake = tmp_path / "ffprobe"
-    fake.write_text(
-        "#!/usr/bin/env python3\n"
+    injected_path = tmp_path / "clip.mp4;touch SHOULD_NOT_EXIST"
+    injected_path.write_bytes(b"fake")
+    captured_args: list[list[str]] = []
+    real_popen = media_adapter.subprocess.Popen
+    ffprobe_payload = (
         "import json\n"
         "print(json.dumps({'format': {'format_name': 'mov,mp4,m4a,3gp,3g2,mj2', "
         "'duration': '1.5', 'tags': {'creation_time': '2024-01-02T03:04:05+09:00'}}, "
         "'streams': [{'codec_type': 'video', 'codec_name': 'h264', 'width': 640, "
-        "'height': 480}]}))\n",
-        encoding="utf-8",
+        "'height': 480}]}))\n"
     )
-    os.chmod(fake, 0o755)
-    monkeypatch.setattr(media_adapter.shutil, "which", lambda _name: str(fake))
-    injected_path = tmp_path / "clip.mp4;touch SHOULD_NOT_EXIST"
-    injected_path.write_bytes(b"fake")
+
+    def popen_ffprobe(args, *popen_args, **popen_kwargs):
+        captured_args.append(list(args))
+        assert popen_kwargs.get("shell") is not True
+        return real_popen(
+            [sys.executable, "-c", ffprobe_payload],
+            *popen_args,
+            **popen_kwargs,
+        )
+
+    monkeypatch.setattr(media_adapter.shutil, "which", lambda _name: str(tmp_path / "ffprobe"))
+    monkeypatch.setattr(media_adapter.subprocess, "Popen", popen_ffprobe)
+
     normal = media_adapter._ffprobe_metadata(file_path=injected_path, media_kind="VIDEO")
     assert normal["parse_status"] is ArtifactParseStatus.SUCCESS
     assert normal["metadata"]["width"] == 640
@@ -982,6 +1148,8 @@ def test_phase5_ffprobe_bounded_output_timeout_and_argv_safety(
         "2024-01-01T18:04:05.000000Z"
     )
     assert not (tmp_path / "SHOULD_NOT_EXIST").exists()
+    assert captured_args[0][-1] == str(injected_path)
+    assert "clip.mp4;touch SHOULD_NOT_EXIST" in captured_args[0][-1]
 
 
 def test_phase5_candidate_review_workflow_preserves_original_text(services, tmp_path: Path) -> None:
