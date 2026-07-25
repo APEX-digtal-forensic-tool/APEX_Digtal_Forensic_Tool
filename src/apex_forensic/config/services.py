@@ -19,12 +19,15 @@ from apex_forensic.adapters.system import SystemClock, UuidGenerator
 from apex_forensic.application.services import (
     ArtifactAnalysisService,
     CaseManager,
+    ContextService,
     CustodyLedger,
+    EngineInterfaceService,
     EvidenceManager,
     FileSystemIndexService,
     MachineExtractionService,
     SearchService,
     TimelineService,
+    ViewProjectionService,
 )
 
 
@@ -41,6 +44,10 @@ class ServiceBundle:
     search: SearchService
     timeline: TimelineService
     candidates: MachineExtractionService
+    contexts: ContextService
+    context: ContextService
+    views: ViewProjectionService
+    interface: EngineInterfaceService
 
     def close(self) -> None:
         """Close underlying resources."""
@@ -113,6 +120,20 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         clock=clock,
         id_generator=ids,
     )
+    contexts = ContextService(repository=repository, clock=clock, id_generator=ids)
+    views = ViewProjectionService(
+        repository=repository,
+        contexts=contexts,
+        clock=clock,
+        id_generator=ids,
+    )
+    interface = EngineInterfaceService(
+        repository=repository,
+        contexts=contexts,
+        views=views,
+        clock=clock,
+        id_generator=ids,
+    )
     cases = CaseManager(repository=repository, clock=clock, id_generator=ids)
     return ServiceBundle(
         repository=repository,
@@ -124,4 +145,8 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         search=search,
         timeline=timeline,
         candidates=candidates,
+        contexts=contexts,
+        context=contexts,
+        views=views,
+        interface=interface,
     )

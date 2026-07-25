@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/raw-read-request.schema.json",
+  "title": "APEX Raw Read Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "case_id",
+    "resource_type",
+    "resource_id",
+    "offset",
+    "length"
+  ],
+  "properties": {
+    "case_id": {
+      "$ref": "#/$defs/id"
+    },
+    "resource_type": {
+      "enum": [
+        "EVIDENCE",
+        "FILE_SYSTEM_NODE",
+        "ARTIFACT",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "TIMELINE_EVENT",
+        "SEARCH_RESULT",
+        "MACHINE_CANDIDATE",
+        "CUSTODY_EVENT",
+        "CONTEXT_SNAPSHOT",
+        "OTHER"
+      ]
+    },
+    "resource_id": {
+      "$ref": "#/$defs/id"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "length": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 1048576
+    },
+    "correlation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "warningArray": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/warning"
+      }
+    },
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    }
+  }
+}

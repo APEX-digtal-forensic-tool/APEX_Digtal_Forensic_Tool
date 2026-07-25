@@ -124,3 +124,109 @@ class StateConflictError(ApexError):
             target=target,
             details={},
         )
+
+
+class ContextError(ApexError):
+    """Raised for structured Phase 6 context contract violations."""
+
+    def __init__(
+        self,
+        code: str,
+        developer_message: str,
+        *,
+        target: str | None = None,
+        retryable: bool = False,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=code,
+            message_key=f"error.{code.lower()}",
+            developer_message=developer_message,
+            target=target,
+            retryable=retryable,
+            details=details or {},
+        )
+
+
+class ContextRevisionConflictError(ContextError):
+    """Raised when an optimistic-lock context revision check fails."""
+
+    def __init__(self, developer_message: str, *, target: str | None = None) -> None:
+        super().__init__(
+            "CONTEXT_REVISION_CONFLICT",
+            developer_message,
+            target=target,
+            retryable=True,
+        )
+
+
+class ContextExpiredError(ContextError):
+    """Raised when a live GUI context is modified after expiration."""
+
+    def __init__(self, developer_message: str, *, target: str | None = None) -> None:
+        super().__init__("CONTEXT_EXPIRED", developer_message, target=target)
+
+
+class ContextScopeMismatchError(ContextError):
+    """Raised when selected resources do not belong to the target case/context."""
+
+    def __init__(
+        self,
+        developer_message: str,
+        *,
+        target: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            "CONTEXT_SCOPE_MISMATCH",
+            developer_message,
+            target=target,
+            details=details,
+        )
+
+
+class ContextSelectionLimitExceededError(ContextError):
+    """Raised when a context selection exceeds the configured item budget."""
+
+    def __init__(self, developer_message: str, *, target: str | None = None) -> None:
+        super().__init__("CONTEXT_SELECTION_LIMIT_EXCEEDED", developer_message, target=target)
+
+
+class ContextFilterLimitExceededError(ContextError):
+    """Raised when filter/preferences JSON is too large or too deeply nested."""
+
+    def __init__(self, developer_message: str, *, target: str | None = None) -> None:
+        super().__init__("CONTEXT_FILTER_LIMIT_EXCEEDED", developer_message, target=target)
+
+
+class CursorInvalidError(ApexError):
+    """Raised when an opaque cursor cannot be decoded for the requested page."""
+
+    def __init__(self, developer_message: str, *, target: str | None = None) -> None:
+        super().__init__(
+            code="CURSOR_INVALID",
+            message_key="error.cursor_invalid",
+            developer_message=developer_message,
+            target=target,
+            details={},
+        )
+
+
+class RawReadError(ApexError):
+    """Raised for safe raw range reader contract violations."""
+
+    def __init__(
+        self,
+        code: str,
+        developer_message: str,
+        *,
+        target: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=code,
+            message_key=f"error.{code.lower()}",
+            developer_message=developer_message,
+            target=target,
+            details=details or {},
+        )

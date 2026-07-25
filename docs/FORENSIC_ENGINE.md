@@ -1424,3 +1424,9 @@ Timeline Generator는 filesystem created/modified/accessed/changed, registry obs
 Event Log SystemTime, Prefetch last run candidate를 event로 변환한다. Raw/UTC/case time을 분리하고
 timezone source/confidence, semantics, precision, raw locator, citation, partial flag를 보존한다.
 Event ID나 Prefetch만으로 악성 여부 또는 사용자 실행 사실을 확정하지 않는다.
+
+## Phase 6 Runtime Notes
+
+The executable Phase 6 layer stores live GUI session contexts separately from immutable analysis snapshots. Session contexts carry route, selection, filter, time range, keyword/search/timeline references, schema version, revision, TTL, and actor fields; snapshot creation resolves selected resources into case-scoped bundles with deterministic fingerprints and previous-snapshot linkage.
+
+View projection is split into Simple, Detailed, and Raw modes. Simple mode returns compact finding-oriented fields, Detailed mode preserves technical payload and provenance, and Raw mode exposes only validated locator metadata plus bounded read entry points. The public engine interface reports schema/API versions, supported tools, limits, and structured success/error responses for adapter consumers.

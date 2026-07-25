@@ -657,3 +657,9 @@ opaque base64 JSON with deterministic tie-breakers.
 
 The architecture deliberately omits file body indexing, AI/LLM, GUI/web/MCP server, OCR/STT, report
 rendering, disk image internals, deleted/slack search, and live acquisition in this phase.
+
+## 31. Phase 6 Runtime Architecture
+
+Phase 6 adds application services for GUI context, scope context, view projection, raw reading, and adapter-facing engine discovery. The services depend on domain models, repository methods, clocks, and ID ports; they do not import GUI, HTTP, MCP, LLM, or prompt code.
+
+The context path is `GuiSessionContext -> AnalysisContextSnapshot -> AnalysisScopeContext -> ViewProjection`. Each transition validates case ownership and source revisions, preserves partial/stale metadata, and keeps snapshots append-only. Raw access is a read-only range reader with evidence-root validation, symlink escape prevention, byte limits, logical locator support, and audit recording.

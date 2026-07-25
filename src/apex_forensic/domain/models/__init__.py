@@ -21,6 +21,16 @@ from apex_forensic.domain.models.browser_media import (
     ThumbnailRecord,
 )
 from apex_forensic.domain.models.case import Case
+from apex_forensic.domain.models.context import (
+    AnalysisContextSnapshot,
+    AnalysisScopeContext,
+    EngineInterfaceVersion,
+    EngineToolDescriptor,
+    GuiSessionContext,
+    RawViewProjection,
+    RevisionState,
+    ViewProjection,
+)
 from apex_forensic.domain.models.custody import CustodyEvent, HashVerification
 from apex_forensic.domain.models.evidence import Evidence, EvidenceFingerprint, HashRecord
 from apex_forensic.domain.models.filesystem import (
@@ -51,6 +61,8 @@ from apex_forensic.domain.models.timeline import (
 )
 
 __all__ = [
+    "AnalysisContextSnapshot",
+    "AnalysisScopeContext",
     "ArtifactAnalysisResult",
     "ArtifactCapability",
     "ArtifactCoverage",
@@ -65,10 +77,13 @@ __all__ = [
     "Case",
     "CursorPage",
     "CustodyEvent",
+    "EngineInterfaceVersion",
+    "EngineToolDescriptor",
     "Evidence",
     "EvidenceFingerprint",
     "FileSystemNode",
     "FileTreePage",
+    "GuiSessionContext",
     "HashRecord",
     "HashVerification",
     "IndexCoverage",
@@ -80,6 +95,8 @@ __all__ = [
     "MediaArtifact",
     "Phase5Checkpoint",
     "ProviderCapability",
+    "RawViewProjection",
+    "RevisionState",
     "SearchCacheEntry",
     "SearchDocument",
     "SearchExecution",
@@ -94,4 +111,5 @@ __all__ = [
     "TimelineQuery",
     "TimestampNormalization",
     "TimezoneCandidate",
+    "ViewProjection",
 ]

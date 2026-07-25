@@ -1194,3 +1194,9 @@ Timeline:
 
 Phase 4 migrations are idempotent and keep WAL, foreign keys, and custody append-only triggers. Search
 or Timeline cache/delete behavior does not delete original evidence, filesystem nodes, or artifacts.
+
+## Phase 6 Implemented Tables
+
+Phase 6 introduces SQLite persistence for `gui_session_contexts`, `gui_session_context_revisions`, `analysis_context_snapshots`, `analysis_scope_contexts`, `context_snapshot_resources`, `context_revision_states`, `view_projections`, `view_projection_cache`, `raw_read_audit_records`, `engine_interface_versions`, and `engine_tool_descriptors`.
+
+`analysis_context_snapshots` and `raw_read_audit_records` are protected by append-only update/delete triggers. Session-context revisions record before/after JSON for auditability while the current live row remains mutable until expiry. Snapshot/resource and scope/resource tables preserve resolved resource membership separately from the JSON projection so paging and stale-source checks do not require rehydrating full context payloads.

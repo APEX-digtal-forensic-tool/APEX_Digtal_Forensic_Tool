@@ -65,3 +65,13 @@ Foundation. The implementation keeps Phase 2+ behavior out of runtime code.
 | Candidate review is implemented without OCR/STT execution | OCR/STT output must stay provider-neutral and cannot become observed fact automatically. | `MachineExtractionService` persists unavailable OCR/STT capabilities, immutable candidates, append-only review events, and requires correction text for `CORRECTED`. |
 | Corrupt media/browser sources produce partial facts | One damaged file or SQLite database must not stop the whole artifact job. | Damaged media and browser DBs return `CORRUPT`/`UNSUPPORTED` artifacts with warnings; the coordinator continues remaining sources and marks coverage partial. |
 | Email and messengers remain plugin scope | The Phase 5 roadmap explicitly excludes Email, Discord, Telegram, KakaoTalk, and other messengers from completion criteria. | No messenger parser is registered in core; browser cache bodies, passwords, deleted records, and cloud sync stay unsupported. |
+
+## Phase 6 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| Live context and immutable snapshots use separate tables | GUI state changes frequently, while AI/report context needs reproducible evidence bundles. | `gui_session_contexts` remains mutable until TTL expiry; `analysis_context_snapshots` is append-only and content-fingerprinted. |
+| Context fingerprints exclude transient provenance | Snapshot IDs, creation timestamps, actor IDs, and previous links should not change the hash of equivalent selected evidence. | Equivalent resolved context produces stable SHA-256 fingerprints while previous-snapshot lineage is stored separately. |
+| Raw reads are service-level bounded operations | Raw View must not load full evidence files or bypass case/evidence validation. | `SafeRawRangeReader` enforces root containment, offset/length limits, logical locator rules, EOF behavior, and audit records. |
+| MCP is represented as an adapter boundary only | Core Phase 6 must expose contracts without coupling to a transport, prompts, or provider credentials. | `EngineInterfaceService` publishes version/capability/tool descriptors and structured responses; no MCP server or LLM code is imported. |
+| Scope paging uses persisted resource membership | Large analysis contexts should not require reserializing a full snapshot for every page. | Snapshot and scope resource tables preserve included/excluded resource IDs for bounded pagination and stale-source refresh. |

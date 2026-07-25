@@ -358,3 +358,9 @@ Still deferred to later phases: arbitrary file body FTS, Office/PDF extraction, 
 artifact parsers, deleted/slack/unallocated search, disk image internal parsers, YARA, AI keyword
 recommendation, LLM/agent loops, GUI/web/MCP server, report rendering, broad timezone auto-confirmation,
 and benchmark performance claims.
+
+## Phase 6 Implementation Status
+
+Phase 6 is implemented for the Python/SQLite engine: revisioned live context, immutable analysis snapshots, scope-specific context, stale/partial source tracking, Simple/Detailed/Raw projections, bounded read-only raw range access, public engine interface metadata, CLI coverage, JSON schemas, and unit/integration tests are present.
+
+The deferred boundary is unchanged: actual MCP server registration, GUI transport, LLM provider calls, prompts, agent loops, and AI enrichment logic remain outside Phase 6 and belong to adapter or Phase 7 work.

@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/raw-view.schema.json",
+  "title": "APEX Raw View Projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "projection_id",
+    "case_id",
+    "evidence_id",
+    "resource_type",
+    "resource_id",
+    "source_path",
+    "raw_locator",
+    "locator_type",
+    "requested_offset",
+    "requested_length",
+    "returned_offset",
+    "returned_length",
+    "total_length",
+    "encoding",
+    "content_type",
+    "hex_preview",
+    "text_preview",
+    "structured_raw_fields",
+    "truncated",
+    "hash",
+    "citations",
+    "warnings",
+    "source_revision",
+    "created_at"
+  ],
+  "properties": {
+    "projection_id": {
+      "$ref": "#/$defs/id"
+    },
+    "case_id": {
+      "$ref": "#/$defs/id"
+    },
+    "evidence_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "resource_type": {
+      "enum": [
+        "EVIDENCE",
+        "FILE_SYSTEM_NODE",
+        "ARTIFACT",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "TIMELINE_EVENT",
+        "SEARCH_RESULT",
+        "MACHINE_CANDIDATE",
+        "CUSTODY_EVENT",
+        "CONTEXT_SNAPSHOT",
+        "OTHER"
+      ]
+    },
+    "resource_id": {
+      "$ref": "#/$defs/id"
+    },
+    "source_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "raw_locator": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "locator_type": {
+      "enum": [
+        "FILE_BYTE_RANGE",
+        "FILE_LOGICAL_FIELD",
+        "SQLITE_ROW",
+        "SQLITE_TABLE_ROW_COLUMN",
+        "REGISTRY_KEY",
+        "REGISTRY_VALUE",
+        "EVENT_RECORD",
+        "PREFETCH_FIELD",
+        "EXIF_TAG",
+        "MEDIA_METADATA_FIELD",
+        "TIMELINE_SOURCE",
+        "SEARCH_DOCUMENT",
+        "DERIVED_DATA",
+        "UNKNOWN"
+      ]
+    },
+    "requested_offset": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "requested_length": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 1048576
+    },
+    "returned_offset": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "returned_length": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1048576
+    },
+    "total_length": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "encoding": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "content_type": {
+      "type": "string"
+    },
+    "hex_preview": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "text_preview": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "structured_raw_fields": {
+      "$ref": "#/$defs/metadata"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "hash": {
+      "$ref": "#/$defs/metadata"
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "source_revision": {
+      "type": [
+        "string",
+        "integer",
+        "null"
+      ]
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "warningArray": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/warning"
+      }
+    },
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    }
+  }
+}

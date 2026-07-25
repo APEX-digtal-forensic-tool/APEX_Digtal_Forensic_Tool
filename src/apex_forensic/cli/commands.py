@@ -11,7 +11,9 @@ from typing import Any
 
 from apex_forensic.config import build_services
 from apex_forensic.domain.enums import (
+    AnalysisContextPurpose,
     AnalysisProfileType,
+    AnalysisScopeType,
     ArtifactParseStatus,
     ArtifactType,
     CaseStatus,
@@ -20,6 +22,7 @@ from apex_forensic.domain.enums import (
     KeywordMatchMode,
     KeywordSetStatus,
     KeywordType,
+    ResourceType,
     SearchDocumentType,
     SearchQueryMode,
     SearchSourceType,
@@ -82,6 +85,12 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _keyword_set(args, services)
     if args.command == "timeline":
         return _timeline(args, services)
+    if args.command == "context":
+        return _context(args, services)
+    if args.command == "view":
+        return _view(args, services)
+    if args.command == "interface":
+        return _interface(args, services)
     raise ValidationError("Unknown command.", target="command")
 
 
@@ -623,6 +632,154 @@ def _timeline(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown timeline command.", target="timeline_command")
 
 
+def _context(args: Namespace, services: Any) -> Any:
+    if args.context_command == "create":
+        return services.contexts.create(
+            session_id=args.session_id,
+            case_id=args.case_id,
+            actor_id=args.actor_id,
+            locale=args.locale,
+            timezone=args.timezone,
+            current_route=args.current_route,
+            current_panel=args.current_panel,
+            active_evidence_id=args.evidence_id,
+            selected_file_node_ids=args.file_node_id,
+            selected_artifact_ids=args.artifact_id,
+            selected_timeline_event_ids=args.timeline_event_id,
+            selected_search_result_ids=args.search_result_id,
+            selected_media_artifact_ids=args.media_artifact_id,
+            selected_browser_artifact_ids=args.browser_artifact_id,
+            selected_candidate_ids=args.candidate_id,
+            active_filters=_json_arg(args.filters_json, "filters_json"),
+            active_sort=_json_arg(args.sort_json, "sort_json"),
+            active_time_range=_json_arg(args.time_range_json, "time_range_json"),
+            active_keyword_set_id=args.keyword_set_id,
+            active_keyword_set_version=args.keyword_set_version,
+            active_search_execution_id=args.search_execution_id,
+            active_timeline_revision=args.timeline_revision,
+            active_context_scope=AnalysisScopeType(args.scope),
+            ui_preferences=_json_arg(args.ui_preferences_json, "ui_preferences_json"),
+            expires_at=args.expires_at,
+        ).to_schema_dict()
+    if args.context_command == "get":
+        return services.contexts.get(args.session_context_id).to_schema_dict()
+    if args.context_command == "update":
+        updates = _context_updates(args)
+        return services.contexts.update(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+            **updates,
+        ).to_schema_dict()
+    if args.context_command == "select":
+        return services.contexts.select_items(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+            resource_type=ResourceType(args.resource_type),
+            resource_ids=args.resource_id,
+            mode=args.mode,
+        ).to_schema_dict()
+    if args.context_command == "filters":
+        return services.contexts.set_filters(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+            filters=_json_arg(args.filters_json, "filters_json"),
+        ).to_schema_dict()
+    if args.context_command == "snapshot":
+        return services.contexts.build_from_session(
+            args.session_context_id,
+            purpose=AnalysisContextPurpose(args.purpose),
+            scopes=args.scope,
+            previous_snapshot_id=args.previous_snapshot_id,
+        ).to_schema_dict()
+    if args.context_command == "snapshot-show":
+        return services.contexts.get_snapshot(args.context_snapshot_id).to_schema_dict()
+    if args.context_command == "compare":
+        if args.left_snapshot_id and args.right_snapshot_id:
+            return services.contexts.compare(args.left_snapshot_id, args.right_snapshot_id)
+        return services.contexts.compare_revisions(
+            args.session_context_id,
+            args.left_revision,
+            args.right_revision,
+        )
+    if args.context_command == "scopes":
+        return [
+            item.to_schema_dict()
+            for item in services.contexts.list_scopes(args.context_snapshot_id)
+        ]
+    if args.context_command == "scope-page":
+        return services.contexts.paginate_scope(
+            args.context_snapshot_id,
+            AnalysisScopeType(args.scope),
+            cursor=args.cursor,
+            limit=args.limit,
+        )
+    if args.context_command == "refresh":
+        if args.context_snapshot_id:
+            return services.contexts.refresh(args.context_snapshot_id).to_schema_dict()
+        return services.contexts.refresh_revision_state(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+        )
+    if args.context_command == "expire":
+        return services.contexts.expire(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+        ).to_schema_dict()
+    raise ValidationError("Unknown context command.", target="context_command")
+
+
+def _view(args: Namespace, services: Any) -> Any:
+    if args.view_command == "simple":
+        return services.views.simple(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            redaction_policy=args.redaction_policy,
+        ).to_schema_dict()
+    if args.view_command == "detailed":
+        return services.views.detailed(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            redaction_policy=args.redaction_policy,
+        ).to_schema_dict()
+    if args.view_command == "raw":
+        return services.views.raw(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            redaction_policy=args.redaction_policy,
+        ).to_schema_dict()
+    if args.view_command == "raw-read":
+        return services.views.raw_read(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            offset=args.offset,
+            length=args.length,
+            correlation_id=args.correlation_id,
+        ).to_schema_dict()
+    if args.view_command == "capabilities":
+        return services.views.capabilities()
+    raise ValidationError("Unknown view command.", target="view_command")
+
+
+def _interface(args: Namespace, services: Any) -> Any:
+    if args.interface_command == "version":
+        return services.interface.version().to_schema_dict()
+    if args.interface_command == "tools":
+        return [item.to_schema_dict() for item in services.interface.tools()]
+    if args.interface_command == "capability":
+        return services.interface.capability(args.capability)
+    if args.interface_command == "invoke-read":
+        return services.interface.invoke_read(
+            args.operation,
+            _json_arg(args.payload_json, "payload_json"),
+            correlation_id=args.correlation_id,
+        )
+    raise ValidationError("Unknown interface command.", target="interface_command")
+
+
 def _hash_record_output(record: Any) -> dict[str, Any]:
     return {
         "hash_id": record.hash_id,
@@ -636,6 +793,49 @@ def _hash_record_output(record: Any) -> dict[str, Any]:
         "verification_status": record.verification_status,
         "bytes_hashed": record.bytes_hashed,
     }
+
+
+def _json_arg(value: str | None, target: str) -> dict[str, Any]:
+    if value in {None, ""}:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValidationError("Invalid JSON option.", target=target) from error
+    if not isinstance(parsed, dict):
+        raise ValidationError("JSON option must be an object.", target=target)
+    return parsed
+
+def _context_updates(args: Namespace) -> dict[str, Any]:
+    updates: dict[str, Any] = {}
+    for attr in (
+        "session_id",
+        "actor_id",
+        "locale",
+        "timezone",
+        "current_route",
+        "current_panel",
+        "active_evidence_id",
+        "active_keyword_set_id",
+        "active_keyword_set_version",
+        "active_search_execution_id",
+        "active_timeline_revision",
+        "expires_at",
+    ):
+        value = getattr(args, attr, None)
+        if value is not None:
+            updates[attr] = value
+    if args.scope is not None:
+        updates["active_context_scope"] = args.scope
+    if args.filters_json is not None:
+        updates["active_filters"] = _json_arg(args.filters_json, "filters_json")
+    if args.sort_json is not None:
+        updates["active_sort"] = _json_arg(args.sort_json, "sort_json")
+    if args.time_range_json is not None:
+        updates["active_time_range"] = _json_arg(args.time_range_json, "time_range_json")
+    if args.ui_preferences_json is not None:
+        updates["ui_preferences"] = _json_arg(args.ui_preferences_json, "ui_preferences_json")
+    return updates
 
 
 def _parse_algorithm(value: str) -> HashAlgorithm:

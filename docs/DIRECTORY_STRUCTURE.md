@@ -306,3 +306,9 @@ tests/unit/test_phase5_media_browser.py
 Phase 5 keeps Browser and Media analyzers under the existing artifact adapter boundary and adds only
 provider-neutral ports for Browser, Media, and Machine Extraction. It does not add GUI, MCP, LLM,
 OCR/STT engine, browser credential, or report-renderer execution directories.
+
+## Phase 6 구현 구조
+
+Phase 6 runtime code lives in `src/apex_forensic/application/services/context.py`, with DTOs in `src/apex_forensic/domain/models/context.py` and the raw reader boundary in `src/apex_forensic/ports/raw_reader.py`. SQLite persistence is implemented in `src/apex_forensic/adapters/persistence/sqlite/repository.py`, and CLI wiring is in `src/apex_forensic/cli/parser.py` and `src/apex_forensic/cli/commands.py`.
+
+Phase 6 schemas are added under `schemas/v1` for GUI session context, analysis snapshots, scope context, revision state, view projection, raw view, raw read request/response, engine interface, and engine tool descriptors. Focused tests live in `tests/unit/test_phase6_context_views.py` and `tests/integration/test_phase6_cli_workflow.py`.

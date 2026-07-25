@@ -379,3 +379,9 @@ projection, FTS search, GUI, MCP, OCR/STT, and LLM behavior remain outside Phase
 
 Phase 4 modules do not implement AI recommendation, file body extraction, GUI/web/MCP, OCR/STT,
 report rendering, live acquisition, or credential/secret extraction.
+
+## 12. Phase 6 Implemented Responsibilities
+
+`ContextService` owns live GUI context validation, optimistic revision checks, TTL expiry, snapshot creation, scope generation, source-revision refresh, scope paging, and case-bound resource resolution. It rejects cross-case resources, excessive selections, excessive filter depth, and secret/prompt/raw-blob metadata in adapter-bound context.
+
+`ViewProjectionService` owns Simple, Detailed, and Raw projections from snapshots or resources. `SafeRawRangeReader` owns bounded read-only byte and logical locator access, including evidence-root containment, max-length enforcement, EOF handling, hashing, preview, and audit records. `EngineInterfaceService` exposes version/capability/tool metadata and structured adapter-call responses without owning an MCP server or AI provider.

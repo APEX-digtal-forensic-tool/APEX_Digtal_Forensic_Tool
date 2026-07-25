@@ -15,7 +15,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apex_forensic._time import parse_timestamp, to_json_timestamp, utc_now
 from apex_forensic.domain.enums import (
+    AnalysisContextPurpose,
     AnalysisProfileType,
+    AnalysisScopeType,
     ArtifactCoverageStatus,
     ArtifactParseStatus,
     ArtifactSourceKind,
@@ -24,6 +26,7 @@ from apex_forensic.domain.enums import (
     EvidenceFormat,
     EvidenceStatus,
     FileSystemNodeType,
+    GuiRoute,
     HashAlgorithm,
     IndexCoverageStatus,
     JobStatus,
@@ -32,6 +35,8 @@ from apex_forensic.domain.enums import (
     KeywordSetStatus,
     KeywordType,
     ProgressUnit,
+    ResourceType,
+    RevisionStatus,
     SearchDocumentType,
     SearchQueryMode,
     SearchSourceType,
@@ -40,8 +45,11 @@ from apex_forensic.domain.enums import (
     TimestampPrecision,
     TimezoneConfidence,
     TimezoneSource,
+    ViewMode,
 )
 from apex_forensic.domain.models import (
+    AnalysisContextSnapshot,
+    AnalysisScopeContext,
     ArtifactCapability,
     ArtifactCoverage,
     ArtifactQuery,
@@ -52,9 +60,12 @@ from apex_forensic.domain.models import (
     CandidateReviewEvent,
     Case,
     CustodyEvent,
+    EngineInterfaceVersion,
+    EngineToolDescriptor,
     Evidence,
     EvidenceFingerprint,
     FileSystemNode,
+    GuiSessionContext,
     HashRecord,
     HashVerification,
     IndexCoverage,
@@ -65,6 +76,7 @@ from apex_forensic.domain.models import (
     MachineExtractedCandidate,
     MediaArtifact,
     ProviderCapability,
+    RevisionState,
     SearchCacheEntry,
     SearchDocument,
     SearchExecution,
@@ -75,6 +87,7 @@ from apex_forensic.domain.models import (
     TimelineBuildCoverage,
     TimelineEvent,
     TimelineQuery,
+    ViewProjection,
 )
 from apex_forensic.domain.services.canonical import canonical_sha256
 
@@ -1537,6 +1550,228 @@ class SQLiteRepository:
                     UNIQUE(windows_time_zone_key_name, iana_timezone)
                 );
 
+                CREATE TABLE IF NOT EXISTS gui_session_contexts (
+                    session_context_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    actor_id TEXT,
+                    locale TEXT NOT NULL,
+                    timezone TEXT NOT NULL,
+                    current_route TEXT NOT NULL,
+                    current_panel TEXT,
+                    active_evidence_id TEXT REFERENCES evidence(evidence_id),
+                    selected_file_node_ids_json TEXT NOT NULL,
+                    selected_artifact_ids_json TEXT NOT NULL,
+                    selected_timeline_event_ids_json TEXT NOT NULL,
+                    selected_search_result_ids_json TEXT NOT NULL,
+                    selected_media_artifact_ids_json TEXT NOT NULL,
+                    selected_browser_artifact_ids_json TEXT NOT NULL,
+                    selected_candidate_ids_json TEXT NOT NULL,
+                    active_filters_json TEXT NOT NULL,
+                    active_sort_json TEXT NOT NULL,
+                    active_time_range_json TEXT NOT NULL,
+                    active_keyword_set_id TEXT,
+                    active_keyword_set_version INTEGER,
+                    active_search_execution_id TEXT,
+                    active_timeline_revision INTEGER,
+                    active_context_scope TEXT NOT NULL,
+                    ui_preferences_json TEXT NOT NULL,
+                    context_revision INTEGER NOT NULL CHECK (context_revision >= 1),
+                    source_revision_fingerprint TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    stale_reasons_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    expires_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_gui_session_contexts_case
+                    ON gui_session_contexts(case_id, updated_at, session_context_id);
+
+                CREATE TABLE IF NOT EXISTS gui_session_context_revisions (
+                    session_context_id TEXT NOT NULL
+                        REFERENCES gui_session_contexts(session_context_id),
+                    context_revision INTEGER NOT NULL,
+                    context_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (session_context_id, context_revision)
+                );
+
+                CREATE TABLE IF NOT EXISTS analysis_context_snapshots (
+                    context_snapshot_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    session_context_id TEXT,
+                    session_context_revision INTEGER,
+                    actor_id TEXT,
+                    purpose TEXT NOT NULL,
+                    scopes_json TEXT NOT NULL,
+                    included_resource_ids_json TEXT NOT NULL,
+                    excluded_resource_ids_json TEXT NOT NULL,
+                    filters_json TEXT NOT NULL,
+                    time_range_json TEXT NOT NULL,
+                    source_revisions_json TEXT NOT NULL,
+                    analyzer_versions_json TEXT NOT NULL,
+                    search_index_revision INTEGER,
+                    timeline_revision INTEGER,
+                    keyword_set_id TEXT,
+                    keyword_set_version INTEGER,
+                    search_execution_id TEXT,
+                    partial_state_json TEXT NOT NULL,
+                    stale_state_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    context_fingerprint TEXT NOT NULL,
+                    previous_snapshot_id TEXT
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_analysis_context_snapshots_case
+                    ON analysis_context_snapshots(case_id, created_at, context_snapshot_id);
+
+                CREATE TABLE IF NOT EXISTS analysis_scope_contexts (
+                    scope_context_id TEXT PRIMARY KEY,
+                    context_snapshot_id TEXT NOT NULL
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    scope_type TEXT NOT NULL,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_ids_json TEXT NOT NULL,
+                    resource_ids_json TEXT NOT NULL,
+                    source_revisions_json TEXT NOT NULL,
+                    analyzer_versions_json TEXT NOT NULL,
+                    filters_json TEXT NOT NULL,
+                    sort_json TEXT NOT NULL,
+                    time_range_json TEXT NOT NULL,
+                    result_count INTEGER NOT NULL,
+                    included_count INTEGER NOT NULL,
+                    excluded_count INTEGER NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    coverage_json TEXT NOT NULL,
+                    stale_reasons_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    continuation_cursor TEXT,
+                    scope_fingerprint TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(context_snapshot_id, scope_type)
+                );
+
+                CREATE TABLE IF NOT EXISTS context_snapshot_resources (
+                    context_snapshot_id TEXT NOT NULL
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    resource_type TEXT NOT NULL,
+                    resource_id TEXT NOT NULL,
+                    source_revision TEXT,
+                    included INTEGER NOT NULL,
+                    PRIMARY KEY (context_snapshot_id, resource_type, resource_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS context_revision_states (
+                    state_id TEXT PRIMARY KEY,
+                    context_snapshot_id TEXT
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    resource_type TEXT NOT NULL,
+                    resource_id TEXT NOT NULL,
+                    expected_revision TEXT,
+                    current_revision TEXT,
+                    status TEXT NOT NULL,
+                    reason TEXT,
+                    detected_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS view_projections (
+                    projection_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    resource_type TEXT NOT NULL,
+                    resource_id TEXT NOT NULL,
+                    view_mode TEXT NOT NULL,
+                    projection_json TEXT NOT NULL,
+                    source_revision TEXT,
+                    projection_version TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_view_projections_resource
+                    ON view_projections(
+                        case_id, resource_type, resource_id, view_mode, source_revision
+                    );
+
+                CREATE TABLE IF NOT EXISTS view_projection_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    resource_type TEXT NOT NULL,
+                    resource_id TEXT NOT NULL,
+                    view_mode TEXT NOT NULL,
+                    source_revision TEXT,
+                    projection_id TEXT REFERENCES view_projections(projection_id),
+                    expires_at TEXT,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS raw_read_audit_records (
+                    audit_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT,
+                    resource_type TEXT NOT NULL,
+                    resource_id TEXT NOT NULL,
+                    raw_locator_json TEXT NOT NULL,
+                    requested_offset INTEGER,
+                    requested_length INTEGER,
+                    returned_offset INTEGER,
+                    returned_length INTEGER,
+                    range_hash TEXT,
+                    correlation_id TEXT,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS engine_interface_versions (
+                    interface_name TEXT NOT NULL,
+                    interface_version TEXT NOT NULL,
+                    engine_version TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    capabilities_json TEXT NOT NULL,
+                    unavailable_capabilities_json TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    PRIMARY KEY (interface_name, interface_version)
+                );
+
+                CREATE TABLE IF NOT EXISTS engine_tool_descriptors (
+                    tool_name TEXT NOT NULL,
+                    tool_version TEXT NOT NULL,
+                    description_key TEXT NOT NULL,
+                    input_schema_ref TEXT NOT NULL,
+                    output_schema_ref TEXT NOT NULL,
+                    required_capabilities_json TEXT NOT NULL,
+                    mutates_state INTEGER NOT NULL,
+                    requires_confirmation INTEGER NOT NULL,
+                    supports_pagination INTEGER NOT NULL,
+                    supports_partial INTEGER NOT NULL,
+                    supports_citation INTEGER NOT NULL,
+                    max_result_items INTEGER NOT NULL,
+                    PRIMARY KEY (tool_name, tool_version)
+                );
+
+                CREATE TRIGGER IF NOT EXISTS analysis_context_snapshots_no_update
+                BEFORE UPDATE ON analysis_context_snapshots
+                BEGIN
+                    SELECT RAISE(ABORT, 'analysis_context_snapshots are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS analysis_context_snapshots_no_delete
+                BEFORE DELETE ON analysis_context_snapshots
+                BEGIN
+                    SELECT RAISE(ABORT, 'analysis_context_snapshots are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS raw_read_audit_records_no_update
+                BEFORE UPDATE ON raw_read_audit_records
+                BEGIN
+                    SELECT RAISE(ABORT, 'raw_read_audit_records are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS raw_read_audit_records_no_delete
+                BEFORE DELETE ON raw_read_audit_records
+                BEGIN
+                    SELECT RAISE(ABORT, 'raw_read_audit_records are append-only');
+                END;
+
                 CREATE TRIGGER IF NOT EXISTS custody_events_no_update
                 BEFORE UPDATE ON custody_events
                 BEGIN
@@ -1616,6 +1851,13 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("phase5-browser-media-metadata", to_json_timestamp(utc_now())),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("phase6-gui-context-view-interface", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -5381,6 +5623,878 @@ class SQLiteRepository:
             (job_id,),
         ).fetchone()
         return None if row is None else self._row_to_timeline_coverage(row)
+
+
+    def save_gui_session_context(self, context: GuiSessionContext) -> None:
+        """Persist the latest live GUI session context and its revision snapshot."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO gui_session_contexts (
+                    session_context_id, session_id, case_id, actor_id, locale, timezone,
+                    current_route, current_panel, active_evidence_id, selected_file_node_ids_json,
+                    selected_artifact_ids_json, selected_timeline_event_ids_json,
+                    selected_search_result_ids_json, selected_media_artifact_ids_json,
+                    selected_browser_artifact_ids_json, selected_candidate_ids_json,
+                    active_filters_json, active_sort_json, active_time_range_json,
+                    active_keyword_set_id, active_keyword_set_version, active_search_execution_id,
+                    active_timeline_revision, active_context_scope, ui_preferences_json,
+                    context_revision, source_revision_fingerprint, is_partial, stale_reasons_json,
+                    created_at, updated_at, expires_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?
+                )
+                ON CONFLICT(session_context_id) DO UPDATE SET
+                    session_id = excluded.session_id,
+                    actor_id = excluded.actor_id,
+                    locale = excluded.locale,
+                    timezone = excluded.timezone,
+                    current_route = excluded.current_route,
+                    current_panel = excluded.current_panel,
+                    active_evidence_id = excluded.active_evidence_id,
+                    selected_file_node_ids_json = excluded.selected_file_node_ids_json,
+                    selected_artifact_ids_json = excluded.selected_artifact_ids_json,
+                    selected_timeline_event_ids_json = excluded.selected_timeline_event_ids_json,
+                    selected_search_result_ids_json = excluded.selected_search_result_ids_json,
+                    selected_media_artifact_ids_json = excluded.selected_media_artifact_ids_json,
+                    selected_browser_artifact_ids_json =
+                        excluded.selected_browser_artifact_ids_json,
+                    selected_candidate_ids_json = excluded.selected_candidate_ids_json,
+                    active_filters_json = excluded.active_filters_json,
+                    active_sort_json = excluded.active_sort_json,
+                    active_time_range_json = excluded.active_time_range_json,
+                    active_keyword_set_id = excluded.active_keyword_set_id,
+                    active_keyword_set_version = excluded.active_keyword_set_version,
+                    active_search_execution_id = excluded.active_search_execution_id,
+                    active_timeline_revision = excluded.active_timeline_revision,
+                    active_context_scope = excluded.active_context_scope,
+                    ui_preferences_json = excluded.ui_preferences_json,
+                    context_revision = excluded.context_revision,
+                    source_revision_fingerprint = excluded.source_revision_fingerprint,
+                    is_partial = excluded.is_partial,
+                    stale_reasons_json = excluded.stale_reasons_json,
+                    updated_at = excluded.updated_at,
+                    expires_at = excluded.expires_at
+                """,
+                self._gui_session_context_values(context),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO gui_session_context_revisions (
+                    session_context_id, context_revision, context_json, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    context.session_context_id,
+                    context.context_revision,
+                    self._json(context.to_schema_dict()),
+                    to_json_timestamp(context.updated_at or utc_now()),
+                ),
+            )
+
+    def get_gui_session_context(self, session_context_id: str) -> GuiSessionContext | None:
+        """Return the latest live GUI session context."""
+
+        row = self.connection.execute(
+            "SELECT * FROM gui_session_contexts WHERE session_context_id = ?",
+            (session_context_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_gui_session_context(row)
+
+    def list_gui_session_contexts(self, case_id: str) -> list[GuiSessionContext]:
+        """List live GUI session contexts for a case."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM gui_session_contexts
+            WHERE case_id = ?
+            ORDER BY updated_at DESC, session_context_id
+            """,
+            (case_id,),
+        ).fetchall()
+        return [self._row_to_gui_session_context(row) for row in rows]
+
+    def get_gui_session_context_revision(
+        self,
+        session_context_id: str,
+        context_revision: int,
+    ) -> GuiSessionContext | None:
+        """Return a persisted GUI session context revision."""
+
+        row = self.connection.execute(
+            """
+            SELECT context_json FROM gui_session_context_revisions
+            WHERE session_context_id = ? AND context_revision = ?
+            """,
+            (session_context_id, context_revision),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._gui_session_context_from_dict(json.loads(str(row["context_json"])))
+
+    def save_analysis_context_snapshot(self, snapshot: AnalysisContextSnapshot) -> None:
+        """Persist an immutable analysis context snapshot."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO analysis_context_snapshots (
+                    context_snapshot_id, case_id, session_context_id, session_context_revision,
+                    actor_id, purpose, scopes_json, included_resource_ids_json,
+                    excluded_resource_ids_json, filters_json, time_range_json,
+                    source_revisions_json, analyzer_versions_json, search_index_revision,
+                    timeline_revision, keyword_set_id, keyword_set_version, search_execution_id,
+                    partial_state_json, stale_state_json, warnings_json, citations_json,
+                    context_fingerprint, previous_snapshot_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._analysis_context_snapshot_values(snapshot),
+            )
+            for resource_type, resource_ids in snapshot.included_resource_ids.items():
+                for resource_id in resource_ids:
+                    revision = self._revision_for(
+                        snapshot.source_revisions,
+                        resource_type,
+                        resource_id,
+                    )
+                    self.connection.execute(
+                        """
+                        INSERT OR IGNORE INTO context_snapshot_resources (
+                            context_snapshot_id, resource_type, resource_id, source_revision,
+                            included
+                        ) VALUES (?, ?, ?, ?, 1)
+                        """,
+                        (snapshot.context_snapshot_id, resource_type, resource_id, revision),
+                    )
+            for resource_type, resource_ids in snapshot.excluded_resource_ids.items():
+                for resource_id in resource_ids:
+                    revision = self._revision_for(
+                        snapshot.source_revisions,
+                        resource_type,
+                        resource_id,
+                    )
+                    self.connection.execute(
+                        """
+                        INSERT OR IGNORE INTO context_snapshot_resources (
+                            context_snapshot_id, resource_type, resource_id, source_revision,
+                            included
+                        ) VALUES (?, ?, ?, ?, 0)
+                        """,
+                        (snapshot.context_snapshot_id, resource_type, resource_id, revision),
+                    )
+
+    def get_analysis_context_snapshot(
+        self,
+        context_snapshot_id: str,
+    ) -> AnalysisContextSnapshot | None:
+        """Return an immutable analysis context snapshot."""
+
+        row = self.connection.execute(
+            "SELECT * FROM analysis_context_snapshots WHERE context_snapshot_id = ?",
+            (context_snapshot_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_analysis_context_snapshot(row)
+
+    def save_analysis_scope_context(self, scope: AnalysisScopeContext) -> None:
+        """Persist one snapshot scope context."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO analysis_scope_contexts (
+                    scope_context_id, context_snapshot_id, scope_type, case_id, evidence_ids_json,
+                    resource_ids_json, source_revisions_json, analyzer_versions_json,
+                    filters_json, sort_json, time_range_json, result_count, included_count,
+                    excluded_count, is_partial, coverage_json, stale_reasons_json, warnings_json,
+                    citations_json, continuation_cursor, scope_fingerprint, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._analysis_scope_context_values(scope),
+            )
+
+    def get_analysis_scope_context(
+        self,
+        context_snapshot_id: str,
+        scope_type: str,
+    ) -> AnalysisScopeContext | None:
+        """Return one scope context for a snapshot."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM analysis_scope_contexts
+            WHERE context_snapshot_id = ? AND scope_type = ?
+            """,
+            (context_snapshot_id, scope_type),
+        ).fetchone()
+        return None if row is None else self._row_to_analysis_scope_context(row)
+
+    def list_analysis_scope_contexts(self, context_snapshot_id: str) -> list[AnalysisScopeContext]:
+        """Return all scope contexts for a snapshot."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM analysis_scope_contexts
+            WHERE context_snapshot_id = ?
+            ORDER BY scope_type
+            """,
+            (context_snapshot_id,),
+        ).fetchall()
+        return [self._row_to_analysis_scope_context(row) for row in rows]
+
+    def save_context_revision_states(
+        self,
+        context_snapshot_id: str,
+        states: list[RevisionState],
+    ) -> None:
+        """Persist source revision checks for a snapshot."""
+
+        with self.connection:
+            for state in states:
+                self.connection.execute(
+                    """
+                    INSERT INTO context_revision_states (
+                        state_id, context_snapshot_id, resource_type, resource_id,
+                        expected_revision, current_revision, status, reason, detected_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid4()),
+                        context_snapshot_id,
+                        str(state.resource_type),
+                        state.resource_id,
+                        None if state.expected_revision is None else str(state.expected_revision),
+                        None if state.current_revision is None else str(state.current_revision),
+                        str(state.status),
+                        state.reason,
+                        to_json_timestamp(state.detected_at),
+                    ),
+                )
+
+    def list_context_revision_states(self, context_snapshot_id: str) -> list[RevisionState]:
+        """Return persisted revision states for a snapshot."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM context_revision_states
+            WHERE context_snapshot_id = ?
+            ORDER BY resource_type, resource_id
+            """,
+            (context_snapshot_id,),
+        ).fetchall()
+        return [self._row_to_revision_state(row) for row in rows]
+
+    def save_view_projection(self, projection: ViewProjection) -> None:
+        """Persist a view projection row for audit/cache inspection."""
+
+        self.connection.execute(
+            """
+            INSERT OR REPLACE INTO view_projections (
+                projection_id, case_id, resource_type, resource_id, view_mode, projection_json,
+                source_revision, projection_version, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                projection.projection_id,
+                projection.case_id,
+                str(projection.resource_type),
+                projection.resource_id,
+                str(projection.view_mode),
+                self._json(projection.to_schema_dict()),
+                None if projection.source_revision is None else str(projection.source_revision),
+                projection.projection_version,
+                to_json_timestamp(projection.created_at),
+            ),
+        )
+
+    def get_view_projection(self, projection_id: str) -> ViewProjection | None:
+        """Return a stored view projection."""
+
+        row = self.connection.execute(
+            "SELECT projection_json FROM view_projections WHERE projection_id = ?",
+            (projection_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._view_projection_from_dict(json.loads(str(row["projection_json"])))
+
+    def save_raw_read_audit(self, record: dict[str, Any]) -> None:
+        """Append one raw read audit record."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO raw_read_audit_records (
+                    audit_id, case_id, evidence_id, resource_type, resource_id, raw_locator_json,
+                    requested_offset, requested_length, returned_offset, returned_length,
+                    range_hash, correlation_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record["audit_id"],
+                    record["case_id"],
+                    record.get("evidence_id"),
+                    record["resource_type"],
+                    record["resource_id"],
+                    self._json(record.get("raw_locator", {})),
+                    record.get("requested_offset"),
+                    record.get("requested_length"),
+                    record.get("returned_offset"),
+                    record.get("returned_length"),
+                    record.get("range_hash"),
+                    record.get("correlation_id"),
+                    record["created_at"],
+                ),
+            )
+
+    def list_raw_read_audit_records(
+        self,
+        *,
+        case_id: str | None = None,
+        resource_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List raw read audit records for tests and reports."""
+
+        clauses: list[str] = []
+        params: list[Any] = []
+        if case_id is not None:
+            clauses.append("case_id = ?")
+            params.append(case_id)
+        if resource_id is not None:
+            clauses.append("resource_id = ?")
+            params.append(resource_id)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.connection.execute(
+            f"SELECT * FROM raw_read_audit_records {where} ORDER BY created_at, audit_id",
+            tuple(params),
+        ).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            data = dict(row)
+            data["raw_locator"] = json.loads(str(data.pop("raw_locator_json")))
+            result.append(data)
+        return result
+
+    def save_engine_interface_version(self, version: EngineInterfaceVersion) -> None:
+        """Persist the public engine interface version statement."""
+
+        self.connection.execute(
+            """
+            INSERT INTO engine_interface_versions (
+                interface_name, interface_version, engine_version, schema_version,
+                capabilities_json, unavailable_capabilities_json, generated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(interface_name, interface_version) DO UPDATE SET
+                engine_version = excluded.engine_version,
+                schema_version = excluded.schema_version,
+                capabilities_json = excluded.capabilities_json,
+                unavailable_capabilities_json = excluded.unavailable_capabilities_json,
+                generated_at = excluded.generated_at
+            """,
+            (
+                version.interface_name,
+                version.interface_version,
+                version.engine_version,
+                version.schema_version,
+                self._json(version.capabilities),
+                self._json(version.unavailable_capabilities),
+                to_json_timestamp(version.generated_at),
+            ),
+        )
+
+    def save_engine_tool_descriptor(self, descriptor: EngineToolDescriptor) -> None:
+        """Persist a public interface tool descriptor."""
+
+        self.connection.execute(
+            """
+            INSERT INTO engine_tool_descriptors (
+                tool_name, tool_version, description_key, input_schema_ref, output_schema_ref,
+                required_capabilities_json, mutates_state, requires_confirmation,
+                supports_pagination, supports_partial, supports_citation, max_result_items
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(tool_name, tool_version) DO UPDATE SET
+                description_key = excluded.description_key,
+                input_schema_ref = excluded.input_schema_ref,
+                output_schema_ref = excluded.output_schema_ref,
+                required_capabilities_json = excluded.required_capabilities_json,
+                mutates_state = excluded.mutates_state,
+                requires_confirmation = excluded.requires_confirmation,
+                supports_pagination = excluded.supports_pagination,
+                supports_partial = excluded.supports_partial,
+                supports_citation = excluded.supports_citation,
+                max_result_items = excluded.max_result_items
+            """,
+            (
+                descriptor.tool_name,
+                descriptor.tool_version,
+                descriptor.description_key,
+                descriptor.input_schema_ref,
+                descriptor.output_schema_ref,
+                self._json(descriptor.required_capabilities),
+                int(descriptor.mutates_state),
+                int(descriptor.requires_confirmation),
+                int(descriptor.supports_pagination),
+                int(descriptor.supports_partial),
+                int(descriptor.supports_citation),
+                descriptor.max_result_items,
+            ),
+        )
+
+    def list_engine_tool_descriptors(self) -> list[EngineToolDescriptor]:
+        """Return public engine tool descriptors."""
+
+        rows = self.connection.execute(
+            "SELECT * FROM engine_tool_descriptors ORDER BY tool_name, tool_version"
+        ).fetchall()
+        return [self._row_to_engine_tool_descriptor(row) for row in rows]
+
+    def get_search_result(self, result_id: str) -> SearchResult | None:
+        """Return a persisted search result by ID."""
+
+        row = self.connection.execute(
+            "SELECT * FROM search_results WHERE result_id = ?",
+            (result_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_search_result(row)
+
+    def case_id_for_search_result(self, result_id: str) -> str:
+        """Resolve the owning case for a search result."""
+
+        row = self.connection.execute(
+            """
+            SELECT q.case_id AS case_id
+            FROM search_results r
+            JOIN search_queries q ON q.query_id = r.query_id
+            WHERE r.result_id = ?
+            """,
+            (result_id,),
+        ).fetchone()
+        if row is None:
+            return ""
+        return str(row["case_id"])
+
+    def list_resource_ids(
+        self,
+        table_name: str,
+        id_column: str,
+        case_id: str,
+        limit: int,
+    ) -> list[str]:
+        """List resource IDs from a small whitelist of Phase 1-6 tables."""
+
+        allowed = {
+            "evidence": "evidence_id",
+            "fs_nodes": "node_id",
+            "timeline_events": "timeline_event_id",
+            "machine_extracted_candidates": "candidate_id",
+            "custody_events": "event_id",
+        }
+        if allowed.get(table_name) != id_column:
+            raise ValueError("unsupported resource id table")
+        rows = self.connection.execute(
+            f"SELECT {id_column} AS resource_id FROM {table_name} "
+            "WHERE case_id = ? ORDER BY resource_id LIMIT ?",
+            (case_id, limit),
+        ).fetchall()
+        return [str(row["resource_id"]) for row in rows]
+
+    def list_artifact_ids_for_types(
+        self,
+        case_id: str,
+        artifact_types: list[str],
+        limit: int,
+    ) -> list[str]:
+        """List artifact IDs matching artifact types for scope building."""
+
+        if not artifact_types:
+            return []
+        placeholders = ", ".join("?" for _ in artifact_types)
+        rows = self.connection.execute(
+            f"""
+            SELECT artifact_id FROM artifacts
+            WHERE case_id = ? AND artifact_type IN ({placeholders})
+            ORDER BY artifact_id
+            LIMIT ?
+            """,
+            (case_id, *artifact_types, limit),
+        ).fetchall()
+        return [str(row["artifact_id"]) for row in rows]
+
+    def list_search_result_ids_for_case(self, case_id: str, limit: int) -> list[str]:
+        """List search result IDs for a case through their query owner."""
+
+        rows = self.connection.execute(
+            """
+            SELECT r.result_id
+            FROM search_results r
+            JOIN search_queries q ON q.query_id = r.query_id
+            WHERE q.case_id = ?
+            ORDER BY r.rank, r.document_id
+            LIMIT ?
+            """,
+            (case_id, limit),
+        ).fetchall()
+        return [str(row["result_id"]) for row in rows]
+
+    def coverage_summary_for_scope(self, case_id: str, scope: str) -> dict[str, Any]:
+        """Return compact coverage metadata for a Phase 6 scope."""
+
+        if scope == "filesystem":
+            rows = self.connection.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM fs_index_coverage
+                WHERE case_id = ?
+                GROUP BY status
+                """,
+                (case_id,),
+            ).fetchall()
+            return {
+                "scope": scope,
+                "status_counts": {str(row["status"]): int(row["count"]) for row in rows},
+            }
+        if scope in {"registry", "eventlog", "prefetch", "browser", "media"}:
+            rows = self.connection.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM artifact_coverage
+                WHERE case_id = ?
+                GROUP BY status
+                """,
+                (case_id,),
+            ).fetchall()
+            return {
+                "scope": scope,
+                "status_counts": {str(row["status"]): int(row["count"]) for row in rows},
+            }
+        if scope == "timeline":
+            rows = self.connection.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM timeline_coverage
+                WHERE case_id = ?
+                GROUP BY status
+                """,
+                (case_id,),
+            ).fetchall()
+            return {
+                "scope": scope,
+                "status_counts": {str(row["status"]): int(row["count"]) for row in rows},
+            }
+        return {"scope": scope, "status_counts": {}}
+
+    def _gui_session_context_values(self, context: GuiSessionContext) -> tuple[Any, ...]:
+        return (
+            context.session_context_id,
+            context.session_id,
+            context.case_id,
+            context.actor_id,
+            context.locale,
+            context.timezone,
+            str(context.current_route),
+            context.current_panel,
+            context.active_evidence_id,
+            self._json(context.selected_file_node_ids),
+            self._json(context.selected_artifact_ids),
+            self._json(context.selected_timeline_event_ids),
+            self._json(context.selected_search_result_ids),
+            self._json(context.selected_media_artifact_ids),
+            self._json(context.selected_browser_artifact_ids),
+            self._json(context.selected_candidate_ids),
+            self._json(context.active_filters),
+            self._json(context.active_sort),
+            self._json(context.active_time_range),
+            context.active_keyword_set_id,
+            context.active_keyword_set_version,
+            context.active_search_execution_id,
+            context.active_timeline_revision,
+            str(context.active_context_scope),
+            self._json(context.ui_preferences),
+            context.context_revision,
+            context.source_revision_fingerprint,
+            int(context.is_partial),
+            self._json(context.stale_reasons),
+            to_json_timestamp(context.created_at or utc_now()),
+            to_json_timestamp(context.updated_at or utc_now()),
+            None if context.expires_at is None else to_json_timestamp(context.expires_at),
+        )
+
+    def _analysis_context_snapshot_values(
+        self,
+        snapshot: AnalysisContextSnapshot,
+    ) -> tuple[Any, ...]:
+        return (
+            snapshot.context_snapshot_id,
+            snapshot.case_id,
+            snapshot.session_context_id,
+            snapshot.session_context_revision,
+            snapshot.actor_id,
+            str(snapshot.purpose),
+            self._json(snapshot.scopes),
+            self._json(snapshot.included_resource_ids),
+            self._json(snapshot.excluded_resource_ids),
+            self._json(snapshot.filters),
+            self._json(snapshot.time_range),
+            self._json([state.to_schema_dict() for state in snapshot.source_revisions]),
+            self._json(snapshot.analyzer_versions),
+            snapshot.search_index_revision,
+            snapshot.timeline_revision,
+            snapshot.keyword_set_id,
+            snapshot.keyword_set_version,
+            snapshot.search_execution_id,
+            self._json(snapshot.partial_state),
+            self._json(snapshot.stale_state),
+            self._json(snapshot.warnings),
+            self._json(snapshot.citations),
+            snapshot.context_fingerprint,
+            snapshot.previous_snapshot_id,
+            to_json_timestamp(snapshot.created_at),
+        )
+
+    def _analysis_scope_context_values(self, scope: AnalysisScopeContext) -> tuple[Any, ...]:
+        return (
+            scope.scope_context_id,
+            scope.context_snapshot_id,
+            str(scope.scope_type),
+            scope.case_id,
+            self._json(scope.evidence_ids),
+            self._json(scope.resource_ids),
+            self._json([state.to_schema_dict() for state in scope.source_revisions]),
+            self._json(scope.analyzer_versions),
+            self._json(scope.filters),
+            self._json(scope.sort),
+            self._json(scope.time_range),
+            scope.result_count,
+            scope.included_count,
+            scope.excluded_count,
+            int(scope.is_partial),
+            self._json(scope.coverage),
+            self._json(scope.stale_reasons),
+            self._json(scope.warnings),
+            self._json(scope.citations),
+            scope.continuation_cursor,
+            scope.scope_fingerprint,
+            to_json_timestamp(scope.created_at),
+        )
+
+    @staticmethod
+    def _revision_for(
+        states: list[RevisionState],
+        resource_type: str,
+        resource_id: str,
+    ) -> str | None:
+        for state in states:
+            if str(state.resource_type) == resource_type and state.resource_id == resource_id:
+                return None if state.expected_revision is None else str(state.expected_revision)
+        return None
+
+    def _row_to_gui_session_context(self, row: sqlite3.Row) -> GuiSessionContext:
+        return GuiSessionContext(
+            session_context_id=str(row["session_context_id"]),
+            session_id=str(row["session_id"]),
+            case_id=str(row["case_id"]),
+            actor_id=row["actor_id"],
+            locale=str(row["locale"]),
+            timezone=str(row["timezone"]),
+            current_route=GuiRoute(str(row["current_route"])),
+            current_panel=row["current_panel"],
+            active_evidence_id=row["active_evidence_id"],
+            selected_file_node_ids=list(json.loads(str(row["selected_file_node_ids_json"]))),
+            selected_artifact_ids=list(json.loads(str(row["selected_artifact_ids_json"]))),
+            selected_timeline_event_ids=list(json.loads(str(row["selected_timeline_event_ids_json"]))),
+            selected_search_result_ids=list(json.loads(str(row["selected_search_result_ids_json"]))),
+            selected_media_artifact_ids=list(json.loads(str(row["selected_media_artifact_ids_json"]))),
+            selected_browser_artifact_ids=list(json.loads(str(row["selected_browser_artifact_ids_json"]))),
+            selected_candidate_ids=list(json.loads(str(row["selected_candidate_ids_json"]))),
+            active_filters=dict(json.loads(str(row["active_filters_json"]))),
+            active_sort=dict(json.loads(str(row["active_sort_json"]))),
+            active_time_range=dict(json.loads(str(row["active_time_range_json"]))),
+            active_keyword_set_id=row["active_keyword_set_id"],
+            active_keyword_set_version=row["active_keyword_set_version"],
+            active_search_execution_id=row["active_search_execution_id"],
+            active_timeline_revision=row["active_timeline_revision"],
+            active_context_scope=AnalysisScopeType(str(row["active_context_scope"])),
+            ui_preferences=dict(json.loads(str(row["ui_preferences_json"]))),
+            context_revision=int(row["context_revision"]),
+            source_revision_fingerprint=str(row["source_revision_fingerprint"]),
+            is_partial=bool(row["is_partial"]),
+            stale_reasons=list(json.loads(str(row["stale_reasons_json"]))),
+            created_at=parse_timestamp(str(row["created_at"])),
+            updated_at=parse_timestamp(str(row["updated_at"])),
+            expires_at=None
+            if row["expires_at"] is None
+            else parse_timestamp(str(row["expires_at"])),
+        )
+
+    def _gui_session_context_from_dict(self, data: dict[str, Any]) -> GuiSessionContext:
+        return GuiSessionContext(
+            session_context_id=str(data["session_context_id"]),
+            session_id=str(data["session_id"]),
+            case_id=str(data["case_id"]),
+            actor_id=data.get("actor_id"),
+            locale=str(data["locale"]),
+            timezone=str(data["timezone"]),
+            current_route=GuiRoute(str(data["current_route"])),
+            current_panel=data.get("current_panel"),
+            active_evidence_id=data.get("active_evidence_id"),
+            selected_file_node_ids=list(data.get("selected_file_node_ids", [])),
+            selected_artifact_ids=list(data.get("selected_artifact_ids", [])),
+            selected_timeline_event_ids=list(data.get("selected_timeline_event_ids", [])),
+            selected_search_result_ids=list(data.get("selected_search_result_ids", [])),
+            selected_media_artifact_ids=list(data.get("selected_media_artifact_ids", [])),
+            selected_browser_artifact_ids=list(data.get("selected_browser_artifact_ids", [])),
+            selected_candidate_ids=list(data.get("selected_candidate_ids", [])),
+            active_filters=dict(data.get("active_filters", {})),
+            active_sort=dict(data.get("active_sort", {})),
+            active_time_range=dict(data.get("active_time_range", {})),
+            active_keyword_set_id=data.get("active_keyword_set_id"),
+            active_keyword_set_version=data.get("active_keyword_set_version"),
+            active_search_execution_id=data.get("active_search_execution_id"),
+            active_timeline_revision=data.get("active_timeline_revision"),
+            active_context_scope=AnalysisScopeType(str(data.get("active_context_scope", "case"))),
+            ui_preferences=dict(data.get("ui_preferences", {})),
+            context_revision=int(data.get("context_revision", 1)),
+            source_revision_fingerprint=str(data.get("source_revision_fingerprint", "")),
+            is_partial=bool(data.get("is_partial", False)),
+            stale_reasons=list(data.get("stale_reasons", [])),
+            created_at=parse_timestamp(str(data["created_at"])),
+            updated_at=parse_timestamp(str(data["updated_at"])),
+            expires_at=None
+            if data.get("expires_at") is None
+            else parse_timestamp(str(data["expires_at"])),
+        )
+
+    def _row_to_analysis_context_snapshot(self, row: sqlite3.Row) -> AnalysisContextSnapshot:
+        return AnalysisContextSnapshot(
+            context_snapshot_id=str(row["context_snapshot_id"]),
+            case_id=str(row["case_id"]),
+            session_context_id=row["session_context_id"],
+            session_context_revision=row["session_context_revision"],
+            actor_id=row["actor_id"],
+            purpose=AnalysisContextPurpose(str(row["purpose"])),
+            scopes=list(json.loads(str(row["scopes_json"]))),
+            included_resource_ids=dict(json.loads(str(row["included_resource_ids_json"]))),
+            excluded_resource_ids=dict(json.loads(str(row["excluded_resource_ids_json"]))),
+            filters=dict(json.loads(str(row["filters_json"]))),
+            time_range=dict(json.loads(str(row["time_range_json"]))),
+            source_revisions=self._revision_states_from_json(str(row["source_revisions_json"])),
+            analyzer_versions=dict(json.loads(str(row["analyzer_versions_json"]))),
+            search_index_revision=row["search_index_revision"],
+            timeline_revision=row["timeline_revision"],
+            keyword_set_id=row["keyword_set_id"],
+            keyword_set_version=row["keyword_set_version"],
+            search_execution_id=row["search_execution_id"],
+            partial_state=dict(json.loads(str(row["partial_state_json"]))),
+            stale_state=dict(json.loads(str(row["stale_state_json"]))),
+            warnings=list(json.loads(str(row["warnings_json"]))),
+            citations=list(json.loads(str(row["citations_json"]))),
+            context_fingerprint=str(row["context_fingerprint"]),
+            previous_snapshot_id=row["previous_snapshot_id"],
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
+
+    def _row_to_analysis_scope_context(self, row: sqlite3.Row) -> AnalysisScopeContext:
+        return AnalysisScopeContext(
+            scope_context_id=str(row["scope_context_id"]),
+            context_snapshot_id=str(row["context_snapshot_id"]),
+            scope_type=AnalysisScopeType(str(row["scope_type"])),
+            case_id=str(row["case_id"]),
+            evidence_ids=list(json.loads(str(row["evidence_ids_json"]))),
+            resource_ids=list(json.loads(str(row["resource_ids_json"]))),
+            source_revisions=self._revision_states_from_json(str(row["source_revisions_json"])),
+            analyzer_versions=dict(json.loads(str(row["analyzer_versions_json"]))),
+            filters=dict(json.loads(str(row["filters_json"]))),
+            sort=dict(json.loads(str(row["sort_json"]))),
+            time_range=dict(json.loads(str(row["time_range_json"]))),
+            result_count=int(row["result_count"]),
+            included_count=int(row["included_count"]),
+            excluded_count=int(row["excluded_count"]),
+            is_partial=bool(row["is_partial"]),
+            coverage=dict(json.loads(str(row["coverage_json"]))),
+            stale_reasons=list(json.loads(str(row["stale_reasons_json"]))),
+            warnings=list(json.loads(str(row["warnings_json"]))),
+            citations=list(json.loads(str(row["citations_json"]))),
+            continuation_cursor=row["continuation_cursor"],
+            scope_fingerprint=str(row["scope_fingerprint"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
+
+    def _revision_states_from_json(self, value: str) -> list[RevisionState]:
+        return [self._revision_state_from_dict(item) for item in json.loads(value)]
+
+    def _row_to_revision_state(self, row: sqlite3.Row) -> RevisionState:
+        return RevisionState(
+            resource_type=ResourceType(str(row["resource_type"])),
+            resource_id=str(row["resource_id"]),
+            expected_revision=row["expected_revision"],
+            current_revision=row["current_revision"],
+            status=RevisionStatus(str(row["status"])),
+            reason=row["reason"],
+            detected_at=parse_timestamp(str(row["detected_at"])),
+        )
+
+    @staticmethod
+    def _revision_state_from_dict(data: dict[str, Any]) -> RevisionState:
+        return RevisionState(
+            resource_type=ResourceType(str(data["resource_type"])),
+            resource_id=str(data["resource_id"]),
+            expected_revision=data.get("expected_revision"),
+            current_revision=data.get("current_revision"),
+            status=RevisionStatus(str(data["status"])),
+            reason=data.get("reason"),
+            detected_at=parse_timestamp(str(data["detected_at"])),
+        )
+
+    @staticmethod
+    def _view_projection_from_dict(data: dict[str, Any]) -> ViewProjection:
+        return ViewProjection(
+            projection_id=str(data["projection_id"]),
+            case_id=str(data["case_id"]),
+            resource_type=ResourceType(str(data["resource_type"])),
+            resource_id=str(data["resource_id"]),
+            view_mode=ViewMode(str(data["view_mode"])),
+            title=str(data["title"]),
+            subtitle=data.get("subtitle"),
+            summary=data.get("summary"),
+            severity=data.get("severity"),
+            badges=list(data.get("badges", [])),
+            primary_fields=dict(data.get("primary_fields", {})),
+            secondary_fields=dict(data.get("secondary_fields", {})),
+            technical_fields=dict(data.get("technical_fields", {})),
+            raw_fields=dict(data.get("raw_fields", {})),
+            timestamps=dict(data.get("timestamps", {})),
+            timezone=data.get("timezone"),
+            confidence=data.get("confidence"),
+            partial_state=dict(data.get("partial_state", {})),
+            stale_state=dict(data.get("stale_state", {})),
+            warnings=list(data.get("warnings", [])),
+            citations=list(data.get("citations", [])),
+            raw_locator=data.get("raw_locator"),
+            available_actions=list(data.get("available_actions", [])),
+            source_revision=data.get("source_revision"),
+            analyzer_id=data.get("analyzer_id"),
+            analyzer_version=data.get("analyzer_version"),
+            projection_version=str(data["projection_version"]),
+            created_at=parse_timestamp(str(data["created_at"])),
+        )
+
+    @staticmethod
+    def _row_to_engine_tool_descriptor(row: sqlite3.Row) -> EngineToolDescriptor:
+        return EngineToolDescriptor(
+            tool_name=str(row["tool_name"]),
+            tool_version=str(row["tool_version"]),
+            description_key=str(row["description_key"]),
+            input_schema_ref=str(row["input_schema_ref"]),
+            output_schema_ref=str(row["output_schema_ref"]),
+            required_capabilities=list(json.loads(str(row["required_capabilities_json"]))),
+            mutates_state=bool(row["mutates_state"]),
+            requires_confirmation=bool(row["requires_confirmation"]),
+            supports_pagination=bool(row["supports_pagination"]),
+            supports_partial=bool(row["supports_partial"]),
+            supports_citation=bool(row["supports_citation"]),
+            max_result_items=int(row["max_result_items"]),
+        )
 
     def _configure_connection(self) -> None:
         self.connection.execute("PRAGMA foreign_keys = ON")

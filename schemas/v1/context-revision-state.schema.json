@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/context-revision-state.schema.json",
+  "title": "APEX Context Revision State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "resource_type",
+    "resource_id",
+    "expected_revision",
+    "current_revision",
+    "status",
+    "reason",
+    "detected_at"
+  ],
+  "properties": {
+    "resource_type": {
+      "enum": [
+        "EVIDENCE",
+        "FILE_SYSTEM_NODE",
+        "ARTIFACT",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "TIMELINE_EVENT",
+        "SEARCH_RESULT",
+        "MACHINE_CANDIDATE",
+        "CUSTODY_EVENT",
+        "CONTEXT_SNAPSHOT",
+        "OTHER"
+      ]
+    },
+    "resource_id": {
+      "$ref": "#/$defs/id"
+    },
+    "expected_revision": {
+      "type": [
+        "string",
+        "integer",
+        "null"
+      ]
+    },
+    "current_revision": {
+      "type": [
+        "string",
+        "integer",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "CURRENT",
+        "STALE",
+        "MISSING",
+        "PARTIAL",
+        "UNKNOWN"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "detected_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "warningArray": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/warning"
+      }
+    },
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    }
+  }
+}

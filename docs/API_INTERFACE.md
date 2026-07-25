@@ -643,3 +643,9 @@ Common options include `--db`, `--json`, `--case-id`, `--evidence-id`, `--query`
 `--cursor`, `--limit`, `--order`, `--item-budget`, and `--batch-size`. Search and Timeline pagination
 use opaque stable cursors, not offset-only pagination. Capability gaps use structured
 `CAPABILITY_UNAVAILABLE` responses.
+
+## 26. Phase 6 CLI/API Contract
+
+The executable interface for Phase 6 is exposed through versioned DTOs and CLI command groups: `context` for create/get/update/select/filter/snapshot/scope/refresh/expire flows, `view` for simple/detailed/raw projections and bounded raw reads, and `interface` for engine version, tool descriptors, capability lookup, and raw-read invocation.
+
+Adapter consumers receive stable schema versions, structured error codes, advertised limits, and tool descriptors. Raw-read requests require a case/evidence/resource locator plus offset/length or a validated logical locator. The core repository remains the authority for case ownership, revision state, and raw-read audit records; MCP transport and GUI widget state stay outside the engine package.

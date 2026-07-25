@@ -314,3 +314,20 @@ from being fabricated while preserving raw/source references for future raw view
 recommendation contracts but its enum set also includes Phase 4 manual keyword status values
 `ACTIVE`/`ARCHIVED` and keyword type `OTHER`. All updated schemas remain Draft 2020-12 with explicit
 `additionalProperties` and no circular `$ref`.
+
+## 6. Phase 6 Schemas
+
+| 파일 | Root 정의 | 용도 |
+| --- | --- | --- |
+| `gui-session-context.schema.json` | GuiSessionContext | TTL과 Revision을 가진 Live GUI Context |
+| `analysis-context-snapshot.schema.json` | AnalysisContextSnapshot | Append-only 분석 Snapshot과 Fingerprint |
+| `analysis-scope-context.schema.json` | AnalysisScopeContext | Scope별 Resource Bundle과 Cursor |
+| `context-revision-state.schema.json` | RevisionState | Source Revision, Partial, Stale Reason |
+| `view-projection.schema.json` | ViewProjection | Simple/Detailed View Projection |
+| `raw-view.schema.json` | RawViewProjection | Raw Locator와 제한 정보 |
+| `raw-read-request.schema.json` | RawReadRequest | Bounded Raw Range 입력 |
+| `raw-read-response.schema.json` | RawReadResponse | Raw Chunk, EOF, Hash, Audit ID |
+| `engine-interface.schema.json` | EngineInterfaceVersion | Adapter용 Engine Version/Limit/Capability |
+| `engine-tool-descriptor.schema.json` | EngineToolDescriptor | Public Tool Descriptor와 Limit |
+
+Phase 6 schemas keep object extensibility explicit with `additionalProperties`, reject unbounded binary payload transfer, and carry warning/citation arrays so partial or stale context can be represented without inventing facts.

@@ -476,6 +476,147 @@ def build_parser() -> argparse.ArgumentParser:
     timeline_show.add_argument("--timeline-event-id", required=True)
     timeline_show.add_argument("--json", action="store_true")
 
+    context_parser = subcommands.add_parser("context", help="GUI session context commands")
+    context_commands = context_parser.add_subparsers(dest="context_command", required=True)
+    context_create = context_commands.add_parser("create")
+    context_create.add_argument("--case-id", required=True)
+    context_create.add_argument("--session-id", required=True)
+    context_create.add_argument("--actor-id")
+    context_create.add_argument("--locale", default="ko-KR")
+    context_create.add_argument("--timezone", default="Asia/Seoul")
+    context_create.add_argument("--current-route", default="CASE_OVERVIEW", choices=_gui_routes())
+    context_create.add_argument("--current-panel")
+    context_create.add_argument("--evidence-id")
+    _add_context_selection_args(context_create)
+    context_create.add_argument("--filters-json")
+    context_create.add_argument("--sort-json")
+    context_create.add_argument("--time-range-json")
+    context_create.add_argument("--keyword-set-id")
+    context_create.add_argument("--keyword-set-version", type=int)
+    context_create.add_argument("--search-execution-id")
+    context_create.add_argument("--timeline-revision", type=int)
+    context_create.add_argument("--scope", default="case", choices=_analysis_scopes())
+    context_create.add_argument("--ui-preferences-json")
+    context_create.add_argument("--expires-at")
+    context_create.add_argument("--json", action="store_true")
+
+    context_get = context_commands.add_parser("get")
+    context_get.add_argument("--session-context-id", required=True)
+    context_get.add_argument("--json", action="store_true")
+
+    context_update = context_commands.add_parser("update")
+    context_update.add_argument("--session-context-id", required=True)
+    context_update.add_argument("--expected-revision", type=int, required=True)
+    context_update.add_argument("--session-id")
+    context_update.add_argument("--actor-id")
+    context_update.add_argument("--locale")
+    context_update.add_argument("--timezone")
+    context_update.add_argument("--current-route", choices=_gui_routes())
+    context_update.add_argument("--current-panel")
+    context_update.add_argument("--active-evidence-id")
+    context_update.add_argument("--filters-json")
+    context_update.add_argument("--sort-json")
+    context_update.add_argument("--time-range-json")
+    context_update.add_argument("--keyword-set-id", dest="active_keyword_set_id")
+    context_update.add_argument(
+        "--keyword-set-version",
+        dest="active_keyword_set_version",
+        type=int,
+    )
+    context_update.add_argument("--search-execution-id", dest="active_search_execution_id")
+    context_update.add_argument("--timeline-revision", dest="active_timeline_revision", type=int)
+    context_update.add_argument("--scope", choices=_analysis_scopes())
+    context_update.add_argument("--ui-preferences-json")
+    context_update.add_argument("--expires-at")
+    context_update.add_argument("--json", action="store_true")
+
+    context_select = context_commands.add_parser("select")
+    context_select.add_argument("--session-context-id", required=True)
+    context_select.add_argument("--expected-revision", type=int, required=True)
+    context_select.add_argument("--resource-type", required=True, choices=_resource_types())
+    context_select.add_argument("--resource-id", action="append", default=[])
+    context_select.add_argument(
+        "--mode",
+        default="replace",
+        choices=["replace", "append", "remove"],
+    )
+    context_select.add_argument("--json", action="store_true")
+
+    context_filters = context_commands.add_parser("filters")
+    context_filters.add_argument("--session-context-id", required=True)
+    context_filters.add_argument("--expected-revision", type=int, required=True)
+    context_filters.add_argument("--filters-json", required=True)
+    context_filters.add_argument("--json", action="store_true")
+
+    context_snapshot = context_commands.add_parser("snapshot")
+    context_snapshot.add_argument("--session-context-id", required=True)
+    context_snapshot.add_argument("--purpose", default="MCP_REQUEST", choices=_context_purposes())
+    context_snapshot.add_argument("--scope", action="append", default=[])
+    context_snapshot.add_argument("--previous-snapshot-id")
+    context_snapshot.add_argument("--json", action="store_true")
+
+    context_snapshot_show = context_commands.add_parser("snapshot-show")
+    context_snapshot_show.add_argument("--context-snapshot-id", required=True)
+    context_snapshot_show.add_argument("--json", action="store_true")
+
+    context_compare = context_commands.add_parser("compare")
+    context_compare.add_argument("--session-context-id")
+    context_compare.add_argument("--left-revision", type=int)
+    context_compare.add_argument("--right-revision", type=int)
+    context_compare.add_argument("--left-snapshot-id")
+    context_compare.add_argument("--right-snapshot-id")
+    context_compare.add_argument("--json", action="store_true")
+
+    context_scopes = context_commands.add_parser("scopes")
+    context_scopes.add_argument("--context-snapshot-id", required=True)
+    context_scopes.add_argument("--json", action="store_true")
+
+    context_scope_page = context_commands.add_parser("scope-page")
+    context_scope_page.add_argument("--context-snapshot-id", required=True)
+    context_scope_page.add_argument("--scope", required=True, choices=_analysis_scopes())
+    context_scope_page.add_argument("--cursor")
+    context_scope_page.add_argument("--limit", type=int, default=100)
+    context_scope_page.add_argument("--json", action="store_true")
+
+    context_refresh = context_commands.add_parser("refresh")
+    context_refresh.add_argument("--session-context-id")
+    context_refresh.add_argument("--context-snapshot-id")
+    context_refresh.add_argument("--expected-revision", type=int)
+    context_refresh.add_argument("--json", action="store_true")
+
+    context_expire = context_commands.add_parser("expire")
+    context_expire.add_argument("--session-context-id", required=True)
+    context_expire.add_argument("--expected-revision", type=int)
+    context_expire.add_argument("--json", action="store_true")
+
+    view_parser = subcommands.add_parser("view", help="Simple, detailed, and raw view commands")
+    view_commands = view_parser.add_subparsers(dest="view_command", required=True)
+    for command_name in ("simple", "detailed", "raw"):
+        view_command = view_commands.add_parser(command_name)
+        _add_view_resource_args(view_command)
+    view_raw_read = view_commands.add_parser("raw-read")
+    _add_view_resource_args(view_raw_read)
+    view_raw_read.add_argument("--offset", type=int, default=0)
+    view_raw_read.add_argument("--length", type=int)
+    view_raw_read.add_argument("--correlation-id")
+    view_capabilities = view_commands.add_parser("capabilities")
+    view_capabilities.add_argument("--json", action="store_true")
+
+    interface_parser = subcommands.add_parser("interface", help="Public engine interface commands")
+    interface_commands = interface_parser.add_subparsers(dest="interface_command", required=True)
+    interface_version = interface_commands.add_parser("version")
+    interface_version.add_argument("--json", action="store_true")
+    interface_tools = interface_commands.add_parser("tools")
+    interface_tools.add_argument("--json", action="store_true")
+    interface_capability = interface_commands.add_parser("capability")
+    interface_capability.add_argument("--capability")
+    interface_capability.add_argument("--json", action="store_true")
+    interface_invoke = interface_commands.add_parser("invoke-read")
+    interface_invoke.add_argument("--operation", required=True)
+    interface_invoke.add_argument("--payload-json", required=True)
+    interface_invoke.add_argument("--correlation-id")
+    interface_invoke.add_argument("--json", action="store_true")
+
     custody_parser = subcommands.add_parser("custody", help="Custody commands")
     custody_commands = custody_parser.add_subparsers(dest="custody_command", required=True)
     custody_list = custody_commands.add_parser("list", help="List custody events")
@@ -496,6 +637,96 @@ def build_parser() -> argparse.ArgumentParser:
     custody_add.add_argument("--json", action="store_true")
 
     return parser
+
+
+def _gui_routes() -> list[str]:
+    return [
+        "CASE_OVERVIEW",
+        "EVIDENCE",
+        "FILE_SYSTEM",
+        "ARTIFACTS",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "SEARCH",
+        "TIMELINE",
+        "CANDIDATES",
+        "CHAIN_OF_CUSTODY",
+        "REPORT",
+        "SETTINGS",
+        "UNKNOWN",
+    ]
+
+
+def _analysis_scopes() -> list[str]:
+    return [
+        "case",
+        "evidence",
+        "filesystem",
+        "registry",
+        "eventlog",
+        "prefetch",
+        "browser",
+        "media",
+        "timeline",
+        "keyword_search",
+        "machine_candidate",
+        "chain_of_custody",
+        "report",
+        "selection",
+    ]
+
+
+def _context_purposes() -> list[str]:
+    return [
+        "AI_REQUEST",
+        "MCP_REQUEST",
+        "REPORT_DRAFT",
+        "REPORT_REVIEW",
+        "ANALYST_BOOKMARK",
+        "AUDIT",
+        "EXPORT",
+        "OTHER",
+    ]
+
+
+def _resource_types() -> list[str]:
+    return [
+        "EVIDENCE",
+        "FILE_SYSTEM_NODE",
+        "ARTIFACT",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "TIMELINE_EVENT",
+        "SEARCH_RESULT",
+        "MACHINE_CANDIDATE",
+        "CUSTODY_EVENT",
+        "CONTEXT_SNAPSHOT",
+        "OTHER",
+    ]
+
+
+def _add_context_selection_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--file-node-id", action="append", default=[])
+    parser.add_argument("--artifact-id", action="append", default=[])
+    parser.add_argument("--timeline-event-id", action="append", default=[])
+    parser.add_argument("--search-result-id", action="append", default=[])
+    parser.add_argument("--media-artifact-id", action="append", default=[])
+    parser.add_argument("--browser-artifact-id", action="append", default=[])
+    parser.add_argument("--candidate-id", action="append", default=[])
+
+
+def _add_view_resource_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--case-id", required=True)
+    parser.add_argument("--resource-type", required=True, choices=_resource_types())
+    parser.add_argument("--resource-id", required=True)
+    parser.add_argument("--redaction-policy", default="DEFAULT")
+    parser.add_argument("--json", action="store_true")
 
 
 def _add_artifact_scope_args(parser: argparse.ArgumentParser, *, include_case: bool) -> None:

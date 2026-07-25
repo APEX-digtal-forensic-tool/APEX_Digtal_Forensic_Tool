@@ -308,3 +308,15 @@ analyzers, and report rendering.
 - Unsupported boundaries: raster thumbnail pixel rendering, actual OCR/STT execution, Email,
   Discord, Telegram, KakaoTalk, other messenger parsers, deleted/slack/unallocated recovery, live
   browser acquisition, GUI/web/MCP, AI/LLM flows, and report rendering remain outside Phase 5.
+
+### Phase 6 Implementation Trace
+
+| Area | Implemented contract | Verification |
+|---|---|---|
+| Context snapshot | Immutable `AnalysisContextSnapshot` builds resolved bundles without re-running analyzers. | `tests/unit/test_phase6_context_views.py` snapshot persistence and reopen checks |
+| View projection | Simple, Detailed, and Raw projections are generated from the same source context. | `tests/unit/test_phase6_context_views.py` view projection checks |
+| Raw locator | Raw projections and reads include locator, citation, offset, length, and bounds validation. | Raw read valid/EOF/negative/oversize tests |
+| Raw audit | Raw reads are read-only, max-length bounded, evidence-root checked, and audited. | Raw reader and CLI workflow tests |
+| Scope context | Scope contexts preserve independent scope fingerprints, revision states, partial state, and cursors. | Scope snapshot and paging tests |
+
+Phase 6 stops at the public engine/interface boundary. MCP transport, AI provider invocation, prompts, and human-verification AI behavior are intentionally deferred to later phases.

@@ -1634,3 +1634,9 @@ AI가 생성한 분석 결과와 Report는 분석 보조 자료이며, 최종 �
 - 분석 결과 재현 가능성 확보
 - Chain of Custody Event 불변성 유지
 - 검증되지 않은 성능 또는 법적 효력 주장 금지
+
+## Phase 6 Implementation Status
+
+Phase 6 runtime support is implemented through `ContextService`, `ViewProjectionService`, `SafeRawRangeReader`, and `EngineInterfaceService`. The CLI now exposes `context`, `view`, and `interface` command groups for live GUI session context, immutable analysis snapshots, scope paging, simple/detailed/raw projections, bounded raw range reads, and public engine capability discovery.
+
+Live GUI session context is revisioned and TTL-bound. Analysis snapshots are append-only, case-scoped, content-fingerprinted, and linked to source revision state so partial and stale context can be surfaced without reanalysis. Raw reads validate evidence-root containment, byte range bounds, max length, logical locator limits, and append an audit record. MCP remains an adapter boundary: core publishes schemas and tool descriptors but does not include an MCP server, LLM provider, prompt, or agent loop.
