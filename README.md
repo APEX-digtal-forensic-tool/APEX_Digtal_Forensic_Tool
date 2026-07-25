@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트는 **Phase 5 Browser·Media MVP 및 Windows 호환성 검증 완료** 상태입니다.
-> Phase 1~4 기반 위에 Chromium·Firefox Profile Discovery, Browser History·Search·Download, Main DB·WAL·SHM Snapshot 분석, Image·Video·Audio Metadata, EXIF·GPS Candidate, Search·Timeline 연동, Machine-extracted Candidate Review, Checkpoint·Resume, Pause·Cancel, Stable Cursor Pagination 및 관련 CLI가 구현되었습니다.
+> 현재 프로젝트의 Forensic Core Engine은 **Phase 6 GUI Context, Analysis Context Snapshot, Simple·Detailed·Raw View 및 Public Engine Interface 구현과 Windows·Linux 회귀 검증 완료** 상태입니다.
+> Phase 1~5의 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata 및 Machine-extracted Candidate 기반 위에 Live GUI Session Context, 불변 Analysis Context Snapshot, Scope별 Context, View Projection, 제한된 Raw Range Read, Audit 및 공개 Engine Interface 계약이 구현되었습니다.
 >
-> Browser SQLite Snapshot은 플랫폼 임시 디렉터리와 읽기 전용 연결을 사용하고, 분석 후 Connection을 명시적으로 닫아 Windows에서도 안전하게 정리합니다. Binary Registry/EVTX 분석은 optional parser dependency capability로 분리되어 있으며, File Body Full Text Indexing, E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing, 삭제 파일 복구, Live Windows 수집, Credential/Secret 추출, GUI, MCP, AI, 실제 OCR/STT 실행 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> GUI Session Context는 Revision·TTL 기반으로 관리하고 Analysis Context Snapshot은 Case·Resource Revision·Filter·Time Range·Search·Keyword·Timeline 출처를 보존하는 Append-only 구조로 저장합니다. Raw Read는 등록된 Evidence와 Indexed Source Node를 검증한 뒤 허용된 Byte Range만 읽습니다. 실제 Desktop GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, AI Keyword Recommendation, PDF·HTML Report Renderer, Disk Image 내부 File System Parsing 및 삭제 파일 복구는 이후 단계 또는 별도 담당 범위입니다.
 
 ---
 
@@ -346,31 +346,57 @@ AI가 활용할 수 있는 정보:
 
 ## GUI Context 및 Scope별 Analysis Context
 
-### GUI Context
+### Live GUI Session Context
 
 GUI Context는 현재 사용자의 분석 상태를 나타내는 Session 단위 임시 데이터입니다.
 
-포함 가능한 정보:
+현재 저장 가능한 정보:
 
-- 현재 Case
-- 현재 Evidence
-- 현재 화면
-- 선택된 File
-- 선택된 Artifact
-- 선택된 Timeline Event
-- 선택된 Search Result
-- 활성 Filter
+- 현재 Case와 활성 Evidence
+- 현재 화면 및 View Mode
+- 선택된 File·Artifact·Timeline Event·Search Result
+- 활성 Filter와 Sort
 - Timeline 시간 범위
 - Tag 및 주요 Evidence
 - Locale 및 Timezone
+- 활성 Search·Timeline·Analyzer Revision
+- Session 생성·수정·만료 시각
 
-Live GUI Context는 Session Store에서 관리합니다.
+Live GUI Session Context는 `context_revision` 기반 Optimistic Lock과 TTL을 적용합니다.
 
-Audit, AI 요청 또는 Report 재현이 필요한 경우에만 불변 Context Snapshot으로 저장합니다.
+- Client가 전달한 Revision과 현재 Revision이 다르면 구조화된 Conflict Error 반환
+- 만료된 Session은 정상 Context처럼 재사용하지 않음
+- Case와 Evidence 소속 관계 검증
+- Cross-case Resource 혼합 방지
+- Context 변경 시 새 Revision 생성
+- 원본 분석 결과와 GUI 선택 상태를 분리
+
+Audit, MCP·AI 요청 또는 Report 재현이 필요한 시점에는 Live Session 상태를 불변 Analysis Context Snapshot으로 고정합니다.
+
+### Immutable Analysis Context Snapshot
+
+Analysis Context Snapshot은 Session 상태 전체를 대용량 Payload로 복사하지 않고 Resource ID와 Source Revision 중심으로 저장합니다.
+
+현재 구현 원칙:
+
+- Append-only Snapshot
+- 기존 Snapshot Update·Delete 방지
+- `previous_snapshot_id`를 통한 Refresh 계보 보존
+- Case·Evidence·Resource 소속 검증
+- Keyword Set ID·Version 보존
+- Search Execution·Index Revision 보존
+- Timeline Revision 보존
+- Filter·Sort·Time Range 보존
+- Analyzer·Source Revision 보존
+- Deterministic Content Fingerprint
+- Scope별 `partial`, `stale`, Coverage 및 Revision State
+- Repository 재개방 후 동일 Snapshot 조회
+
+Snapshot Refresh는 기존 Snapshot을 수정하지 않고 새 Snapshot을 생성하며, 재현 메타데이터를 유지한 상태에서 현재 Source Revision과 Stale 여부를 다시 계산합니다.
 
 ### Scope별 Analysis Context
 
-AI Context는 모든 분석 결과를 하나의 거대한 Context로 혼합하지 않습니다.
+Analysis Context는 모든 분석 결과를 하나의 거대한 Context로 혼합하지 않습니다.
 
 지원 Scope:
 
@@ -387,16 +413,21 @@ AI Context는 모든 분석 결과를 하나의 거대한 Context로 혼합하�
 - `report`
 - `chain_of_custody`
 
-각 Scope는 다음 정보를 포함할 수 있습니다.
+각 Scope는 별도 Row와 Stable Cursor Page로 저장·조회하며 다음 정보를 포함할 수 있습니다.
 
 - Context Revision
-- 포함 Result ID
-- Analyzer Version
-- Filter 및 Time Range
-- Partial Result 여부
-- Citation
+- Resource ID와 Resource Type
+- Analyzer·Source Revision
+- Filter·Sort·Time Range
+- Result Count와 Included Count
+- Partial·Stale·Coverage 상태
+- Citation 및 Raw Locator
 - Context 생성 시점
-- 실제 AI 요청에 전달된 Scope
+- 실제 Adapter 또는 AI 요청에 전달된 Scope
+
+Artifact는 실제 `artifact_type`에 따라 Registry·Event Log·Prefetch·Browser·Media Scope로 분류하며, Generic Artifact가 관련 없는 Scope에 중복 포함되지 않도록 검증합니다.
+
+Evidence Scope는 활성 Evidence와 Case 내 Evidence 목록을 Stable Cursor로 조회하고, 다른 Case의 Evidence가 포함되면 거부합니다.
 
 상위 Case Context는 필요한 Scope만 선택하여 결합합니다.
 
@@ -493,7 +524,7 @@ Timezone 후보 출처:
 - Live Windows Artifact Acquisition 및 Remote Registry 미지원
 - Registry Transaction Log·삭제 Key 복구 미지원
 - Credential·Secret·Password Hash 추출 미지원
-- Artifact Search와 Registry·Event Log·Prefetch Timeline Projection·Query는 Phase 4에서 구현되었으며, GUI·AI Context 연동은 미지원
+- Artifact Search와 Registry·Event Log·Prefetch Timeline Projection·Query는 Phase 4에서 구현되었으며, Phase 6 Context Snapshot·View Projection에서 재사용합니다. 실제 GUI와 AI 실행 계층은 아직 포함하지 않습니다.
 - E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing 미지원
 
 ### Phase 4 — Search, Keyword Set 및 Timeline
@@ -596,6 +627,38 @@ Incognito 복원, 삭제 Browser Record Carving, Cloud Sync, 실제 OCR·STT, Vi
 Subtitle·Audio Transcription, Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP·AI 실행 및 Report
 Renderer입니다.
 
+
+### Phase 6 — GUI Context, Analysis Snapshot 및 View Runtime
+
+- Live GUI Session Context와 `context_revision` 기반 Optimistic Lock
+- Session TTL·만료 상태 및 Case·Evidence 소속 검증
+- 불변 Analysis Context Snapshot과 `previous_snapshot_id` 기반 Refresh 계보
+- Keyword Set·Search Execution·Search Index·Timeline·Analyzer·Source Revision 보존
+- Case·Evidence·File System·Registry·Event Log·Prefetch·Browser·Media·Timeline·Keyword Search 등 Scope별 Context
+- Scope별 Partial·Stale·Coverage·Revision State 및 Stable Cursor Pagination
+- Artifact Type 기반 Scope 격리와 Cross-case·Cross-evidence Resource 검증
+- 동일 Resource와 Source Revision을 유지하는 Simple·Detailed·Raw Projection
+- Indexed Source Node 기반 Safe Raw Range Reader
+- Evidence Root Containment, Offset·Length·Maximum Read Limit 및 EOF 검증
+- Raw Read Append-only Audit Record
+- JSON-friendly Public Engine Interface Envelope와 Capability·Tool Descriptor
+- Canonical Operation Name과 Structured Request Error
+- `context`, `view`, `interface` CLI Command Group
+- Phase 6 JSON Schema와 Unit·Integration Test
+- Windows·Linux Runtime 회귀 검증
+
+현재 제한:
+
+- 실제 Desktop GUI와 Frontend View 미포함
+- Web Server 및 REST·GraphQL Transport 미포함
+- MCP Server·SDK·Tool Registration 미포함
+- LLM Provider·Prompt·Agent Loop·API Key 미포함
+- AI Keyword Recommendation과 Scope Summary 미구현
+- Report Review·Approval 및 PDF·HTML Renderer 미구현
+- 임의 Local Path 직접 읽기 금지
+- Disk Image 내부 Raw Locator와 File System Parser 미지원
+- Deleted·Unallocated·Slack 영역 Raw Read 미지원
+- Role 기반 Raw View 권한 정책은 Backend·Frontend 통합 단계에서 구현
 ---
 
 ## 주요 기능
@@ -915,24 +978,31 @@ AI는 다음 동작을 수행할 수 없습니다.
 
 ## Simple / Detailed / Raw View
 
-동일 Finding을 세 단계로 확인할 수 있도록 설계합니다.
+Phase 6에서는 동일 Resource를 세 단계 Projection으로 조회할 수 있습니다.
 
-| View | 제공 내용 |
+| View | 현재 Engine 제공 내용 |
 |---|---|
-| Simple | 한국어 설명, 주요 발견 후보, AI 요약, 추천 분석, 핵심 Timeline |
-| Detailed | 전체 Artifact Field, Parser/Version, Source, Timezone 해석, Confidence, Citation |
-| Raw | 원본 Field/Value, Byte Offset/Length, Encoding, Hex/Text, 원본 Timestamp, Raw Snippet |
+| Simple | Resource ID, 핵심 표시 Field, 요약용 값, Partial·Stale 상태 및 주요 Citation |
+| Detailed | 전체 Artifact·Context Field, Parser·Analyzer Version, Source Revision, Timezone 해석, Confidence 및 Citation |
+| Raw | 검증된 Raw Locator, Byte Offset·Length, Encoding, Hex·Text Preview, 원본 Timestamp 및 Logical Locator 정보 |
 
-원칙:
+현재 구현 원칙:
 
-- 동일 Finding에서 View 전환
-- AI 설명과 원본 Fact의 시각적 분리
+- 동일 `resource_id`와 Source Revision을 유지한 상태에서 View 전환
+- 기존 Observed Fact를 수정하지 않는 Projection DTO
+- Simple·Detailed·Raw 결과의 JSON-friendly Envelope
+- AI 설명과 원본 Fact가 혼합되지 않도록 별도 계층 유지
 - Raw Locator와 Citation 연결
-- 최대 Read Length 제한
-- 필요한 Offset만 선택적으로 읽기
-- 대용량 File 전체 로딩 금지
+- 등록된 Evidence와 Indexed Source Node 검증
+- Caller가 전달한 임의 `relative_path`만으로 File Read 금지
+- Evidence Root 밖으로 벗어나는 Path 거부
+- Offset·Length·EOF·Maximum Read Length 검증
+- 필요한 Byte Range만 선택적으로 읽기
+- 대용량 File 전체 Memory Loading 금지
+- Raw Read 결과에 Audit Record 추가
 - 원본 Evidence 읽기 전용 유지
-- 사용자 역할별 Raw View 접근 정책 검토
+
+한국어 설명, AI 요약 및 추천 분석은 Phase 7 AI Layer 또는 Frontend에서 이 Projection을 기반으로 제공하며, Phase 6 Engine 자체는 LLM을 실행하지 않습니다. 사용자 역할별 Raw View 접근 정책은 Backend·Frontend 통합 단계에서 구현합니다.
 
 ---
 
@@ -1224,20 +1294,26 @@ APEX/
 │       │   ├── filesystem/
 │       │   ├── hashing/
 │       │   ├── persistence/
+│       │   │   └── sqlite/
+│       │   │       └── repository.py
 │       │   └── schema/
 │       ├── application/
 │       │   └── services/
 │       │       ├── artifact_analysis.py
+│       │       ├── context.py
 │       │       ├── file_system_index.py
 │       │       ├── machine_extraction.py
 │       │       ├── search.py
 │       │       └── timeline.py
 │       ├── cli/
+│       │   ├── commands.py
+│       │   └── parser.py
 │       ├── config/
 │       ├── domain/
 │       │   └── models/
 │       │       ├── artifact.py
 │       │       ├── browser_media.py
+│       │       ├── context.py
 │       │       ├── filesystem.py
 │       │       ├── search.py
 │       │       └── timeline.py
@@ -1250,22 +1326,35 @@ APEX/
 │           ├── filesystem_provider.py
 │           ├── machine_extraction.py
 │           ├── media_analyzer.py
+│           ├── raw_reader.py
 │           ├── search_index.py
 │           └── timeline_repository.py
 │
 ├── schemas/
 │   └── v1/
+│       ├── analysis-context-snapshot.schema.json
+│       ├── analysis-scope-context.schema.json
 │       ├── browser-artifact.schema.json
 │       ├── browser-profile.schema.json
+│       ├── context-revision-state.schema.json
+│       ├── engine-interface.schema.json
+│       ├── engine-tool-descriptor.schema.json
+│       ├── gui-session-context.schema.json
 │       ├── machine-extracted-candidate.schema.json
 │       ├── media-artifact.schema.json
 │       ├── provider-capability.schema.json
-│       └── thumbnail.schema.json
+│       ├── raw-read-request.schema.json
+│       ├── raw-read-response.schema.json
+│       ├── raw-view.schema.json
+│       ├── thumbnail.schema.json
+│       └── view-projection.schema.json
 │
 ├── tests/
 │   ├── integration/
+│   │   └── test_phase6_cli_workflow.py
 │   └── unit/
-│       └── test_phase5_media_browser.py
+│       ├── test_phase5_media_browser.py
+│       └── test_phase6_context_views.py
 │
 └── tools/
     ├── validate_design.mjs
@@ -1362,22 +1451,34 @@ APEX/
 - [x] Search / Timeline Opaque Stable Cursor Pagination
 - [x] Search Index / Timeline Build Checkpoint / Resume / Pause / Cancel
 - [x] Search / Keyword Set / Timeline CLI·Schema·Test
-- [x] Phase 5 Browser Communications 및 Media Metadata MVP
+- [x] Phase 5 Browser Communications & Media Metadata MVP
 - [x] Chromium / Firefox Profile Discovery
-- [x] Browser SQLite Main DB / WAL / SHM Snapshot
-- [x] Chromium History / Search / Download Analyzer
-- [x] Firefox History / Download Annotation Candidate
-- [x] Browser Source Fingerprint / Revision / Checkpoint / Resume
-- [x] Browser Pause / Cancel / Stable Cursor / Repository Reopen
-- [x] Browser Search Index / Timeline Projection / Case Timezone Display
-- [x] Image / Video / Audio Metadata Analyzer
-- [x] JPEG EXIF / GPS / Orientation Candidate
-- [x] Optional ffprobe Capability와 Cross-platform Bounded Process Reader
-- [x] Thumbnail Derived Metadata Contract
-- [x] Machine-extracted Candidate 및 Append-only Review History
-- [x] OCR / STT Provider Port와 `CAPABILITY_UNAVAILABLE`
+- [x] Chromium Visit / Search Term / Download 분석
+- [x] Firefox Visit / Download Candidate 및 URL-bar Input Candidate 분리
+- [x] Browser SQLite Main DB / WAL / SHM Snapshot과 Source Revision
+- [x] Browser Source Checkpoint / Resume / Pause / Cancel
+- [x] Browser Stable Cursor / Search / Timeline 연동
+- [x] Image Metadata / JPEG EXIF / GPS Candidate
+- [x] Video / Audio Metadata 및 Optional ffprobe Capability
+- [x] Bounded Cross-platform Subprocess와 Windows Snapshot Cleanup
+- [x] Thumbnail Derived Metadata 계약
+- [x] Machine-extracted Candidate Domain 및 Append-only Review History
+- [x] OCR / STT Provider Port와 `CAPABILITY_UNAVAILABLE` 기본 동작
 - [x] Browser / Media / Candidate CLI·Schema·Test
-- [x] Windows / Linux Runtime Compatibility Regression
+- [x] Windows·Linux Runtime 회귀 검증
+- [x] Phase 6 GUI Context, Analysis Snapshot 및 View Runtime
+- [x] Live GUI Session Context Revision·TTL·Optimistic Lock
+- [x] Immutable Analysis Context Snapshot 및 Refresh 계보
+- [x] Keyword·Search·Timeline·Analyzer·Source Revision 보존
+- [x] Scope별 Context, Partial·Stale·Coverage 및 Stable Cursor
+- [x] Evidence Scope와 Cross-case·Cross-evidence Validation
+- [x] Artifact Type 기반 Scope 격리
+- [x] Simple / Detailed / Raw View Projection
+- [x] Indexed Source 기반 Safe Raw Range Read와 Append-only Audit
+- [x] Public Engine Interface, Capability 및 Tool Descriptor
+- [x] `context` / `view` / `interface` CLI
+- [x] Phase 6 JSON Schema 및 Unit·Integration Test
+- [x] Windows·Linux Runtime 회귀 검증
 
 ### 구현 예정
 
@@ -1387,9 +1488,10 @@ APEX/
 - [ ] Prefetch MAM Compression 해제
 - [ ] Event Message DLL Rendering
 - [ ] 광범위한 Windows Timezone Resolver 및 Timestamp Normalizer 확장
-- [ ] GUI Context 및 Scope별 Analysis Context 실행 구현
-- [ ] Simple / Detailed / Raw View 실행 구현
-- [ ] MCP Adapter용 공개 Interface
+- [ ] Browser Credential / Cookie Decryption 및 Deleted Record Recovery
+- [ ] Email / Discord / Telegram / KakaoTalk Plugin
+- [ ] Raster Thumbnail Rendering 및 제한된 Video Frame Sampling
+- [ ] 실제 OCR / STT Provider 및 Candidate Extraction
 - [ ] AI Keyword Recommendation 및 Citation Workflow
 - [ ] Report Review / Approval / PDF·HTML Export
 - [ ] 한국어 Search 및 Localization
@@ -1480,32 +1582,43 @@ APEX/
 - [x] Checkpoint / Resume / Pause / Cancel
 - [x] CLI / JSON Schema / Unit·Integration Test
 
-### Phase 5 — Browser Communications 및 Media Metadata — 완료
+### Phase 5 — Browser Communications & Media Metadata — 완료
 
 - [x] Chromium / Firefox Profile Discovery
-- [x] Browser SQLite Main DB / WAL / SHM Snapshot
-- [x] Chromium History / Search / Download
-- [x] Firefox History / Download Annotation Candidate
-- [x] Source Fingerprint / Revision / Checkpoint / Resume
-- [x] Cooperative Pause / Cancel
-- [x] Browser Stable Cursor Query
-- [x] Browser Search / Timeline Projection
-- [x] Image / Video / Audio Metadata
-- [x] JPEG EXIF / GPS Candidate
-- [x] Optional ffprobe Video / Audio Metadata Capability
-- [x] Cross-platform Timeout / Output Limit / Process Cleanup
-- [x] Thumbnail Derived Metadata Contract
-- [x] Machine-extracted Candidate 및 Append-only Review History
-- [x] OCR / STT Provider Port와 Unsupported Capability
+- [x] Chromium History / Search Term / Download
+- [x] Firefox Visit / Download Candidate
+- [x] Firefox URL-bar Input Candidate 분리
+- [x] Read-only Browser SQLite Snapshot
+- [x] Main DB / WAL / SHM Source Fingerprint와 Reanalysis
+- [x] Source Checkpoint / Resume / Pause / Cancel
+- [x] Browser Stable Cursor / Search / Timeline 연동
+- [x] Image Header Metadata / JPEG EXIF / GPS Candidate
+- [x] Decompression Bomb / Corrupt File 보호
+- [x] Video / Audio Metadata와 Optional ffprobe Capability
+- [x] Cross-platform Bounded Subprocess / Timeout / Output Limit
+- [x] Thumbnail Derived Metadata 계약
+- [x] Machine-extracted Candidate / Append-only Review History
+- [x] OCR / STT Provider Port와 Unavailable Capability
+- [x] Browser / Media / Candidate CLI
+- [x] JSON Schema / Unit·Integration Test
+- [x] Windows·Linux Runtime 검증
+
+### Phase 6 — GUI Context 및 View — 완료
+
+- [x] Live GUI Session Context
+- [x] Context Revision·TTL·Optimistic Lock
+- [x] Immutable Analysis Context Snapshot
+- [x] Snapshot Refresh 및 Previous Snapshot 계보
+- [x] Scope별 Analysis Context
+- [x] Partial·Stale·Coverage·Revision State
+- [x] Evidence Scope 및 Stable Cursor Pagination
+- [x] Artifact Type 기반 Scope Isolation
+- [x] Simple / Detailed / Raw View Projection
+- [x] Safe Raw Range Reader 및 Audit
+- [x] Public Engine Interface와 Tool Descriptor
+- [x] Structured Request Error 및 Canonical Operation Name
 - [x] CLI / JSON Schema / Unit·Integration Test
-- [x] Windows / Linux Runtime Compatibility Regression
-
-### Phase 6 — GUI Context 및 View
-
-- GUI Context
-- Scope별 Analysis Context
-- Simple / Detailed / Raw View
-- MCP Adapter용 공개 Interface
+- [x] Windows·Linux Runtime 검증
 
 ### Phase 7 — AI Assistance
 
