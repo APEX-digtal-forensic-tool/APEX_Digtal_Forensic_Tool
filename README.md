@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트의 Forensic Core Engine은 **Phase 6 GUI Context, Analysis Context Snapshot, Simple·Detailed·Raw View 및 Public Engine Interface 구현과 Windows·Linux 회귀 검증 완료** 상태입니다.
-> Phase 1~5의 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata 및 Machine-extracted Candidate 기반 위에 Live GUI Session Context, 불변 Analysis Context Snapshot, Scope별 Context, View Projection, 제한된 Raw Range Read, Audit 및 공개 Engine Interface 계약이 구현되었습니다.
+> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 구현과 통합 보안·기능 감사 및 Windows·Linux 회귀 검증 완료** 상태입니다.
+> Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata, Machine-extracted Candidate, GUI Context, Analysis Context Snapshot, View Projection, Safe Raw Read, Public Engine Interface, AI Assistance Engine Contract 및 Report Review·Approval·Export Contract가 구현되었습니다.
 >
-> GUI Session Context는 Revision·TTL 기반으로 관리하고 Analysis Context Snapshot은 Case·Resource Revision·Filter·Time Range·Search·Keyword·Timeline 출처를 보존하는 Append-only 구조로 저장합니다. Raw Read는 등록된 Evidence와 Indexed Source Node를 검증한 뒤 허용된 Byte Range만 읽습니다. 실제 Desktop GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, AI Keyword Recommendation, PDF·HTML Report Renderer, Disk Image 내부 File System Parsing 및 삭제 파일 복구는 이후 단계 또는 별도 담당 범위입니다.
+> 통합 감사에서는 Read Interface의 Mutation 실행 차단, 인덱싱 후 Symlink·Reparse Point 교체 방어, Windows-safe Export Filename 검증, Export Manifest 상태 전이 검증, Export Prepare 멱등성 및 AI Revision Resolver 예외 처리 문제를 수정했습니다. 현재 회귀 기준은 **94개 Test 통과**, Ruff·mypy 및 52개 JSON Schema 설계 검증 통과입니다. 실제 Desktop GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, 실제 AI Provider 실행, 실제 OCR·STT 및 PDF·HTML Rendering은 이후 단계 또는 별도 담당 범위입니다.
 
 ---
 
@@ -653,12 +653,74 @@ Renderer입니다.
 - Web Server 및 REST·GraphQL Transport 미포함
 - MCP Server·SDK·Tool Registration 미포함
 - LLM Provider·Prompt·Agent Loop·API Key 미포함
-- AI Keyword Recommendation과 Scope Summary 미구현
-- Report Review·Approval 및 PDF·HTML Renderer 미구현
+- LLM 기반 Keyword Recommendation과 Scope Summary 생성 미포함
+- Report Review·Approval Engine Contract는 Phase 8에서 구현되었으며, 실제 PDF·HTML Renderer와 GUI Preview는 미구현
 - 임의 Local Path 직접 읽기 금지
 - Disk Image 내부 Raw Locator와 File System Parser 미지원
 - Deleted·Unallocated·Slack 영역 Raw Read 미지원
 - Role 기반 Raw View 권한 정책은 Backend·Frontend 통합 단계에서 구현
+
+### Phase 7 — AI Assistance Engine Contract
+
+- Snapshot 기반 `AiAssistanceRequest` 생성과 TTL·Fingerprint·Current Revision 검증
+- 외부 Keyword Recommendation Batch Ingest 및 Schema/Size/Forbidden Field 검증
+- 외부 Scope Summary Ingest와 Script/Base64/Scope/Citation 검증
+- AI 결과의 `NOT_OBSERVED_FACT` 분류와 Citation·Partial·Stale·Coverage Warning 보존
+- Human Verification Append-only Event Hash Chain
+- Accepted/Corrected Keyword Candidate만 기존 Keyword Set DRAFT Version으로 Promotion
+- Promotion은 Search 실행이나 Keyword Set Activation을 자동 수행하지 않음
+- Public Engine Interface와 `ai` CLI Command Group
+- Provider-neutral Port와 기본 `CAPABILITY_UNAVAILABLE` 응답
+- MCP SDK, LLM SDK, Prompt Template, API Key, Chain-of-thought, Runtime Network 호출 미포함
+
+### Phase 8 — Report Review, Approval 및 Export Engine Contract
+
+- `ReportRecord`, Immutable `ReportVersion`, Stable `ReportSection` 구조
+- Analyst Draft·외부 AI Draft·Imported Draft·System-assembled Data의 Source Kind 분리
+- Context Snapshot·Evidence·Search Execution·Timeline Revision·AI Result·Citation Provenance 검증
+- Partial·Stale·Coverage·Limitations 보존
+- Report Version Update·Delete 방지와 `previous_version_id` 기반 Version 계보
+- Append-only Human Review·Approval·Reject·Revoke Event Hash Chain
+- 승인된 특정 Version과 Content Fingerprint만 Export 허용
+- 새 Report Version 생성 시 기존 Approval을 승계하지 않고 재검토 요구
+- 기존 Chain of Custody Ledger를 수정하지 않는 불변 Custody Snapshot과 Ledger 검증
+- JSON-friendly Render Package, Export Manifest, Export Audit 및 Rendered Artifact Metadata 계약
+- Provider-neutral Renderer Port와 기본 `CAPABILITY_UNAVAILABLE`
+- PDF·HTML Format 계약은 제공하지만 실제 PDF·HTML Bytes 생성은 미구현
+- Export Filename의 Path Traversal·Absolute Path·Drive Prefix·UNC·Windows Reserved Name 차단
+- Derived Output Root 밖 Reference 거부와 Overwrite 기본 금지
+- Export Prepare 멱등성 및 Manifest 상태 전이 검증
+- `report` CLI와 Public Engine Interface Report Operation 제공
+
+현재 제한:
+
+- 실제 AI Report Draft 생성 미지원
+- 실제 LLM·Prompt·MCP Server·Tool Registration 미지원
+- 실제 PDF·HTML Renderer, HTML Template, CSS 및 GUI Report Preview 미지원
+- 전자서명·실제 사용자 인증·RBAC·Billing 미지원
+- Rendered Output은 Original Evidence가 아닌 Derived Data Metadata로만 관리
+
+### Phase 1~8 통합 감사 및 회귀 검증
+
+통합 감사에서 발견된 2 High, 2 Medium, 2 Low Finding을 모두 수정했습니다.
+
+- Read 전용 Interface가 Mutation Operation을 실행하지 못하도록 Descriptor의 `mutates_state` 경계 강제
+- 인덱싱 이후 Source Path가 Symlink·Junction·Reparse Point로 교체된 경우 Artifact 분석 차단
+- Windows Reserved Device Name, Trailing Dot·Space, Drive Prefix 및 UNC를 포함한 Export Filename 검증 강화
+- 유효하지 않은 Export Manifest 상태에서 Renderer Result로 완료 처리하는 경로 차단
+- 같은 Export 요청의 반복 Prepare에서 Render Package가 중복 생성되지 않도록 멱등 처리
+- AI Revision 검증에서 예상하지 못한 Resolver Exception을 숨기지 않도록 예외 범위 축소
+- 수정 사항별 집중 Regression Test 추가
+- Windows·Linux 전체 회귀 Test 94개 통과
+- Ruff, mypy 81 Source File 및 52개 JSON Schema 설계 검증 통과
+
+감사 결과 기준 미해결 Finding:
+
+- Critical: 0
+- High: 0
+- Medium: 0
+- Low: 0
+
 ---
 
 ## 주요 기능
@@ -877,7 +939,7 @@ Renderer입니다.
 
 AI는 조사 범위를 줄이기 위한 Keyword Candidate를 제안할 수 있습니다.
 
-> 현재는 설계 계약만 완료되었으며, AI Keyword Recommendation 실행 구현은 Phase 7 범위입니다.
+> 현재 Engine은 AI Provider를 실행하지 않고, 외부 Adapter가 제출한 Keyword Recommendation을 검증·저장·검토·승격하는 Phase 7 계약을 제공합니다.
 
 ```text
 Case 배경 정보
@@ -1086,7 +1148,7 @@ Chain of Custody는 일반 Report 문장이 아니라 독립적인 Append-only L
 - 기존 Custody Event 직접 수정·삭제 금지
 - 오류 수정은 `CORRECTION` Event 추가
 - Append-only Ledger
-- Event Hash Chain 적용 검토
+- Event Hash Chain 적용 및 Repository 재개방 후 검증
 - 최초 Hash와 재검증 Hash 기록
 - Hash 불일치 경고
 - 사용자·역할·승인자 기록
@@ -1100,36 +1162,59 @@ Chain of Custody는 일반 Report 문장이 아니라 독립적인 Append-only L
 
 ---
 
-## AI Report 및 Human Review
+## Report Review, Approval 및 Export Contract
 
-AI가 생성한 Report는 즉시 최종 결과로 확정되지 않습니다.
+Forensic Core Engine은 보고서 문장을 직접 생성하거나 PDF·HTML을 직접 렌더링하지 않습니다.
+
+외부 MCP·AI Layer 또는 Analyst가 작성한 Draft를 검증하여 Immutable Report Version으로 저장하고, Human Review·Approval·Custody Snapshot·Export 계약을 관리합니다.
 
 ```text
-AI Draft
+외부 AI Draft / Analyst Draft
     ↓
-Human Review
+Engine Validation 및 Immutable Report Version
     ↓
-Approval
+Human Review / Request Changes
     ↓
-PDF / HTML Export
+Approval 또는 Reject
+    ↓
+Custody Snapshot 및 Render Package
+    ↓
+외부 PDF / HTML Renderer
+    ↓
+Rendered Artifact Metadata 검증·저장
 ```
 
-Report 상태:
+현재 Report 상태:
 
 - `DRAFT`
-- `GENERATING`
 - `REVIEW_REQUIRED`
 - `APPROVED`
 - `REJECTED`
-- `EXPORTING`
+- `EXPORT_PREPARING`
+- `EXPORT_READY`
 - `EXPORTED`
-- `FAILED`
+- `EXPORT_FAILED`
+- `ARCHIVED`
 
-승인된 특정 Report Version만 Export할 수 있습니다.
+핵심 원칙:
 
-승인 후 내용이 변경되면 기존 승인은 무효화되고 다시 검토해야 합니다.
+- Report Content는 Immutable Version으로 저장
+- 특정 Version과 Content Fingerprint에만 Approval 부여
+- 승인 후 수정은 기존 Version을 변경하지 않고 새 Version 생성
+- 새 Version은 이전 Approval을 승계하지 않음
+- Review·Approval·Reject·Revoke는 Append-only Event로 보존
+- AI Draft와 Analyst Draft의 Source Kind 및 Provider Provenance 분리
+- Report 문장을 Artifact·Timeline Event·Search Result·Observed Fact로 승격하지 않음
+- Cross-case Evidence·Snapshot·Citation·AI Result 연결 금지
+- Partial·Stale·Coverage·Limitations를 숨기지 않음
+- Invalid Custody Ledger는 기본 정책에서 Approval 차단
+- APPROVED Version만 Export Manifest 생성 가능
+- Export Filename과 Derived Output Root 경계 검증
+- 실제 Renderer가 없으면 `CAPABILITY_UNAVAILABLE`
+- Failed Renderer Result를 Completed 상태로 기록하지 않음
+- 동일 Export Prepare 요청은 멱등 처리
 
-Report에 포함 가능한 항목:
+Report에 포함 가능한 Section:
 
 1. 사건 개요
 2. 분석 목적
@@ -1139,28 +1224,30 @@ Report에 포함 가능한 항목:
 6. Chain of Custody
 7. 분석 환경
 8. Analysis Profile 및 완료 범위
-9. Partial Result 여부
+9. Partial·Stale·Coverage Warning
 10. Timezone 및 변환 정책
 11. 주요 발견 사항
 12. File System 분석 결과
-13. Artifact 분석 결과
-14. Images / Videos 분석 결과
+13. Windows Artifact 분석 결과
+14. Images / Videos / Audio 분석 결과
 15. Browser Communications 분석 결과
 16. Timeline
 17. Keyword Set 및 Search Options
-18. AI 분석 요약
+18. AI Assistance Result
 19. Raw Citation
 20. Machine-extracted Candidate와 검토 상태
 21. 결론
 22. 대응 권고
 23. 분석 범위와 제외 범위
 24. 증거 출처 및 Citation
-25. 분석 한계
+25. 분석 한계 및 Known Limitations
 
-지원 예정 Export:
+지원하는 Export 계약:
 
 - PDF
 - HTML
+
+현재는 Render Package·Export Manifest·Renderer Port·Output Metadata 검증까지만 구현되어 있으며 실제 PDF·HTML 파일 생성은 별도 Renderer 담당입니다.
 
 ---
 
@@ -1199,7 +1286,9 @@ APEX는 다음 원칙에 따라 디지털 증거를 처리합니다.
 - Citation과 Raw Locator
 - Chain of Custody
 - Machine-extracted Candidate 계약
-- Report 상태와 승인 규칙
+- AI Assistance Request·Result Ingest·Human Verification·Keyword Promotion 계약
+- Report Aggregate·Immutable Version·Review·Approval·Custody Snapshot 계약
+- Render Package·Export Manifest·Rendered Artifact Metadata 계약
 - GUI와 MCP Adapter용 공개 Interface
 
 비담당:
@@ -1299,10 +1388,12 @@ APEX/
 │       │   └── schema/
 │       ├── application/
 │       │   └── services/
+│       │       ├── ai_assistance.py
 │       │       ├── artifact_analysis.py
 │       │       ├── context.py
 │       │       ├── file_system_index.py
 │       │       ├── machine_extraction.py
+│       │       ├── report.py
 │       │       ├── search.py
 │       │       └── timeline.py
 │       ├── cli/
@@ -1311,14 +1402,17 @@ APEX/
 │       ├── config/
 │       ├── domain/
 │       │   └── models/
+│       │       ├── ai.py
 │       │       ├── artifact.py
 │       │       ├── browser_media.py
 │       │       ├── context.py
 │       │       ├── filesystem.py
+│       │       ├── report.py
 │       │       ├── search.py
 │       │       └── timeline.py
 │       ├── jobs/
 │       └── ports/
+│           ├── ai_assistance.py
 │           ├── artifact_analyzer.py
 │           ├── artifact_repository.py
 │           ├── browser_analyzer.py
@@ -1327,34 +1421,51 @@ APEX/
 │           ├── machine_extraction.py
 │           ├── media_analyzer.py
 │           ├── raw_reader.py
+│           ├── report_renderer.py
 │           ├── search_index.py
 │           └── timeline_repository.py
 │
 ├── schemas/
 │   └── v1/
+│       ├── ai-assistance-request.schema.json
+│       ├── ai-keyword-promotion.schema.json
+│       ├── ai-keyword-recommendation-batch.schema.json
+│       ├── ai-keyword-recommendation.schema.json
+│       ├── ai-provider-capability.schema.json
+│       ├── ai-report-draft-input.schema.json
+│       ├── ai-scope-summary.schema.json
+│       ├── ai-verification-event.schema.json
 │       ├── analysis-context-snapshot.schema.json
 │       ├── analysis-scope-context.schema.json
-│       ├── browser-artifact.schema.json
-│       ├── browser-profile.schema.json
 │       ├── context-revision-state.schema.json
+│       ├── custody-snapshot.schema.json
 │       ├── engine-interface.schema.json
 │       ├── engine-tool-descriptor.schema.json
 │       ├── gui-session-context.schema.json
-│       ├── machine-extracted-candidate.schema.json
-│       ├── media-artifact.schema.json
-│       ├── provider-capability.schema.json
 │       ├── raw-read-request.schema.json
 │       ├── raw-read-response.schema.json
 │       ├── raw-view.schema.json
-│       ├── thumbnail.schema.json
+│       ├── rendered-report-artifact.schema.json
+│       ├── report-approval-record.schema.json
+│       ├── report-export-manifest.schema.json
+│       ├── report-record.schema.json
+│       ├── report-render-package.schema.json
+│       ├── report-renderer-capability.schema.json
+│       ├── report-review-event.schema.json
+│       ├── report-section.schema.json
+│       ├── report-version.schema.json
 │       └── view-projection.schema.json
 │
 ├── tests/
 │   ├── integration/
-│   │   └── test_phase6_cli_workflow.py
+│   │   ├── test_phase6_cli_workflow.py
+│   │   ├── test_phase7_cli_workflow.py
+│   │   └── test_phase8_cli_workflow.py
 │   └── unit/
 │       ├── test_phase5_media_browser.py
-│       └── test_phase6_context_views.py
+│       ├── test_phase6_context_views.py
+│       ├── test_phase7_ai_assistance.py
+│       └── test_phase8_report_contract.py
 │
 └── tools/
     ├── validate_design.mjs
@@ -1479,6 +1590,27 @@ APEX/
 - [x] `context` / `view` / `interface` CLI
 - [x] Phase 6 JSON Schema 및 Unit·Integration Test
 - [x] Windows·Linux Runtime 회귀 검증
+- [x] Phase 7 AI Assistance Engine Contract
+- [x] Snapshot 기반 AI Assistance Request와 TTL/Fingerprint 검증
+- [x] 외부 Keyword Recommendation·Scope Summary Ingest 검증
+- [x] Citation, Partial, Stale, Coverage Warning 보존
+- [x] Append-only Human Verification Hash Chain
+- [x] Accepted/Corrected Keyword Promotion과 Search 자동 실행 차단
+- [x] `ai` CLI 및 Public Engine Interface AI Tool Descriptor
+- [x] Phase 7 JSON Schema 및 Unit·Integration Test
+- [x] Phase 8 Report Aggregate와 Immutable Version
+- [x] Analyst/AI Draft Ingest, Section/Citation/Snapshot/Evidence 검증
+- [x] Append-only Report Review/Approval Hash Chain
+- [x] Chain of Custody Snapshot과 Ledger Verification Metadata
+- [x] Render Package, Export Manifest, Renderer Port 기본 `CAPABILITY_UNAVAILABLE`
+- [x] `report` CLI, Public Engine Interface Report Tool Descriptor, JSON Schema 및 Test
+- [x] Phase 1~8 통합 보안·기능 감사
+- [x] Read Interface / Mutation Operation 경계 강화
+- [x] Post-index Symlink·Reparse Point 교체 방어
+- [x] Windows-safe Export Filename 및 Derived Root 검증
+- [x] Export Manifest 상태 전이와 Prepare 멱등성 검증
+- [x] AI Revision Resolver 예외 처리 강화
+- [x] 수정 사항 Regression Test 및 Windows·Linux 94 Test 통과
 
 ### 구현 예정
 
@@ -1492,8 +1624,8 @@ APEX/
 - [ ] Email / Discord / Telegram / KakaoTalk Plugin
 - [ ] Raster Thumbnail Rendering 및 제한된 Video Frame Sampling
 - [ ] 실제 OCR / STT Provider 및 Candidate Extraction
-- [ ] AI Keyword Recommendation 및 Citation Workflow
-- [ ] Report Review / Approval / PDF·HTML Export
+- [ ] 외부 AI Adapter 품질 평가와 실제 Provider 통합 검증
+- [ ] 실제 PDF·HTML Renderer Adapter와 GUI Report Preview
 - [ ] 한국어 Search 및 Localization
 - [ ] 성능 Benchmark 및 외부 전문가 검토
 - [ ] Windows Desktop Packaging
@@ -1620,21 +1752,27 @@ APEX/
 - [x] CLI / JSON Schema / Unit·Integration Test
 - [x] Windows·Linux Runtime 검증
 
-### Phase 7 — AI Assistance
+### Phase 7 — AI Assistance — 완료
 
-- Keyword Recommendation
-- Scope Summary
-- Citation
-- Partial Result 경고
-- Human Verification
+- [x] Snapshot 기반 AI Assistance Request
+- [x] 외부 Keyword Recommendation과 Scope Summary 검증·저장
+- [x] Citation, Partial Result, Stale Source, Coverage Warning 보존
+- [x] Human Verification Event Hash Chain
+- [x] 승인/수정된 Keyword Candidate의 Keyword Set Promotion
+- [x] Runtime LLM/MCP/Prompt/Provider 실행 코드 제외
 
-### Phase 8 — Report 및 Chain of Custody
+### Phase 8 — Report 및 Chain of Custody — 완료
 
-- AI Draft
-- Human Review
-- Approval
-- Chain of Custody Section
-- PDF / HTML Export
+- [x] Analyst Draft와 외부 AI Draft Ingest
+- [x] ReportRecord / Immutable ReportVersion / ReportSection
+- [x] Source Kind, Citation, Context Snapshot, Evidence, Search, Timeline, AI Result Provenance
+- [x] Partial / Stale / Coverage / Limitations 보존
+- [x] Human Review, Section Review, Approval, Reject, Revoke Event Hash Chain
+- [x] 승인 후 새 Version 생성과 재승인 요구
+- [x] Chain of Custody Snapshot / Verification Metadata
+- [x] Export Render Package / Manifest / Audit / Rendered Artifact Metadata 계약
+- [x] Provider-neutral Renderer Port와 기본 `CAPABILITY_UNAVAILABLE`
+- [x] 실제 AI Draft 생성, LLM/Prompt/MCP, GUI Preview, PDF/HTML Rendering 제외
 
 ### Phase 9 — Benchmark 및 배포
 
@@ -1692,7 +1830,16 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 
 ---
 
-## 설계 검증
+## 설계 및 회귀 검증
+
+현재 Phase 1~8 통합 회귀 기준:
+
+- Windows·Linux `pytest`: 94 passed
+- Ruff: All checks passed
+- mypy: 81 source files, no issues
+- Python Design Validator: 1607 checks, 52 schemas
+- Node Design Validator: 3586 checks, 52 schemas
+- 통합 감사 미해결 Finding: Critical 0 / High 0 / Medium 0 / Low 0
 
 ### Python 기본 검증
 
