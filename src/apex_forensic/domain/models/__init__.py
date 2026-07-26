@@ -1,5 +1,14 @@
 """Domain model exports."""
 
+from apex_forensic.domain.models.ai import (
+    AiAssistanceRequest,
+    AiKeywordPromotion,
+    AiKeywordRecommendation,
+    AiKeywordRecommendationBatch,
+    AiProviderCapability,
+    AiScopeSummaryRecord,
+    AiVerificationEvent,
+)
 from apex_forensic.domain.models.artifact import (
     ArtifactAnalysisResult,
     ArtifactCapability,
@@ -61,6 +70,13 @@ from apex_forensic.domain.models.timeline import (
 )
 
 __all__ = [
+    "AiAssistanceRequest",
+    "AiKeywordPromotion",
+    "AiKeywordRecommendation",
+    "AiKeywordRecommendationBatch",
+    "AiProviderCapability",
+    "AiScopeSummaryRecord",
+    "AiVerificationEvent",
     "AnalysisContextSnapshot",
     "AnalysisScopeContext",
     "ArtifactAnalysisResult",

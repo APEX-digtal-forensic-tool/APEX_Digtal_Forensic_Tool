@@ -312,3 +312,19 @@ OCR/STT engine, browser credential, or report-renderer execution directories.
 Phase 6 runtime code lives in `src/apex_forensic/application/services/context.py`, with DTOs in `src/apex_forensic/domain/models/context.py` and the raw reader boundary in `src/apex_forensic/ports/raw_reader.py`. SQLite persistence is implemented in `src/apex_forensic/adapters/persistence/sqlite/repository.py`, and CLI wiring is in `src/apex_forensic/cli/parser.py` and `src/apex_forensic/cli/commands.py`.
 
 Phase 6 schemas are added under `schemas/v1` for GUI session context, analysis snapshots, scope context, revision state, view projection, raw view, raw read request/response, engine interface, and engine tool descriptors. Focused tests live in `tests/unit/test_phase6_context_views.py` and `tests/integration/test_phase6_cli_workflow.py`.
+
+## Phase 7 구현 구조
+
+Phase 7 keeps the same package boundaries and adds only engine-side AI assistance contracts:
+
+```text
+src/apex_forensic/domain/models/ai.py
+src/apex_forensic/ports/ai_assistance.py
+src/apex_forensic/application/services/ai_assistance.py
+tests/unit/test_phase7_ai_assistance.py
+tests/integration/test_phase7_cli_workflow.py
+```
+
+Existing files extended in place include the SQLite repository, service factory, domain enum/model/error exports, public engine interface, CLI parser/commands, and JSON schemas. No `mcp`, `prompt`, LLM provider, API-key, chain-of-thought, or runtime network adapter directory is added.
+
+Phase 7 schemas are added under `schemas/v1` for assistance requests, keyword recommendation batches and items, scope summaries, verification events, keyword promotions, and provider capability snapshots.

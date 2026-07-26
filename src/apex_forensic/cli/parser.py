@@ -310,6 +310,148 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_capabilities.add_argument("--type")
     candidate_capabilities.add_argument("--json", action="store_true")
 
+    ai_parser = subcommands.add_parser("ai", help="AI assistance contract commands")
+    ai_commands = ai_parser.add_subparsers(dest="ai_command", required=True)
+    ai_request_create = ai_commands.add_parser("request-create")
+    ai_request_create.add_argument("--case-id", required=True)
+    ai_request_create.add_argument("--context-snapshot-id", required=True)
+    ai_request_create.add_argument(
+        "--purpose",
+        default="INVESTIGATION_ASSISTANCE",
+        choices=[
+            "KEYWORD_RECOMMENDATION",
+            "SCOPE_SUMMARY",
+            "REPORT_INPUT",
+            "INVESTIGATION_ASSISTANCE",
+            "OTHER",
+        ],
+    )
+    ai_request_create.add_argument("--operation", action="append", default=[])
+    ai_request_create.add_argument("--scope", action="append", default=[])
+    ai_request_create.add_argument("--scope-context-id", action="append", default=[])
+    ai_request_create.add_argument("--locale")
+    ai_request_create.add_argument("--timezone")
+    ai_request_create.add_argument("--max-keyword-candidates", type=int, default=100)
+    ai_request_create.add_argument("--max-summary-length", type=int, default=4000)
+    ai_request_create.add_argument("--ttl-seconds", type=int, default=3600)
+    ai_request_create.add_argument("--correlation-id")
+    ai_request_create.add_argument("--json", action="store_true")
+
+    ai_request_show = ai_commands.add_parser("request-show")
+    ai_request_show.add_argument("--assistance-request-id", required=True)
+    ai_request_show.add_argument("--json", action="store_true")
+
+    ai_request_list = ai_commands.add_parser("request-list")
+    ai_request_list.add_argument("--case-id", required=True)
+    ai_request_list.add_argument("--limit", type=int, default=100)
+    ai_request_list.add_argument("--json", action="store_true")
+
+    ai_request_compare = ai_commands.add_parser("request-compare")
+    ai_request_compare.add_argument("--left-request-id", required=True)
+    ai_request_compare.add_argument("--right-request-id", required=True)
+    ai_request_compare.add_argument("--json", action="store_true")
+
+    ai_request_capabilities = ai_commands.add_parser("request-capabilities")
+    ai_request_capabilities.add_argument("--json", action="store_true")
+
+    ai_keyword_ingest = ai_commands.add_parser("keyword-ingest")
+    ai_keyword_ingest.add_argument("--assistance-request-id", required=True)
+    ai_keyword_ingest.add_argument("--input-json")
+    ai_keyword_ingest.add_argument("--input-file", type=Path)
+    ai_keyword_ingest.add_argument("--json", action="store_true")
+
+    ai_keyword_batch_show = ai_commands.add_parser("keyword-batch-show")
+    ai_keyword_batch_show.add_argument("--recommendation-batch-id", required=True)
+    ai_keyword_batch_show.add_argument("--json", action="store_true")
+
+    ai_keyword_list = ai_commands.add_parser("keyword-list")
+    ai_keyword_list.add_argument("--case-id", required=True)
+    ai_keyword_list.add_argument("--recommendation-batch-id")
+    ai_keyword_list.add_argument("--cursor")
+    ai_keyword_list.add_argument("--limit", type=int, default=100)
+    ai_keyword_list.add_argument("--json", action="store_true")
+
+    ai_keyword_show = ai_commands.add_parser("keyword-show")
+    ai_keyword_show.add_argument("--recommendation-id", required=True)
+    ai_keyword_show.add_argument("--json", action="store_true")
+
+    ai_keyword_review = ai_commands.add_parser("keyword-review")
+    ai_keyword_review.add_argument("--recommendation-id", required=True)
+    ai_keyword_review.add_argument(
+        "--action", required=True, choices=["ACCEPT", "REJECT", "COMMENT"]
+    )
+    ai_keyword_review.add_argument("--actor-id", required=True)
+    ai_keyword_review.add_argument("--reason", required=True)
+    ai_keyword_review.add_argument("--expected-review-revision", type=int)
+    ai_keyword_review.add_argument("--json", action="store_true")
+
+    ai_keyword_correct = ai_commands.add_parser("keyword-correct")
+    ai_keyword_correct.add_argument("--recommendation-id", required=True)
+    ai_keyword_correct.add_argument("--actor-id", required=True)
+    ai_keyword_correct.add_argument("--reason", required=True)
+    ai_keyword_correct.add_argument("--corrected-value", required=True)
+    ai_keyword_correct.add_argument("--corrected-reason")
+    ai_keyword_correct.add_argument("--expected-review-revision", type=int)
+    ai_keyword_correct.add_argument("--json", action="store_true")
+
+    ai_keyword_promotion_preview = ai_commands.add_parser("keyword-promotion-preview")
+    ai_keyword_promotion_preview.add_argument("--recommendation-id", required=True)
+    ai_keyword_promotion_preview.add_argument("--keyword-set-id", required=True)
+    ai_keyword_promotion_preview.add_argument("--regex-confirmed", action="store_true")
+    ai_keyword_promotion_preview.add_argument("--json", action="store_true")
+
+    ai_keyword_promote = ai_commands.add_parser("keyword-promote")
+    ai_keyword_promote.add_argument("--recommendation-id", required=True)
+    ai_keyword_promote.add_argument("--keyword-set-id", required=True)
+    ai_keyword_promote.add_argument("--actor-id", required=True)
+    ai_keyword_promote.add_argument("--reason", required=True)
+    ai_keyword_promote.add_argument("--expected-review-revision", type=int)
+    ai_keyword_promote.add_argument("--regex-confirmed", action="store_true")
+    ai_keyword_promote.add_argument("--confirmation-json")
+    ai_keyword_promote.add_argument("--json", action="store_true")
+
+    ai_summary_ingest = ai_commands.add_parser("summary-ingest")
+    ai_summary_ingest.add_argument("--assistance-request-id", required=True)
+    ai_summary_ingest.add_argument("--input-json")
+    ai_summary_ingest.add_argument("--input-file", type=Path)
+    ai_summary_ingest.add_argument("--json", action="store_true")
+
+    ai_summary_list = ai_commands.add_parser("summary-list")
+    ai_summary_list.add_argument("--case-id", required=True)
+    ai_summary_list.add_argument("--context-snapshot-id")
+    ai_summary_list.add_argument("--scope-summary-id")
+    ai_summary_list.add_argument("--scope-context-id")
+    ai_summary_list.add_argument("--limit", type=int, default=100)
+    ai_summary_list.add_argument("--json", action="store_true")
+
+    ai_summary_show = ai_commands.add_parser("summary-show")
+    ai_summary_show.add_argument("--scope-summary-id", required=True)
+    ai_summary_show.add_argument("--json", action="store_true")
+
+    ai_summary_review = ai_commands.add_parser("summary-review")
+    ai_summary_review.add_argument("--scope-summary-id", required=True)
+    ai_summary_review.add_argument(
+        "--action", required=True, choices=["ACCEPT", "REJECT", "COMMENT"]
+    )
+    ai_summary_review.add_argument("--actor-id", required=True)
+    ai_summary_review.add_argument("--reason", required=True)
+    ai_summary_review.add_argument("--expected-review-revision", type=int)
+    ai_summary_review.add_argument("--json", action="store_true")
+
+    ai_summary_correct = ai_commands.add_parser("summary-correct")
+    ai_summary_correct.add_argument("--scope-summary-id", required=True)
+    ai_summary_correct.add_argument("--actor-id", required=True)
+    ai_summary_correct.add_argument("--reason", required=True)
+    ai_summary_correct.add_argument("--corrected-value", required=True)
+    ai_summary_correct.add_argument("--corrected-reason")
+    ai_summary_correct.add_argument("--expected-review-revision", type=int)
+    ai_summary_correct.add_argument("--json", action="store_true")
+
+    ai_review_history = ai_commands.add_parser("review-history")
+    ai_review_history.add_argument("--target-type", required=True)
+    ai_review_history.add_argument("--target-id", required=True)
+    ai_review_history.add_argument("--json", action="store_true")
+
     search_parser = subcommands.add_parser("search", help="Search index and query commands")
     search_commands = search_parser.add_subparsers(dest="search_command", required=True)
     search_index = search_commands.add_parser("index", help="Build metadata/artifact search index")
@@ -616,6 +758,11 @@ def build_parser() -> argparse.ArgumentParser:
     interface_invoke.add_argument("--payload-json", required=True)
     interface_invoke.add_argument("--correlation-id")
     interface_invoke.add_argument("--json", action="store_true")
+    interface_invoke_mutation = interface_commands.add_parser("invoke-mutation")
+    interface_invoke_mutation.add_argument("--operation", required=True)
+    interface_invoke_mutation.add_argument("--payload-json", required=True)
+    interface_invoke_mutation.add_argument("--correlation-id")
+    interface_invoke_mutation.add_argument("--json", action="store_true")
 
     custody_parser = subcommands.add_parser("custody", help="Custody commands")
     custody_commands = custody_parser.add_subparsers(dest="custody_command", required=True)

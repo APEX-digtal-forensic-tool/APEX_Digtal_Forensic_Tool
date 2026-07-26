@@ -1200,3 +1200,17 @@ or Timeline cache/delete behavior does not delete original evidence, filesystem 
 Phase 6 introduces SQLite persistence for `gui_session_contexts`, `gui_session_context_revisions`, `analysis_context_snapshots`, `analysis_scope_contexts`, `context_snapshot_resources`, `context_revision_states`, `view_projections`, `view_projection_cache`, `raw_read_audit_records`, `engine_interface_versions`, and `engine_tool_descriptors`.
 
 `analysis_context_snapshots` and `raw_read_audit_records` are protected by append-only update/delete triggers. Session-context revisions record before/after JSON for auditability while the current live row remains mutable until expiry. Snapshot/resource and scope/resource tables preserve resolved resource membership separately from the JSON projection so paging and stale-source checks do not require rehydrating full context payloads.
+
+## Phase 7 Implemented Tables
+
+Phase 7 adds an idempotent `phase7-ai-assistance-engine-contract` migration:
+
+- `ai_assistance_requests`: snapshot-bound request envelope with deterministic fingerprint, TTL, operation/scope limits, requested citations, source-revision fingerprint, coverage summary, warnings, and status.
+- `ai_keyword_recommendation_batches`: external batch metadata, provider metadata fingerprint, validation warnings, and source request linkage.
+- `ai_keyword_recommendations`: immutable AI keyword candidates with original value, keyword type, match mode, confidence, reason, citations, warning/provenance fields, `NOT_OBSERVED_FACT` status, and effective review projection fields.
+- `ai_scope_summaries`: immutable AI scope summaries with title/text/key points, referenced resources, citations, warning/provenance fields, `NOT_OBSERVED_FACT` status, and effective review projection fields.
+- `ai_verification_events`: append-only accept/reject/correct/comment review events with actor, reason, correction payload, revision, previous event hash, and event hash.
+- `ai_keyword_promotions`: idempotent promotion provenance from reviewed recommendation to keyword-set version and keyword row.
+- `ai_provider_capabilities`: provider-neutral capability snapshots; the default provider records unavailable runtime AI generation.
+
+Append-only triggers protect recommendation, summary, review-event, and promotion history rows from update/delete. Promotion writes only through the existing keyword-set versioning tables and never creates search execution rows.

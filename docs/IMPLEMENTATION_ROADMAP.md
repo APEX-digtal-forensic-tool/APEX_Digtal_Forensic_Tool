@@ -363,4 +363,10 @@ and benchmark performance claims.
 
 Phase 6 is implemented for the Python/SQLite engine: revisioned live context, immutable analysis snapshots, scope-specific context, stale/partial source tracking, Simple/Detailed/Raw projections, bounded read-only raw range access, public engine interface metadata, CLI coverage, JSON schemas, and unit/integration tests are present.
 
-The deferred boundary is unchanged: actual MCP server registration, GUI transport, LLM provider calls, prompts, agent loops, and AI enrichment logic remain outside Phase 6 and belong to adapter or Phase 7 work.
+The deferred boundary is unchanged: actual MCP server registration, GUI transport, LLM provider calls, prompts, agent loops, and runtime AI generation remain outside Phase 6 and belong to adapter or later integration work.
+
+## Phase 7 Implementation Status
+
+Phase 7 is implemented as an engine-side AI Assistance contract. Completed scope includes snapshot-based assistance request creation, deterministic fingerprints, TTL and current-revision checks, external keyword recommendation and scope-summary ingestion, citation and scope validation, partial/stale/coverage warning propagation, append-only human verification, reviewed keyword promotion into draft keyword-set versions, CLI coverage, public interface tool descriptors, JSON schemas, SQLite migration, and unit/integration tests.
+
+The implemented boundary is intentionally non-generative. The default provider returns `CAPABILITY_UNAVAILABLE`, and the core package still has no MCP server, LLM SDK, prompt template, API-key handling, chain-of-thought storage, runtime provider call, token accounting, automatic keyword search, report drafting, or fact promotion from AI output.

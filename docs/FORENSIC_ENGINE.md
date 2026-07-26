@@ -1430,3 +1430,11 @@ Event ID나 Prefetch만으로 악성 여부 또는 사용자 실행 사실을 �
 The executable Phase 6 layer stores live GUI session contexts separately from immutable analysis snapshots. Session contexts carry route, selection, filter, time range, keyword/search/timeline references, schema version, revision, TTL, and actor fields; snapshot creation resolves selected resources into case-scoped bundles with deterministic fingerprints and previous-snapshot linkage.
 
 View projection is split into Simple, Detailed, and Raw modes. Simple mode returns compact finding-oriented fields, Detailed mode preserves technical payload and provenance, and Raw mode exposes only validated locator metadata plus bounded read entry points. The public engine interface reports schema/API versions, supported tools, limits, and structured success/error responses for adapter consumers.
+
+## Phase 7 AI Assistance Runtime Notes
+
+Phase 7 implements the engine-side AI Assistance contract only. The engine can create immutable, snapshot-based assistance requests and can ingest externally generated keyword recommendations or scope summaries after validating schema shape, size limits, forbidden prompt/secret/raw-body fields, case ownership, snapshot membership, citations, resource revisions, partial state, stale state, and coverage warnings.
+
+AI results are stored separately from observed facts and are marked as `NOT_OBSERVED_FACT`. Human verification is append-only and hash chained; corrections create review events and effective projections without overwriting the original AI result. A keyword recommendation can be promoted only after an accepted or corrected review state, and promotion creates a new draft keyword-set version without running search or activating the set.
+
+The default AI provider boundary reports `CAPABILITY_UNAVAILABLE`. Core still contains no MCP server, MCP SDK, LLM SDK, prompt template, API key handling, chain-of-thought storage, runtime provider call, or network AI workflow.

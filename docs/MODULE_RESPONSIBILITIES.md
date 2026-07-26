@@ -385,3 +385,11 @@ report rendering, live acquisition, or credential/secret extraction.
 `ContextService` owns live GUI context validation, optimistic revision checks, TTL expiry, snapshot creation, scope generation, source-revision refresh, scope paging, and case-bound resource resolution. It rejects cross-case resources, excessive selections, excessive filter depth, and secret/prompt/raw-blob metadata in adapter-bound context.
 
 `ViewProjectionService` owns Simple, Detailed, and Raw projections from snapshots or resources. `SafeRawRangeReader` owns bounded read-only byte and logical locator access, including evidence-root containment, max-length enforcement, EOF handling, hashing, preview, and audit records. `EngineInterfaceService` exposes version/capability/tool metadata and structured adapter-call responses without owning an MCP server or AI provider.
+
+## 13. Phase 7 Implemented Responsibilities
+
+`AiAssistanceService` owns snapshot-based assistance request creation, external result ingestion, citation validation, scope/resource/revision checks, warning propagation, review history, effective review projections, provider capability reporting, and reviewed keyword promotion. It depends on existing context and search services rather than duplicating resource resolution or keyword-set versioning.
+
+`AiAssistanceProviderPort` is provider-neutral and unavailable by default. Implementations may be supplied by a future adapter, but provider output is not trusted; keyword batches and scope summaries must pass the same validation path before persistence.
+
+`SQLiteRepository` stores AI assistance rows separately from observed facts and protects review/promotion history with append-only triggers. `EngineInterfaceService` and the `ai` CLI expose the contract without adding MCP transport, prompt templates, API-key handling, chain-of-thought capture, runtime LLM calls, or automatic search execution.

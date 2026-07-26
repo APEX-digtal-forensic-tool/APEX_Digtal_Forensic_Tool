@@ -48,6 +48,13 @@ from apex_forensic.domain.enums import (
     ViewMode,
 )
 from apex_forensic.domain.models import (
+    AiAssistanceRequest,
+    AiKeywordPromotion,
+    AiKeywordRecommendation,
+    AiKeywordRecommendationBatch,
+    AiProviderCapability,
+    AiScopeSummaryRecord,
+    AiVerificationEvent,
     AnalysisContextSnapshot,
     AnalysisScopeContext,
     ArtifactCapability,
@@ -1677,6 +1684,195 @@ class SQLiteRepository:
                     detected_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS ai_assistance_requests (
+                    assistance_request_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    context_snapshot_id TEXT NOT NULL
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    purpose TEXT NOT NULL,
+                    requested_operations_json TEXT NOT NULL,
+                    requested_scopes_json TEXT NOT NULL,
+                    scope_context_ids_json TEXT NOT NULL,
+                    locale TEXT NOT NULL,
+                    timezone TEXT NOT NULL,
+                    context_fingerprint TEXT NOT NULL,
+                    source_revision_fingerprint TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    is_stale INTEGER NOT NULL,
+                    coverage_summary_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    max_keyword_candidates INTEGER NOT NULL,
+                    max_summary_length INTEGER NOT NULL,
+                    requested_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    request_version TEXT NOT NULL,
+                    correlation_id TEXT,
+                    request_fingerprint TEXT NOT NULL UNIQUE,
+                    resource_count INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_assistance_requests_case
+                    ON ai_assistance_requests(case_id, requested_at DESC, assistance_request_id);
+                CREATE INDEX IF NOT EXISTS idx_ai_assistance_requests_snapshot
+                    ON ai_assistance_requests(context_snapshot_id, requested_at DESC);
+
+                CREATE TABLE IF NOT EXISTS ai_keyword_recommendation_batches (
+                    recommendation_batch_id TEXT PRIMARY KEY,
+                    assistance_request_id TEXT NOT NULL
+                        REFERENCES ai_assistance_requests(assistance_request_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    context_snapshot_id TEXT NOT NULL
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    model_id TEXT NOT NULL,
+                    external_request_id TEXT,
+                    generation_started_at TEXT NOT NULL,
+                    generation_completed_at TEXT NOT NULL,
+                    result_hash TEXT NOT NULL,
+                    recommendation_count INTEGER NOT NULL,
+                    partial_state_json TEXT NOT NULL,
+                    stale_state_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    batch_version TEXT NOT NULL,
+                    UNIQUE(assistance_request_id, result_hash)
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_keyword_batches_case
+                    ON ai_keyword_recommendation_batches(
+                        case_id, created_at DESC, recommendation_batch_id
+                    );
+
+                CREATE TABLE IF NOT EXISTS ai_keyword_recommendations (
+                    recommendation_id TEXT PRIMARY KEY,
+                    recommendation_batch_id TEXT NOT NULL
+                        REFERENCES ai_keyword_recommendation_batches(recommendation_batch_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    context_snapshot_id TEXT NOT NULL
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    keyword_type TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    normalized_value TEXT NOT NULL,
+                    display_value TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    confidence TEXT NOT NULL,
+                    recommended_scope TEXT NOT NULL,
+                    evidence_ids_json TEXT NOT NULL,
+                    source_resource_ids_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    is_partial INTEGER NOT NULL,
+                    stale_reasons_json TEXT NOT NULL,
+                    risk_flags_json TEXT NOT NULL,
+                    review_status TEXT NOT NULL,
+                    current_review_revision INTEGER NOT NULL,
+                    content_fingerprint TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(recommendation_batch_id, content_fingerprint)
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_keyword_recommendations_case
+                    ON ai_keyword_recommendations(
+                        case_id, recommendation_batch_id, recommendation_id
+                    );
+                CREATE INDEX IF NOT EXISTS idx_ai_keyword_recommendations_content
+                    ON ai_keyword_recommendations(case_id, normalized_value, keyword_type);
+
+                CREATE TABLE IF NOT EXISTS ai_scope_summaries (
+                    scope_summary_id TEXT PRIMARY KEY,
+                    assistance_request_id TEXT NOT NULL
+                        REFERENCES ai_assistance_requests(assistance_request_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    context_snapshot_id TEXT NOT NULL
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    scope_context_id TEXT NOT NULL
+                        REFERENCES analysis_scope_contexts(scope_context_id),
+                    scope_type TEXT NOT NULL,
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    model_id TEXT NOT NULL,
+                    external_request_id TEXT,
+                    title TEXT NOT NULL,
+                    summary_text TEXT NOT NULL,
+                    key_points_json TEXT NOT NULL,
+                    referenced_resource_ids_json TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    partial_state_json TEXT NOT NULL,
+                    stale_state_json TEXT NOT NULL,
+                    coverage_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    review_status TEXT NOT NULL,
+                    current_review_revision INTEGER NOT NULL,
+                    content_fingerprint TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    summary_version TEXT NOT NULL,
+                    UNIQUE(assistance_request_id, scope_context_id, content_fingerprint)
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_scope_summaries_case
+                    ON ai_scope_summaries(case_id, created_at DESC, scope_summary_id);
+                CREATE INDEX IF NOT EXISTS idx_ai_scope_summaries_scope
+                    ON ai_scope_summaries(scope_context_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS ai_verification_events (
+                    verification_event_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    target_type TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    previous_status TEXT NOT NULL,
+                    new_status TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    corrected_value TEXT,
+                    corrected_reason TEXT,
+                    review_revision INTEGER NOT NULL,
+                    previous_event_hash TEXT,
+                    event_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(target_type, target_id, review_revision),
+                    UNIQUE(target_type, target_id, event_hash)
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_verification_events_target
+                    ON ai_verification_events(target_type, target_id, review_revision);
+
+                CREATE TABLE IF NOT EXISTS ai_keyword_promotions (
+                    promotion_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    recommendation_id TEXT NOT NULL
+                        REFERENCES ai_keyword_recommendations(recommendation_id),
+                    review_revision INTEGER NOT NULL,
+                    keyword_set_id TEXT NOT NULL REFERENCES keyword_sets(keyword_set_id),
+                    keyword_set_version_id TEXT,
+                    keyword_set_version INTEGER,
+                    promoted_keyword_id TEXT,
+                    promoted_value TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    duplicate INTEGER NOT NULL,
+                    source_context_snapshot_id TEXT NOT NULL
+                        REFERENCES analysis_context_snapshots(context_snapshot_id),
+                    actor_id TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    promotion_fingerprint TEXT NOT NULL UNIQUE,
+                    metadata_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(recommendation_id, review_revision, keyword_set_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_keyword_promotions_target
+                    ON ai_keyword_promotions(recommendation_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS ai_provider_capabilities (
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    supported_operations_json TEXT NOT NULL,
+                    max_request_items INTEGER NOT NULL,
+                    max_result_items INTEGER NOT NULL,
+                    max_summary_length INTEGER NOT NULL,
+                    is_available INTEGER NOT NULL,
+                    unavailable_reason TEXT,
+                    warnings_json TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    capability_version TEXT NOT NULL,
+                    PRIMARY KEY(provider_id, provider_version)
+                );
+
                 CREATE TABLE IF NOT EXISTS view_projections (
                     projection_id TEXT PRIMARY KEY,
                     case_id TEXT NOT NULL REFERENCES cases(case_id),
@@ -1795,6 +1991,54 @@ class SQLiteRepository:
                 BEGIN
                     SELECT RAISE(ABORT, 'candidate_review_events are append-only');
                 END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_keyword_recommendations_no_update
+                BEFORE UPDATE ON ai_keyword_recommendations
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_keyword_recommendations are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_keyword_recommendations_no_delete
+                BEFORE DELETE ON ai_keyword_recommendations
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_keyword_recommendations are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_scope_summaries_no_update
+                BEFORE UPDATE ON ai_scope_summaries
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_scope_summaries are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_scope_summaries_no_delete
+                BEFORE DELETE ON ai_scope_summaries
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_scope_summaries are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_verification_events_no_update
+                BEFORE UPDATE ON ai_verification_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_verification_events are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_verification_events_no_delete
+                BEFORE DELETE ON ai_verification_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_verification_events are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_keyword_promotions_no_update
+                BEFORE UPDATE ON ai_keyword_promotions
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_keyword_promotions are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS ai_keyword_promotions_no_delete
+                BEFORE DELETE ON ai_keyword_promotions
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_keyword_promotions are append-only');
+                END;
                 """
             )
             self._ensure_column("jobs", "job_revision", "INTEGER NOT NULL DEFAULT 1")
@@ -1858,6 +2102,13 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("phase6-gui-context-view-interface", to_json_timestamp(utc_now())),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("phase7-ai-assistance-engine-contract", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -5885,6 +6136,354 @@ class SQLiteRepository:
         ).fetchall()
         return [self._row_to_revision_state(row) for row in rows]
 
+    def save_ai_assistance_request(self, request: AiAssistanceRequest) -> None:
+        """Persist one immutable AI assistance request contract."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO ai_assistance_requests (
+                    assistance_request_id, case_id, context_snapshot_id, purpose,
+                    requested_operations_json, requested_scopes_json, scope_context_ids_json,
+                    locale, timezone, context_fingerprint, source_revision_fingerprint,
+                    is_partial, is_stale, coverage_summary_json, warnings_json, citations_json,
+                    max_keyword_candidates, max_summary_length, requested_at, expires_at,
+                    request_version, correlation_id, request_fingerprint, resource_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._ai_assistance_request_values(request),
+            )
+
+    def get_ai_assistance_request(
+        self, assistance_request_id: str
+    ) -> AiAssistanceRequest | None:
+        """Return one AI assistance request."""
+
+        row = self.connection.execute(
+            "SELECT * FROM ai_assistance_requests WHERE assistance_request_id = ?",
+            (assistance_request_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_assistance_request(row)
+
+    def get_ai_assistance_request_by_fingerprint(
+        self, request_fingerprint: str
+    ) -> AiAssistanceRequest | None:
+        """Return a request with the same canonical fingerprint."""
+
+        row = self.connection.execute(
+            "SELECT * FROM ai_assistance_requests WHERE request_fingerprint = ?",
+            (request_fingerprint,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_assistance_request(row)
+
+    def list_ai_assistance_requests(
+        self, *, case_id: str, limit: int
+    ) -> list[AiAssistanceRequest]:
+        """List AI assistance requests for a case."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM ai_assistance_requests
+            WHERE case_id = ?
+            ORDER BY requested_at DESC, assistance_request_id
+            LIMIT ?
+            """,
+            (case_id, limit),
+        ).fetchall()
+        return [self._row_to_ai_assistance_request(row) for row in rows]
+
+    def expire_ai_assistance_request(
+        self, assistance_request_id: str, *, expires_at: datetime
+    ) -> None:
+        """Set an AI assistance request expiration timestamp."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE ai_assistance_requests
+                SET expires_at = ?
+                WHERE assistance_request_id = ?
+                """,
+                (to_json_timestamp(expires_at), assistance_request_id),
+            )
+
+    def save_ai_keyword_batch(
+        self,
+        batch: AiKeywordRecommendationBatch,
+        recommendations: list[AiKeywordRecommendation],
+    ) -> None:
+        """Persist one keyword batch and its immutable recommendations transactionally."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO ai_keyword_recommendation_batches (
+                    recommendation_batch_id, assistance_request_id, case_id,
+                    context_snapshot_id, provider_id, provider_version, model_id,
+                    external_request_id, generation_started_at, generation_completed_at,
+                    result_hash, recommendation_count, partial_state_json, stale_state_json,
+                    warnings_json, created_at, batch_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._ai_keyword_batch_values(batch),
+            )
+            for recommendation in recommendations:
+                self.connection.execute(
+                    """
+                    INSERT INTO ai_keyword_recommendations (
+                        recommendation_id, recommendation_batch_id, case_id,
+                        context_snapshot_id, keyword_type, value, normalized_value,
+                        display_value, reason, confidence, recommended_scope,
+                        evidence_ids_json, source_resource_ids_json, citations_json,
+                        is_partial, stale_reasons_json, risk_flags_json, review_status,
+                        current_review_revision, content_fingerprint, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    self._ai_keyword_recommendation_values(recommendation),
+                )
+
+    def get_ai_keyword_batch(
+        self, recommendation_batch_id: str
+    ) -> AiKeywordRecommendationBatch | None:
+        """Return one AI keyword recommendation batch."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM ai_keyword_recommendation_batches
+            WHERE recommendation_batch_id = ?
+            """,
+            (recommendation_batch_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_keyword_batch(row)
+
+    def get_ai_keyword_recommendation(
+        self, recommendation_id: str
+    ) -> AiKeywordRecommendation | None:
+        """Return one immutable AI keyword recommendation."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM ai_keyword_recommendations
+            WHERE recommendation_id = ?
+            """,
+            (recommendation_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_keyword_recommendation(row)
+
+    def list_ai_keyword_recommendations(
+        self,
+        *,
+        case_id: str,
+        recommendation_batch_id: str | None = None,
+        after_recommendation_id: str | None = None,
+        limit: int,
+    ) -> list[AiKeywordRecommendation]:
+        """List AI keyword recommendations using stable recommendation_id pagination."""
+
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if recommendation_batch_id is not None:
+            clauses.append("recommendation_batch_id = ?")
+            params.append(recommendation_batch_id)
+        if after_recommendation_id is not None:
+            clauses.append("recommendation_id > ?")
+            params.append(after_recommendation_id)
+        params.append(limit)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM ai_keyword_recommendations
+            WHERE {" AND ".join(clauses)}
+            ORDER BY recommendation_id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+        return [self._row_to_ai_keyword_recommendation(row) for row in rows]
+
+    def save_ai_scope_summary(self, summary: AiScopeSummaryRecord) -> None:
+        """Persist one immutable AI scope summary."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO ai_scope_summaries (
+                    scope_summary_id, assistance_request_id, case_id, context_snapshot_id,
+                    scope_context_id, scope_type, provider_id, provider_version, model_id,
+                    external_request_id, title, summary_text, key_points_json,
+                    referenced_resource_ids_json, citations_json, partial_state_json,
+                    stale_state_json, coverage_json, warnings_json, review_status,
+                    current_review_revision, content_fingerprint, created_at, summary_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._ai_scope_summary_values(summary),
+            )
+
+    def get_ai_scope_summary(self, scope_summary_id: str) -> AiScopeSummaryRecord | None:
+        """Return one AI scope summary."""
+
+        row = self.connection.execute(
+            "SELECT * FROM ai_scope_summaries WHERE scope_summary_id = ?",
+            (scope_summary_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_scope_summary(row)
+
+    def list_ai_scope_summaries(
+        self,
+        *,
+        case_id: str,
+        context_snapshot_id: str | None = None,
+        scope_context_id: str | None = None,
+        limit: int,
+    ) -> list[AiScopeSummaryRecord]:
+        """List AI scope summaries for a case/snapshot/scope."""
+
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if context_snapshot_id is not None:
+            clauses.append("context_snapshot_id = ?")
+            params.append(context_snapshot_id)
+        if scope_context_id is not None:
+            clauses.append("scope_context_id = ?")
+            params.append(scope_context_id)
+        params.append(limit)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM ai_scope_summaries
+            WHERE {" AND ".join(clauses)}
+            ORDER BY created_at DESC, scope_summary_id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+        return [self._row_to_ai_scope_summary(row) for row in rows]
+
+    def append_ai_verification_event(self, event: AiVerificationEvent) -> None:
+        """Append one AI verification event."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO ai_verification_events (
+                    verification_event_id, case_id, target_type, target_id, action,
+                    previous_status, new_status, actor_id, reason, corrected_value,
+                    corrected_reason, review_revision, previous_event_hash, event_hash,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._ai_verification_event_values(event),
+            )
+
+    def list_ai_verification_events(
+        self, *, target_type: str, target_id: str
+    ) -> list[AiVerificationEvent]:
+        """Return append-only review events for one AI result target."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM ai_verification_events
+            WHERE target_type = ? AND target_id = ?
+            ORDER BY review_revision, verification_event_id
+            """,
+            (target_type, target_id),
+        ).fetchall()
+        return [self._row_to_ai_verification_event(row) for row in rows]
+
+    def save_ai_keyword_promotion(self, promotion: AiKeywordPromotion) -> None:
+        """Persist one idempotent keyword promotion record."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO ai_keyword_promotions (
+                    promotion_id, case_id, recommendation_id, review_revision,
+                    keyword_set_id, keyword_set_version_id, keyword_set_version,
+                    promoted_keyword_id, promoted_value, status, duplicate,
+                    source_context_snapshot_id, actor_id, reason, promotion_fingerprint,
+                    metadata_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._ai_keyword_promotion_values(promotion),
+            )
+
+    def get_ai_keyword_promotion_by_fingerprint(
+        self, promotion_fingerprint: str
+    ) -> AiKeywordPromotion | None:
+        """Return an existing promotion for idempotent replay."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM ai_keyword_promotions
+            WHERE promotion_fingerprint = ?
+            """,
+            (promotion_fingerprint,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_keyword_promotion(row)
+
+    def list_ai_keyword_promotions(
+        self,
+        *,
+        recommendation_id: str | None = None,
+        keyword_set_id: str | None = None,
+    ) -> list[AiKeywordPromotion]:
+        """List AI keyword promotion history."""
+
+        clauses: list[str] = []
+        params: list[Any] = []
+        if recommendation_id is not None:
+            clauses.append("recommendation_id = ?")
+            params.append(recommendation_id)
+        if keyword_set_id is not None:
+            clauses.append("keyword_set_id = ?")
+            params.append(keyword_set_id)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM ai_keyword_promotions
+            {where}
+            ORDER BY created_at DESC, promotion_id
+            """,
+            tuple(params),
+        ).fetchall()
+        return [self._row_to_ai_keyword_promotion(row) for row in rows]
+
+    def save_ai_provider_capability(self, capability: AiProviderCapability) -> None:
+        """Persist a provider capability statement."""
+
+        generated_at = capability.generated_at or utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO ai_provider_capabilities (
+                    provider_id, provider_version, supported_operations_json,
+                    max_request_items, max_result_items, max_summary_length, is_available,
+                    unavailable_reason, warnings_json, generated_at, capability_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider_id, provider_version) DO UPDATE SET
+                    supported_operations_json = excluded.supported_operations_json,
+                    max_request_items = excluded.max_request_items,
+                    max_result_items = excluded.max_result_items,
+                    max_summary_length = excluded.max_summary_length,
+                    is_available = excluded.is_available,
+                    unavailable_reason = excluded.unavailable_reason,
+                    warnings_json = excluded.warnings_json,
+                    generated_at = excluded.generated_at,
+                    capability_version = excluded.capability_version
+                """,
+                (
+                    capability.provider_id,
+                    capability.provider_version,
+                    self._json(capability.supported_operations),
+                    capability.max_request_items,
+                    capability.max_result_items,
+                    capability.max_summary_length,
+                    int(capability.is_available),
+                    capability.unavailable_reason,
+                    self._json(capability.warnings),
+                    to_json_timestamp(generated_at),
+                    capability.capability_version,
+                ),
+            )
+
     def save_view_projection(self, projection: ViewProjection) -> None:
         """Persist a view projection row for audit/cache inspection."""
 
@@ -6184,6 +6783,153 @@ class SQLiteRepository:
             }
         return {"scope": scope, "status_counts": {}}
 
+    def _ai_assistance_request_values(self, request: AiAssistanceRequest) -> tuple[Any, ...]:
+        return (
+            request.assistance_request_id,
+            request.case_id,
+            request.context_snapshot_id,
+            request.purpose,
+            self._json(request.requested_operations),
+            self._json(request.requested_scopes),
+            self._json(request.scope_context_ids),
+            request.locale,
+            request.timezone,
+            request.context_fingerprint,
+            request.source_revision_fingerprint,
+            int(request.is_partial),
+            int(request.is_stale),
+            self._json(request.coverage_summary),
+            self._json(request.warnings),
+            self._json(request.citations),
+            request.max_keyword_candidates,
+            request.max_summary_length,
+            to_json_timestamp(request.requested_at),
+            to_json_timestamp(request.expires_at),
+            request.request_version,
+            request.correlation_id,
+            request.request_fingerprint,
+            request.resource_count,
+        )
+
+    def _ai_keyword_batch_values(
+        self, batch: AiKeywordRecommendationBatch
+    ) -> tuple[Any, ...]:
+        return (
+            batch.recommendation_batch_id,
+            batch.assistance_request_id,
+            batch.case_id,
+            batch.context_snapshot_id,
+            batch.provider_id,
+            batch.provider_version,
+            batch.model_id,
+            batch.external_request_id,
+            to_json_timestamp(batch.generation_started_at),
+            to_json_timestamp(batch.generation_completed_at),
+            batch.result_hash,
+            batch.recommendation_count,
+            self._json(batch.partial_state),
+            self._json(batch.stale_state),
+            self._json(batch.warnings),
+            to_json_timestamp(batch.created_at),
+            batch.batch_version,
+        )
+
+    def _ai_keyword_recommendation_values(
+        self, recommendation: AiKeywordRecommendation
+    ) -> tuple[Any, ...]:
+        return (
+            recommendation.recommendation_id,
+            recommendation.recommendation_batch_id,
+            recommendation.case_id,
+            recommendation.context_snapshot_id,
+            recommendation.keyword_type,
+            recommendation.value,
+            recommendation.normalized_value,
+            recommendation.display_value,
+            recommendation.reason,
+            recommendation.confidence,
+            recommendation.recommended_scope,
+            self._json(recommendation.evidence_ids),
+            self._json(recommendation.source_resource_ids),
+            self._json(recommendation.citations),
+            int(recommendation.is_partial),
+            self._json(recommendation.stale_reasons),
+            self._json(recommendation.risk_flags),
+            recommendation.review_status,
+            recommendation.current_review_revision,
+            recommendation.content_fingerprint,
+            to_json_timestamp(recommendation.created_at),
+        )
+
+    def _ai_scope_summary_values(self, summary: AiScopeSummaryRecord) -> tuple[Any, ...]:
+        return (
+            summary.scope_summary_id,
+            summary.assistance_request_id,
+            summary.case_id,
+            summary.context_snapshot_id,
+            summary.scope_context_id,
+            summary.scope_type,
+            summary.provider_id,
+            summary.provider_version,
+            summary.model_id,
+            summary.external_request_id,
+            summary.title,
+            summary.summary_text,
+            self._json(summary.key_points),
+            self._json(summary.referenced_resource_ids),
+            self._json(summary.citations),
+            self._json(summary.partial_state),
+            self._json(summary.stale_state),
+            self._json(summary.coverage),
+            self._json(summary.warnings),
+            summary.review_status,
+            summary.current_review_revision,
+            summary.content_fingerprint,
+            to_json_timestamp(summary.created_at),
+            summary.summary_version,
+        )
+
+    @staticmethod
+    def _ai_verification_event_values(event: AiVerificationEvent) -> tuple[Any, ...]:
+        return (
+            event.verification_event_id,
+            event.case_id,
+            event.target_type,
+            event.target_id,
+            event.action,
+            event.previous_status,
+            event.new_status,
+            event.actor_id,
+            event.reason,
+            event.corrected_value,
+            event.corrected_reason,
+            event.review_revision,
+            event.previous_event_hash,
+            event.event_hash,
+            to_json_timestamp(event.created_at),
+        )
+
+    def _ai_keyword_promotion_values(self, promotion: AiKeywordPromotion) -> tuple[Any, ...]:
+        return (
+            promotion.promotion_id,
+            promotion.case_id,
+            promotion.recommendation_id,
+            promotion.review_revision,
+            promotion.keyword_set_id,
+            promotion.keyword_set_version_id,
+            promotion.keyword_set_version,
+            promotion.promoted_keyword_id,
+            promotion.promoted_value,
+            promotion.status,
+            int(promotion.duplicate),
+            promotion.source_context_snapshot_id,
+            promotion.actor_id,
+            promotion.reason,
+            promotion.promotion_fingerprint,
+            self._json(promotion.metadata),
+            to_json_timestamp(promotion.created_at),
+        )
+
     def _gui_session_context_values(self, context: GuiSessionContext) -> tuple[Any, ...]:
         return (
             context.session_context_id,
@@ -6288,6 +7034,151 @@ class SQLiteRepository:
             if str(state.resource_type) == resource_type and state.resource_id == resource_id:
                 return None if state.expected_revision is None else str(state.expected_revision)
         return None
+
+    def _row_to_ai_assistance_request(self, row: sqlite3.Row) -> AiAssistanceRequest:
+        return AiAssistanceRequest(
+            assistance_request_id=str(row["assistance_request_id"]),
+            case_id=str(row["case_id"]),
+            context_snapshot_id=str(row["context_snapshot_id"]),
+            purpose=str(row["purpose"]),
+            requested_operations=list(json.loads(str(row["requested_operations_json"]))),
+            requested_scopes=list(json.loads(str(row["requested_scopes_json"]))),
+            scope_context_ids=list(json.loads(str(row["scope_context_ids_json"]))),
+            locale=str(row["locale"]),
+            timezone=str(row["timezone"]),
+            context_fingerprint=str(row["context_fingerprint"]),
+            source_revision_fingerprint=str(row["source_revision_fingerprint"]),
+            is_partial=bool(row["is_partial"]),
+            is_stale=bool(row["is_stale"]),
+            coverage_summary=dict(json.loads(str(row["coverage_summary_json"]))),
+            warnings=list(json.loads(str(row["warnings_json"]))),
+            citations=list(json.loads(str(row["citations_json"]))),
+            max_keyword_candidates=int(row["max_keyword_candidates"]),
+            max_summary_length=int(row["max_summary_length"]),
+            requested_at=parse_timestamp(str(row["requested_at"])),
+            expires_at=parse_timestamp(str(row["expires_at"])),
+            request_version=str(row["request_version"]),
+            correlation_id=row["correlation_id"],
+            request_fingerprint=str(row["request_fingerprint"]),
+            resource_count=int(row["resource_count"]),
+        )
+
+    def _row_to_ai_keyword_batch(self, row: sqlite3.Row) -> AiKeywordRecommendationBatch:
+        return AiKeywordRecommendationBatch(
+            recommendation_batch_id=str(row["recommendation_batch_id"]),
+            assistance_request_id=str(row["assistance_request_id"]),
+            case_id=str(row["case_id"]),
+            context_snapshot_id=str(row["context_snapshot_id"]),
+            provider_id=str(row["provider_id"]),
+            provider_version=str(row["provider_version"]),
+            model_id=str(row["model_id"]),
+            external_request_id=row["external_request_id"],
+            generation_started_at=parse_timestamp(str(row["generation_started_at"])),
+            generation_completed_at=parse_timestamp(str(row["generation_completed_at"])),
+            result_hash=str(row["result_hash"]),
+            recommendation_count=int(row["recommendation_count"]),
+            partial_state=dict(json.loads(str(row["partial_state_json"]))),
+            stale_state=dict(json.loads(str(row["stale_state_json"]))),
+            warnings=list(json.loads(str(row["warnings_json"]))),
+            created_at=parse_timestamp(str(row["created_at"])),
+            batch_version=str(row["batch_version"]),
+        )
+
+    def _row_to_ai_keyword_recommendation(
+        self, row: sqlite3.Row
+    ) -> AiKeywordRecommendation:
+        return AiKeywordRecommendation(
+            recommendation_id=str(row["recommendation_id"]),
+            recommendation_batch_id=str(row["recommendation_batch_id"]),
+            case_id=str(row["case_id"]),
+            context_snapshot_id=str(row["context_snapshot_id"]),
+            keyword_type=str(row["keyword_type"]),
+            value=str(row["value"]),
+            normalized_value=str(row["normalized_value"]),
+            display_value=str(row["display_value"]),
+            reason=str(row["reason"]),
+            confidence=str(row["confidence"]),
+            recommended_scope=str(row["recommended_scope"]),
+            evidence_ids=list(json.loads(str(row["evidence_ids_json"]))),
+            source_resource_ids=list(json.loads(str(row["source_resource_ids_json"]))),
+            citations=list(json.loads(str(row["citations_json"]))),
+            is_partial=bool(row["is_partial"]),
+            stale_reasons=list(json.loads(str(row["stale_reasons_json"]))),
+            risk_flags=list(json.loads(str(row["risk_flags_json"]))),
+            review_status=str(row["review_status"]),
+            current_review_revision=int(row["current_review_revision"]),
+            content_fingerprint=str(row["content_fingerprint"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
+
+    def _row_to_ai_scope_summary(self, row: sqlite3.Row) -> AiScopeSummaryRecord:
+        return AiScopeSummaryRecord(
+            scope_summary_id=str(row["scope_summary_id"]),
+            assistance_request_id=str(row["assistance_request_id"]),
+            case_id=str(row["case_id"]),
+            context_snapshot_id=str(row["context_snapshot_id"]),
+            scope_context_id=str(row["scope_context_id"]),
+            scope_type=str(row["scope_type"]),
+            provider_id=str(row["provider_id"]),
+            provider_version=str(row["provider_version"]),
+            model_id=str(row["model_id"]),
+            external_request_id=row["external_request_id"],
+            title=str(row["title"]),
+            summary_text=str(row["summary_text"]),
+            key_points=list(json.loads(str(row["key_points_json"]))),
+            referenced_resource_ids=list(json.loads(str(row["referenced_resource_ids_json"]))),
+            citations=list(json.loads(str(row["citations_json"]))),
+            partial_state=dict(json.loads(str(row["partial_state_json"]))),
+            stale_state=dict(json.loads(str(row["stale_state_json"]))),
+            coverage=dict(json.loads(str(row["coverage_json"]))),
+            warnings=list(json.loads(str(row["warnings_json"]))),
+            review_status=str(row["review_status"]),
+            current_review_revision=int(row["current_review_revision"]),
+            content_fingerprint=str(row["content_fingerprint"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+            summary_version=str(row["summary_version"]),
+        )
+
+    @staticmethod
+    def _row_to_ai_verification_event(row: sqlite3.Row) -> AiVerificationEvent:
+        return AiVerificationEvent(
+            verification_event_id=str(row["verification_event_id"]),
+            case_id=str(row["case_id"]),
+            target_type=str(row["target_type"]),
+            target_id=str(row["target_id"]),
+            action=str(row["action"]),
+            previous_status=str(row["previous_status"]),
+            new_status=str(row["new_status"]),
+            actor_id=str(row["actor_id"]),
+            reason=str(row["reason"]),
+            corrected_value=row["corrected_value"],
+            corrected_reason=row["corrected_reason"],
+            review_revision=int(row["review_revision"]),
+            previous_event_hash=row["previous_event_hash"],
+            event_hash=str(row["event_hash"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
+
+    def _row_to_ai_keyword_promotion(self, row: sqlite3.Row) -> AiKeywordPromotion:
+        return AiKeywordPromotion(
+            promotion_id=str(row["promotion_id"]),
+            case_id=str(row["case_id"]),
+            recommendation_id=str(row["recommendation_id"]),
+            review_revision=int(row["review_revision"]),
+            keyword_set_id=str(row["keyword_set_id"]),
+            keyword_set_version_id=row["keyword_set_version_id"],
+            keyword_set_version=row["keyword_set_version"],
+            promoted_keyword_id=row["promoted_keyword_id"],
+            promoted_value=str(row["promoted_value"]),
+            status=str(row["status"]),
+            duplicate=bool(row["duplicate"]),
+            source_context_snapshot_id=str(row["source_context_snapshot_id"]),
+            actor_id=str(row["actor_id"]),
+            reason=str(row["reason"]),
+            promotion_fingerprint=str(row["promotion_fingerprint"]),
+            metadata=dict(json.loads(str(row["metadata_json"]))),
+            created_at=parse_timestamp(str(row["created_at"])),
+        )
 
     def _row_to_gui_session_context(self, row: sqlite3.Row) -> GuiSessionContext:
         return GuiSessionContext(

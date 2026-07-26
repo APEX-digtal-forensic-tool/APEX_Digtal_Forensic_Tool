@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-keyword-promotion.schema.json",
+  "title": "APEX AI Keyword Promotion",
+  "$ref": "#/$defs/aiKeywordPromotion",
+  "$defs": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "promotionStatus": {
+      "enum": ["PROMOTED", "SKIPPED_DUPLICATE"]
+    },
+    "aiKeywordPromotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "promotion_id",
+        "case_id",
+        "recommendation_id",
+        "review_revision",
+        "keyword_set_id",
+        "keyword_set_version_id",
+        "keyword_set_version",
+        "promoted_keyword_id",
+        "promoted_value",
+        "status",
+        "duplicate",
+        "source_context_snapshot_id",
+        "actor_id",
+        "reason",
+        "promotion_fingerprint",
+        "metadata",
+        "created_at"
+      ],
+      "properties": {
+        "promotion_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "recommendation_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "review_revision": { "type": "integer", "minimum": 1 },
+        "keyword_set_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "keyword_set_version_id": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        },
+        "keyword_set_version": { "type": ["integer", "null"], "minimum": 1 },
+        "promoted_keyword_id": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        },
+        "promoted_value": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "status": { "$ref": "#/$defs/promotionStatus" },
+        "duplicate": { "type": "boolean" },
+        "source_context_snapshot_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "actor_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "promotion_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    }
+  }
+}

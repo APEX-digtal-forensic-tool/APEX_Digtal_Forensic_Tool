@@ -663,3 +663,21 @@ rendering, disk image internals, deleted/slack search, and live acquisition in t
 Phase 6 adds application services for GUI context, scope context, view projection, raw reading, and adapter-facing engine discovery. The services depend on domain models, repository methods, clocks, and ID ports; they do not import GUI, HTTP, MCP, LLM, or prompt code.
 
 The context path is `GuiSessionContext -> AnalysisContextSnapshot -> AnalysisScopeContext -> ViewProjection`. Each transition validates case ownership and source revisions, preserves partial/stale metadata, and keeps snapshots append-only. Raw access is a read-only range reader with evidence-root validation, symlink escape prevention, byte limits, logical locator support, and audit recording.
+
+## 32. Phase 7 Runtime Architecture
+
+Phase 7 adds `AiAssistanceService` as an application-layer contract service above existing context and search services:
+
+```text
+AnalysisContextSnapshot
+    -> AiAssistanceRequest
+    -> external adapter result JSON
+    -> AiAssistanceService validation
+    -> ai_keyword_recommendations / ai_scope_summaries
+    -> ai_verification_events
+    -> optional draft keyword-set promotion
+```
+
+The engine owns request fingerprints, TTL expiry, citation/resource validation, review history, and keyword promotion into existing keyword-set versions. The provider port is deliberately inert by default and returns `CAPABILITY_UNAVAILABLE`; any external provider output must re-enter through the same ingestion validators. AI rows never update artifacts, timeline events, filesystem nodes, or observed fact tables.
+
+Promotion is a controlled bridge from reviewed AI recommendation to Search. It requires accepted or corrected review state, preserves AI provenance, checks duplicates, respects regex confirmation, creates a draft keyword-set version, and does not execute search or activate the set. MCP transport, prompt orchestration, provider credentials, token accounting, and agent loops remain outside the core package.

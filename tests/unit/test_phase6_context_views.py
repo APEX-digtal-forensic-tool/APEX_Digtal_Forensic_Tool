@@ -660,11 +660,13 @@ def test_interface_descriptors_aliases_and_validation_errors(tmp_path: Path) -> 
                 "length": 4,
             },
         }
-        for tool in services.interface.tools():
+        tools_by_name = {tool.tool_name: tool for tool in services.interface.tools()}
+        assert set(payloads).issubset(tools_by_name)
+        for tool_name, payload in payloads.items():
             result = services.interface.invoke_read(
-                tool.tool_name,
-                payloads[tool.tool_name],
-                request_id=f"req-{tool.tool_name}",
+                tool_name,
+                payload,
+                request_id=f"req-{tool_name}",
                 correlation_id="corr-tools",
             )
             assert result["status"] == "OK", result

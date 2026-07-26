@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-scope-summary.schema.json",
+  "title": "APEX AI Scope Summary",
+  "$ref": "#/$defs/aiScopeSummary",
+  "$defs": {
+    "scope": {
+      "enum": [
+        "case",
+        "evidence",
+        "filesystem",
+        "registry",
+        "eventlog",
+        "prefetch",
+        "browser",
+        "media",
+        "timeline",
+        "keyword_search",
+        "machine_candidate",
+        "chain_of_custody",
+        "report",
+        "selection"
+      ]
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "reviewStatus": {
+      "enum": ["UNREVIEWED", "ACCEPTED", "REJECTED", "CORRECTED"]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "aiScopeSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_summary_id",
+        "assistance_request_id",
+        "case_id",
+        "context_snapshot_id",
+        "scope_context_id",
+        "scope_type",
+        "provider_id",
+        "provider_version",
+        "model_id",
+        "external_request_id",
+        "title",
+        "summary_text",
+        "key_points",
+        "referenced_resource_ids",
+        "citations",
+        "partial_state",
+        "stale_state",
+        "coverage",
+        "warnings",
+        "review_status",
+        "current_review_revision",
+        "content_fingerprint",
+        "created_at",
+        "summary_version",
+        "result_kind",
+        "observed_fact_status",
+        "effective_title",
+        "effective_summary_text",
+        "effective_key_points",
+        "corrected_reason"
+      ],
+      "properties": {
+        "scope_summary_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "assistance_request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "context_snapshot_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "scope_context_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "scope_type": { "$ref": "#/$defs/scope" },
+        "provider_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "provider_version": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "model_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "external_request_id": { "type": ["string", "null"], "minLength": 1 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "summary_text": { "type": "string", "minLength": 1, "maxLength": 20000 },
+        "key_points": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "referenced_resource_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "citations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+        },
+        "partial_state": { "$ref": "#/$defs/state" },
+        "stale_state": { "$ref": "#/$defs/state" },
+        "coverage": { "$ref": "#/$defs/state" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "review_status": { "$ref": "#/$defs/reviewStatus" },
+        "current_review_revision": { "type": "integer", "minimum": 0 },
+        "content_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "summary_version": { "type": "string", "minLength": 1 },
+        "result_kind": { "const": "AI_SUMMARY" },
+        "observed_fact_status": { "const": "NOT_OBSERVED_FACT" },
+        "effective_title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "effective_summary_text": { "type": "string", "minLength": 1, "maxLength": 20000 },
+        "effective_key_points": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "corrected_reason": { "type": ["string", "null"], "maxLength": 4000 }
+      }
+    }
+  }
+}

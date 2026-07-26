@@ -75,3 +75,14 @@ Foundation. The implementation keeps Phase 2+ behavior out of runtime code.
 | Raw reads are service-level bounded operations | Raw View must not load full evidence files or bypass case/evidence validation. | `SafeRawRangeReader` enforces root containment, offset/length limits, logical locator rules, EOF behavior, and audit records. |
 | MCP is represented as an adapter boundary only | Core Phase 6 must expose contracts without coupling to a transport, prompts, or provider credentials. | `EngineInterfaceService` publishes version/capability/tool descriptors and structured responses; no MCP server or LLM code is imported. |
 | Scope paging uses persisted resource membership | Large analysis contexts should not require reserializing a full snapshot for every page. | Snapshot and scope resource tables preserve included/excluded resource IDs for bounded pagination and stale-source refresh. |
+
+## Phase 7 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| AI Assistance is snapshot-first | AI output must be reproducible against the exact context the external adapter saw. | `AiAssistanceRequest` stores snapshot ID, source revision fingerprint, coverage, citations, TTL, and a deterministic request fingerprint. |
+| Provider output is never trusted directly | A future adapter may have different models or providers, but the engine must enforce one forensic contract. | Provider results and CLI JSON ingestion both pass through the same keyword/summary validators before persistence. |
+| AI results are not observed facts | AI text can assist analysis but must not modify artifacts, timeline events, filesystem nodes, or evidence. | Keyword recommendations and summaries store `NOT_OBSERVED_FACT` and remain in AI tables with citations and provenance warnings. |
+| Review is append-only | Analyst acceptance, rejection, and correction need an auditable history. | `ai_verification_events` records revision, actor, reason, previous hash, and event hash; original AI result rows are not overwritten. |
+| Keyword promotion reuses existing set versioning | Search reproduction already depends on keyword-set versions. | Accepted/corrected recommendations create draft keyword-set versions with AI provenance and do not execute search or activate the set. |
+| Runtime AI execution remains outside core | Phase 7 is an engine contract, not an LLM integration phase. | The default provider returns `CAPABILITY_UNAVAILABLE`; no MCP SDK, LLM SDK, prompt, API-key, chain-of-thought, or network provider code is added. |

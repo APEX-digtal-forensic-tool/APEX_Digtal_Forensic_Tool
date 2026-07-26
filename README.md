@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 Forensic Core Engine은 **Phase 6 GUI Context, Analysis Context Snapshot, Simple·Detailed·Raw View 및 Public Engine Interface 구현과 Windows·Linux 회귀 검증 완료** 상태입니다.
-> Phase 1~5의 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata 및 Machine-extracted Candidate 기반 위에 Live GUI Session Context, 불변 Analysis Context Snapshot, Scope별 Context, View Projection, 제한된 Raw Range Read, Audit 및 공개 Engine Interface 계약이 구현되었습니다.
+> 현재 Forensic Core Engine은 **Phase 7 AI Assistance Engine Contract 구현과 Windows·Linux 회귀 검증 완료** 상태입니다.
+> Phase 1~6의 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata, Machine-extracted Candidate, GUI Context, Analysis Context Snapshot, View Projection, Raw Read 및 Public Engine Interface 기반 위에 AI Assistance Request, 외부 AI 결과 검증·저장, Human Verification, Keyword Promotion 계약이 구현되었습니다.
 >
-> GUI Session Context는 Revision·TTL 기반으로 관리하고 Analysis Context Snapshot은 Case·Resource Revision·Filter·Time Range·Search·Keyword·Timeline 출처를 보존하는 Append-only 구조로 저장합니다. Raw Read는 등록된 Evidence와 Indexed Source Node를 검증한 뒤 허용된 Byte Range만 읽습니다. 실제 GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, AI Keyword Recommendation, PDF·HTML Report Renderer, Disk Image 내부 File System Parsing 및 삭제 파일 복구는 이후 단계 또는 별도 담당 범위입니다.
+> GUI Session Context는 Revision·TTL 기반으로 관리하고 Analysis Context Snapshot은 Case·Resource Revision·Filter·Time Range·Search·Keyword·Timeline 출처를 보존하는 Append-only 구조로 저장합니다. AI Assistance는 Snapshot 기반 요청과 검증된 외부 Keyword Recommendation·Scope Summary만 저장하며, 결과는 Observed Fact와 분리됩니다. 실제 GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, AI Provider 실행, PDF·HTML Report Renderer, Disk Image 내부 File System Parsing 및 삭제 파일 복구는 이후 단계 또는 별도 담당 범위입니다.
 
 ---
 
@@ -631,12 +631,25 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 - Web Server 및 REST·GraphQL Transport 미포함
 - MCP Server·SDK·Tool Registration 미포함
 - LLM Provider·Prompt·Agent Loop·API Key 미포함
-- AI Keyword Recommendation과 Scope Summary 미구현
+- LLM 기반 Keyword Recommendation과 Scope Summary 생성 미포함
 - Report Review·Approval 및 PDF·HTML Renderer 미구현
 - 임의 Local Path 직접 읽기 금지
 - Disk Image 내부 Raw Locator와 File System Parser 미지원
 - Deleted·Unallocated·Slack 영역 Raw Read 미지원
 - Role 기반 Raw View 권한 정책은 Backend·Frontend 통합 단계에서 구현
+
+### Phase 7 — AI Assistance Engine Contract
+
+- Snapshot 기반 `AiAssistanceRequest` 생성과 TTL·Fingerprint·Current Revision 검증
+- 외부 Keyword Recommendation Batch Ingest 및 Schema/Size/Forbidden Field 검증
+- 외부 Scope Summary Ingest와 Script/Base64/Scope/Citation 검증
+- AI 결과의 `NOT_OBSERVED_FACT` 분류와 Citation·Partial·Stale·Coverage Warning 보존
+- Human Verification Append-only Event Hash Chain
+- Accepted/Corrected Keyword Candidate만 기존 Keyword Set DRAFT Version으로 Promotion
+- Promotion은 Search 실행이나 Keyword Set Activation을 자동 수행하지 않음
+- Public Engine Interface와 `ai` CLI Command Group
+- Provider-neutral Port와 기본 `CAPABILITY_UNAVAILABLE` 응답
+- MCP SDK, LLM SDK, Prompt Template, API Key, Chain-of-thought, Runtime Network 호출 미포함
 
 ---
 
@@ -853,7 +866,7 @@ Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 �
 
 AI는 조사 범위를 줄이기 위한 Keyword Candidate를 제안할 수 있습니다.
 
-> 현재는 설계 계약만 완료되었으며, AI Keyword Recommendation 실행 구현은 Phase 7 범위입니다.
+> 현재 Engine은 AI Provider를 실행하지 않고, 외부 Adapter가 제출한 Keyword Recommendation을 검증·저장·검토·승격하는 Phase 7 계약을 제공합니다.
 
 ```text
 Case 배경 정보
@@ -1451,6 +1464,14 @@ APEX/
 - [x] `context` / `view` / `interface` CLI
 - [x] Phase 6 JSON Schema 및 Unit·Integration Test
 - [x] Windows·Linux Runtime 회귀 검증
+- [x] Phase 7 AI Assistance Engine Contract
+- [x] Snapshot 기반 AI Assistance Request와 TTL/Fingerprint 검증
+- [x] 외부 Keyword Recommendation·Scope Summary Ingest 검증
+- [x] Citation, Partial, Stale, Coverage Warning 보존
+- [x] Append-only Human Verification Hash Chain
+- [x] Accepted/Corrected Keyword Promotion과 Search 자동 실행 차단
+- [x] `ai` CLI 및 Public Engine Interface AI Tool Descriptor
+- [x] Phase 7 JSON Schema 및 Unit·Integration Test
 
 ### 구현 예정
 
@@ -1464,7 +1485,7 @@ APEX/
 - [ ] Email / Discord / Telegram / KakaoTalk Plugin
 - [ ] Raster Thumbnail Rendering 및 제한된 Video Frame Sampling
 - [ ] 실제 OCR / STT Provider 및 Candidate Extraction
-- [ ] AI Keyword Recommendation 및 Citation Workflow
+- [ ] 외부 AI Adapter 품질 평가와 실제 Provider 통합 검증
 - [ ] Report Review / Approval / PDF·HTML Export
 - [ ] 한국어 Search 및 Localization
 - [ ] 성능 Benchmark 및 외부 전문가 검토
@@ -1592,13 +1613,14 @@ APEX/
 - [x] CLI / JSON Schema / Unit·Integration Test
 - [x] Windows·Linux Runtime 검증
 
-### Phase 7 — AI Assistance
+### Phase 7 — AI Assistance — 완료
 
-- Keyword Recommendation
-- Scope Summary
-- Citation
-- Partial Result 경고
-- Human Verification
+- [x] Snapshot 기반 AI Assistance Request
+- [x] 외부 Keyword Recommendation과 Scope Summary 검증·저장
+- [x] Citation, Partial Result, Stale Source, Coverage Warning 보존
+- [x] Human Verification Event Hash Chain
+- [x] 승인/수정된 Keyword Candidate의 Keyword Set Promotion
+- [x] Runtime LLM/MCP/Prompt/Provider 실행 코드 제외
 
 ### Phase 8 — Report 및 Chain of Custody
 

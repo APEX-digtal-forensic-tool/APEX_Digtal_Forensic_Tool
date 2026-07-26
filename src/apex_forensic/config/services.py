@@ -17,6 +17,7 @@ from apex_forensic.adapters.hashing import HashlibStreamingHashProvider
 from apex_forensic.adapters.persistence.sqlite import SQLiteRepository
 from apex_forensic.adapters.system import SystemClock, UuidGenerator
 from apex_forensic.application.services import (
+    AiAssistanceService,
     ArtifactAnalysisService,
     CaseManager,
     ContextService,
@@ -44,6 +45,7 @@ class ServiceBundle:
     search: SearchService
     timeline: TimelineService
     candidates: MachineExtractionService
+    ai: AiAssistanceService
     contexts: ContextService
     context: ContextService
     views: ViewProjectionService
@@ -121,6 +123,13 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         id_generator=ids,
     )
     contexts = ContextService(repository=repository, clock=clock, id_generator=ids)
+    ai = AiAssistanceService(
+        repository=repository,
+        contexts=contexts,
+        search=search,
+        clock=clock,
+        id_generator=ids,
+    )
     views = ViewProjectionService(
         repository=repository,
         contexts=contexts,
@@ -131,6 +140,7 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         repository=repository,
         contexts=contexts,
         views=views,
+        ai=ai,
         clock=clock,
         id_generator=ids,
     )
@@ -145,6 +155,7 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         search=search,
         timeline=timeline,
         candidates=candidates,
+        ai=ai,
         contexts=contexts,
         context=contexts,
         views=views,

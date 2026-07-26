@@ -354,6 +354,7 @@ Health 응답에 Evidence 경로, Case 이름, Credential 등 민감정보를 �
 | Chain of Custody | `chain-of-custody.schema.json` |
 | Raw Locator/Range | `citation.schema.json` |
 | Machine Extraction/Review | `machine-extraction.schema.json` |
+| AI Assistance | `ai-assistance-request.schema.json`, `ai-keyword-recommendation-batch.schema.json`, `ai-keyword-recommendation.schema.json`, `ai-scope-summary.schema.json`, `ai-verification-event.schema.json`, `ai-keyword-promotion.schema.json`, `ai-provider-capability.schema.json` |
 
 ## 17. 호환성 정책
 
@@ -649,3 +650,21 @@ use opaque stable cursors, not offset-only pagination. Capability gaps use struc
 The executable interface for Phase 6 is exposed through versioned DTOs and CLI command groups: `context` for create/get/update/select/filter/snapshot/scope/refresh/expire flows, `view` for simple/detailed/raw projections and bounded raw reads, and `interface` for engine version, tool descriptors, capability lookup, and raw-read invocation.
 
 Adapter consumers receive stable schema versions, structured error codes, advertised limits, and tool descriptors. Raw-read requests require a case/evidence/resource locator plus offset/length or a validated logical locator. The core repository remains the authority for case ownership, revision state, and raw-read audit records; MCP transport and GUI widget state stay outside the engine package.
+
+## 27. Phase 7 AI Assistance CLI/API Contract
+
+Phase 7 exposes engine-side AI assistance through the application service, `ai` CLI group, and public interface tool descriptors. It does not add an HTTP server or MCP tool registration.
+
+AI CLI commands:
+
+- `apex-forensic ai request-create|request-show|request-list|request-compare|request-capabilities`
+- `apex-forensic ai keyword-ingest|keyword-batch-show|keyword-list|keyword-show`
+- `apex-forensic ai keyword-review|keyword-correct|keyword-promotion-preview|keyword-promote`
+- `apex-forensic ai summary-ingest|summary-list|summary-show|summary-review|summary-correct`
+- `apex-forensic ai review-history`
+
+Public interface canonical operations use the `ai.*` namespace, including `ai.request.create`, `ai.keyword-batch.ingest`, `ai.keyword-recommendation.review`, `ai.keyword-recommendation.promote`, `ai.scope-summary.ingest`, `ai.scope-summary.review`, `ai.verification.history`, `ai.promotion.preview`, and `ai.capabilities`.
+
+Request creation requires a case-owned `analysis_context_snapshot_id`. Result ingestion accepts JSON objects or UTF-8 JSON files and rejects prompt/secret/raw-body fields, oversized payloads, invalid keyword types, invalid hash/IP/URL/domain values, cross-case citations, citations outside the snapshot, resource revision mismatches, and summary script/base64 content. Review operations require actor, reason, target revision, and correction text when action is `CORRECT`.
+
+Promotion requires an accepted or corrected recommendation and creates a draft keyword-set version through the existing keyword-set manager. It is idempotent for the same reviewed recommendation and target set, detects duplicates, requires explicit regex confirmation, and never runs search or activates the set.

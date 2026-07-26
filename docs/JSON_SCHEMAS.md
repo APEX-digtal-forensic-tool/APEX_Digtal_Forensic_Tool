@@ -34,6 +34,13 @@
 | `machine-extracted-candidate.schema.json` | MachineExtractedCandidate, CandidateReviewEvent | Phase 5 OCR/STT Candidate와 Review 이력 |
 | `provider-capability.schema.json` | ProviderCapability | Optional OCR/STT / ffprobe / ffmpeg Capability 상태 |
 | `thumbnail.schema.json` | ThumbnailRecord | Hash 검증 가능한 Thumbnail Derivative Metadata |
+| `ai-assistance-request.schema.json` | AiAssistanceRequest | Snapshot 기반 AI Assistance 요청 |
+| `ai-keyword-recommendation-batch.schema.json` | AiKeywordRecommendationBatch | 외부 AI Keyword Recommendation Batch |
+| `ai-keyword-recommendation.schema.json` | AiKeywordRecommendation | 검증된 AI Keyword Candidate와 Review Projection |
+| `ai-scope-summary.schema.json` | AiScopeSummary | Scope Summary와 Citation/Warning |
+| `ai-verification-event.schema.json` | AiVerificationEvent | Human Verification Event Hash Chain |
+| `ai-keyword-promotion.schema.json` | AiKeywordPromotion | Reviewed Candidate의 Keyword Set 승격 기록 |
+| `ai-provider-capability.schema.json` | AiProviderCapability | AI Assistance Provider Capability 상태 |
 
 ## 3. 공통 규칙
 
@@ -331,3 +338,17 @@ recommendation contracts but its enum set also includes Phase 4 manual keyword s
 | `engine-tool-descriptor.schema.json` | EngineToolDescriptor | Public Tool Descriptor와 Limit |
 
 Phase 6 schemas keep object extensibility explicit with `additionalProperties`, reject unbounded binary payload transfer, and carry warning/citation arrays so partial or stale context can be represented without inventing facts.
+
+## 7. Phase 7 AI Assistance Schemas
+
+| 파일 | Root 정의 | 용도 |
+| --- | --- | --- |
+| `ai-assistance-request.schema.json` | AiAssistanceRequest | Snapshot 기반 AI 요청, TTL, Fingerprint, Operation/Scope 제한 |
+| `ai-keyword-recommendation-batch.schema.json` | AiKeywordRecommendationBatch | 외부 Keyword Recommendation Batch와 Validation Warning |
+| `ai-keyword-recommendation.schema.json` | AiKeywordRecommendation | 검증된 AI Keyword Candidate, Citation, Review Projection |
+| `ai-scope-summary.schema.json` | AiScopeSummary | Scope Summary, Key Point, Citation, Partial/Stale Warning |
+| `ai-verification-event.schema.json` | AiVerificationEvent | Append-only Human Review Event와 Hash Chain |
+| `ai-keyword-promotion.schema.json` | AiKeywordPromotion | Reviewed Candidate에서 Keyword Set Draft Version으로의 승격 기록 |
+| `ai-provider-capability.schema.json` | AiProviderCapability | Provider-neutral Capability와 기본 `CAPABILITY_UNAVAILABLE` 상태 |
+
+Phase 7 schemas use Draft 2020-12, explicit `additionalProperties`, bounded arrays/strings, and existing citation/common definitions. AI recommendation and summary DTOs carry `result_kind`, `observed_fact_status=NOT_OBSERVED_FACT`, provenance warnings, and human review state so AI output cannot be serialized as an observed fact by accident.

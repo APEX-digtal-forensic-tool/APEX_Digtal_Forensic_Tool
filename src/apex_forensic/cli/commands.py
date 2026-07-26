@@ -79,6 +79,8 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _media(args, services)
     if args.command == "candidate":
         return _candidate(args, services)
+    if args.command == "ai":
+        return _ai(args, services)
     if args.command == "search":
         return _search(args, services)
     if args.command == "keyword-set":
@@ -457,6 +459,133 @@ def _candidate(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown candidate command.", target="candidate_command")
 
 
+def _ai(args: Namespace, services: Any) -> Any:
+    if args.ai_command == "request-capabilities":
+        return services.ai.capabilities()
+    if args.ai_command == "request-create":
+        return services.ai.create_request_from_context_snapshot(
+            case_id=args.case_id,
+            context_snapshot_id=args.context_snapshot_id,
+            purpose=args.purpose,
+            requested_operations=args.operation or None,
+            requested_scopes=args.scope or None,
+            scope_context_ids=args.scope_context_id or None,
+            locale=args.locale,
+            timezone=args.timezone,
+            max_keyword_candidates=args.max_keyword_candidates,
+            max_summary_length=args.max_summary_length,
+            ttl_seconds=args.ttl_seconds,
+            correlation_id=args.correlation_id,
+        ).to_schema_dict()
+    if args.ai_command == "request-show":
+        return services.ai.get_request(args.assistance_request_id).to_schema_dict()
+    if args.ai_command == "request-list":
+        return [
+            item.to_schema_dict()
+            for item in services.ai.list_requests_by_case(args.case_id, limit=args.limit)
+        ]
+    if args.ai_command == "request-compare":
+        return services.ai.compare_requests(args.left_request_id, args.right_request_id)
+    if args.ai_command == "keyword-ingest":
+        return services.ai.ingest_keyword_batch(
+            assistance_request_id=args.assistance_request_id,
+            payload=_json_input(args),
+        )
+    if args.ai_command == "keyword-batch-show":
+        return services.ai.get_keyword_batch(args.recommendation_batch_id)
+    if args.ai_command == "keyword-list":
+        return services.ai.list_keyword_recommendations(
+            case_id=args.case_id,
+            recommendation_batch_id=args.recommendation_batch_id,
+            cursor=args.cursor,
+            limit=args.limit,
+        )
+    if args.ai_command == "keyword-show":
+        return services.ai.get_keyword_recommendation(args.recommendation_id).to_schema_dict()
+    if args.ai_command == "keyword-review":
+        return services.ai.review_keyword_recommendation(
+            recommendation_id=args.recommendation_id,
+            action=args.action,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.ai_command == "keyword-correct":
+        return services.ai.review_keyword_recommendation(
+            recommendation_id=args.recommendation_id,
+            action="CORRECT",
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+            corrected_value=args.corrected_value,
+            corrected_reason=args.corrected_reason,
+        ).to_schema_dict()
+    if args.ai_command == "keyword-promotion-preview":
+        return services.ai.preview_keyword_promotion(
+            recommendation_id=args.recommendation_id,
+            keyword_set_id=args.keyword_set_id,
+            regex_confirmed=args.regex_confirmed,
+        )
+    if args.ai_command == "keyword-promote":
+        return services.ai.promote_accepted_keyword(
+            recommendation_id=args.recommendation_id,
+            keyword_set_id=args.keyword_set_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+            regex_confirmed=args.regex_confirmed,
+            confirmation_metadata=_json_arg(args.confirmation_json, "confirmation_json")
+            if args.confirmation_json is not None
+            else None,
+        ).to_schema_dict()
+    if args.ai_command == "summary-ingest":
+        return services.ai.ingest_scope_summary(
+            assistance_request_id=args.assistance_request_id,
+            payload=_json_input(args),
+        ).to_schema_dict()
+    if args.ai_command == "summary-list":
+        if args.scope_summary_id is not None:
+            return services.ai.get_scope_summary(args.scope_summary_id).to_schema_dict()
+        return [
+            item.to_schema_dict()
+            for item in services.ai.list_scope_summaries(
+                case_id=args.case_id,
+                context_snapshot_id=args.context_snapshot_id,
+                scope_context_id=args.scope_context_id,
+                limit=args.limit,
+            )
+        ]
+    if args.ai_command == "summary-show":
+        return services.ai.get_scope_summary(args.scope_summary_id).to_schema_dict()
+    if args.ai_command == "summary-review":
+        return services.ai.review_scope_summary(
+            scope_summary_id=args.scope_summary_id,
+            action=args.action,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.ai_command == "summary-correct":
+        return services.ai.review_scope_summary(
+            scope_summary_id=args.scope_summary_id,
+            action="CORRECT",
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+            corrected_value=args.corrected_value,
+            corrected_reason=args.corrected_reason,
+        ).to_schema_dict()
+    if args.ai_command == "review-history":
+        return [
+            item.to_schema_dict()
+            for item in services.ai.review_history(
+                target_type=args.target_type,
+                target_id=args.target_id,
+            )
+        ]
+    raise ValidationError("Unknown AI command.", target="ai_command")
+
+
 def _custody(args: Namespace, services: Any) -> Any:
     if args.custody_command == "list":
         return [event.to_schema_dict() for event in services.custody.list_events(args.evidence_id)]
@@ -777,6 +906,12 @@ def _interface(args: Namespace, services: Any) -> Any:
             _json_arg(args.payload_json, "payload_json"),
             correlation_id=args.correlation_id,
         )
+    if args.interface_command == "invoke-mutation":
+        return services.interface.invoke_mutation(
+            args.operation,
+            _json_arg(args.payload_json, "payload_json"),
+            correlation_id=args.correlation_id,
+        )
     raise ValidationError("Unknown interface command.", target="interface_command")
 
 
@@ -805,6 +940,28 @@ def _json_arg(value: str | None, target: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValidationError("JSON option must be an object.", target=target)
     return parsed
+
+
+def _json_input(args: Namespace) -> dict[str, Any]:
+    if getattr(args, "input_json", None) and getattr(args, "input_file", None):
+        raise ValidationError("Use either --input-json or --input-file, not both.", target="input")
+    if getattr(args, "input_file", None) is not None:
+        path = args.input_file
+        if path.stat().st_size > 1024 * 1024:
+            raise ValidationError("Input JSON file exceeds the size limit.", target="input_file")
+        value = path.read_text(encoding="utf-8")
+    else:
+        value = getattr(args, "input_json", None)
+    if not value:
+        raise ValidationError("JSON input is required.", target="input_json")
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValidationError("Invalid JSON input.", target="input_json") from error
+    if not isinstance(parsed, dict):
+        raise ValidationError("JSON input must be an object.", target="input_json")
+    return parsed
+
 
 def _context_updates(args: Namespace) -> dict[str, Any]:
     updates: dict[str, Any] = {}

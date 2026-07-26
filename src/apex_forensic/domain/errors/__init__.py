@@ -148,6 +148,28 @@ class ContextError(ApexError):
         )
 
 
+class AiAssistanceError(ApexError):
+    """Raised for structured Phase 7 AI assistance contract violations."""
+
+    def __init__(
+        self,
+        code: str,
+        developer_message: str,
+        *,
+        target: str | None = None,
+        retryable: bool = False,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=code,
+            message_key=f"error.{code.lower()}",
+            developer_message=developer_message,
+            target=target,
+            retryable=retryable,
+            details=details or {},
+        )
+
+
 class ContextRevisionConflictError(ContextError):
     """Raised when an optimistic-lock context revision check fails."""
 

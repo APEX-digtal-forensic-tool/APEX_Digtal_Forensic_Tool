@@ -14,6 +14,8 @@ from typing import Any, cast
 from apex_forensic._time import parse_timestamp, to_json_timestamp
 from apex_forensic.constants import ENGINE_VERSION, SCHEMA_VERSION
 from apex_forensic.domain.enums import (
+    AiAssistancePurpose,
+    AiVerificationAction,
     AnalysisContextPurpose,
     AnalysisScopeType,
     ArtifactType,
@@ -157,6 +159,32 @@ _OPERATION_ALIASES: dict[str, str] = {
     "view.raw_read": "view.raw-read",
     "apex.view.raw_read": "view.raw-read",
     "apex.view.raw-read": "view.raw-read",
+    "ai.request.create": "ai.request.create",
+    "ai.request.get": "ai.request.get",
+    "ai.request.list": "ai.request.list",
+    "ai.keyword-batch.get": "ai.keyword-batch.get",
+    "ai.keyword_batch.get": "ai.keyword-batch.get",
+    "ai.keyword-recommendation.get": "ai.keyword-recommendation.get",
+    "ai.keyword_recommendation.get": "ai.keyword-recommendation.get",
+    "ai.keyword-recommendation.list": "ai.keyword-recommendation.list",
+    "ai.keyword_recommendation.list": "ai.keyword-recommendation.list",
+    "ai.scope-summary.get": "ai.scope-summary.get",
+    "ai.scope_summary.get": "ai.scope-summary.get",
+    "ai.scope-summary.list": "ai.scope-summary.list",
+    "ai.scope_summary.list": "ai.scope-summary.list",
+    "ai.verification.history": "ai.verification.history",
+    "ai.promotion.preview": "ai.promotion.preview",
+    "ai.capabilities": "ai.capabilities",
+    "ai.keyword-batch.ingest": "ai.keyword-batch.ingest",
+    "ai.keyword_batch.ingest": "ai.keyword-batch.ingest",
+    "ai.scope-summary.ingest": "ai.scope-summary.ingest",
+    "ai.scope_summary.ingest": "ai.scope-summary.ingest",
+    "ai.keyword-recommendation.review": "ai.keyword-recommendation.review",
+    "ai.keyword_recommendation.review": "ai.keyword-recommendation.review",
+    "ai.scope-summary.review": "ai.scope-summary.review",
+    "ai.scope_summary.review": "ai.scope-summary.review",
+    "ai.keyword-recommendation.promote": "ai.keyword-recommendation.promote",
+    "ai.keyword_recommendation.promote": "ai.keyword-recommendation.promote",
 }
 _TOOL_DESCRIPTOR_SPECS: tuple[
     tuple[str, str, str, str, str, list[str], bool, bool, bool, bool, bool, int], ...
@@ -271,6 +299,230 @@ _TOOL_DESCRIPTOR_SPECS: tuple[
         True,
         True,
         True,
+        1,
+    ),
+    (
+        "ai.request.create",
+        "ai.request.create",
+        "tool.ai.request.create",
+        "ai-assistance-request.schema.json",
+        "ai-assistance-request.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.request.get",
+        "ai.request.get",
+        "tool.ai.request.get",
+        "ai-assistance-request.schema.json",
+        "ai-assistance-request.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.request.list",
+        "ai.request.list",
+        "tool.ai.request.list",
+        "ai-assistance-request.schema.json",
+        "ai-assistance-request.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        True,
+        True,
+        True,
+        MAX_SCOPE_ITEMS,
+    ),
+    (
+        "ai.keyword-batch.ingest",
+        "ai.keyword-batch.ingest",
+        "tool.ai.keyword_batch.ingest",
+        "ai-keyword-recommendation-batch.schema.json",
+        "ai-keyword-recommendation-batch.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.keyword-batch.get",
+        "ai.keyword-batch.get",
+        "tool.ai.keyword_batch.get",
+        "ai-keyword-recommendation-batch.schema.json",
+        "ai-keyword-recommendation-batch.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.keyword-recommendation.get",
+        "ai.keyword-recommendation.get",
+        "tool.ai.keyword_recommendation.get",
+        "ai-keyword-recommendation.schema.json",
+        "ai-keyword-recommendation.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.keyword-recommendation.list",
+        "ai.keyword-recommendation.list",
+        "tool.ai.keyword_recommendation.list",
+        "ai-keyword-recommendation.schema.json",
+        "ai-keyword-recommendation.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        True,
+        True,
+        True,
+        MAX_SCOPE_ITEMS,
+    ),
+    (
+        "ai.scope-summary.ingest",
+        "ai.scope-summary.ingest",
+        "tool.ai.scope_summary.ingest",
+        "ai-scope-summary.schema.json",
+        "ai-scope-summary.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.scope-summary.get",
+        "ai.scope-summary.get",
+        "tool.ai.scope_summary.get",
+        "ai-scope-summary.schema.json",
+        "ai-scope-summary.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.scope-summary.list",
+        "ai.scope-summary.list",
+        "tool.ai.scope_summary.list",
+        "ai-scope-summary.schema.json",
+        "ai-scope-summary.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        True,
+        True,
+        True,
+        MAX_SCOPE_ITEMS,
+    ),
+    (
+        "ai.keyword-recommendation.review",
+        "ai.keyword-recommendation.review",
+        "tool.ai.keyword_recommendation.review",
+        "ai-verification-event.schema.json",
+        "ai-verification-event.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.scope-summary.review",
+        "ai.scope-summary.review",
+        "tool.ai.scope_summary.review",
+        "ai-verification-event.schema.json",
+        "ai-verification-event.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.verification.history",
+        "ai.verification.history",
+        "tool.ai.verification.history",
+        "ai-verification-event.schema.json",
+        "ai-verification-event.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        True,
+        True,
+        True,
+        MAX_SCOPE_ITEMS,
+    ),
+    (
+        "ai.promotion.preview",
+        "ai.promotion.preview",
+        "tool.ai.promotion.preview",
+        "ai-keyword-promotion.schema.json",
+        "ai-keyword-promotion.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.keyword-recommendation.promote",
+        "ai.keyword-recommendation.promote",
+        "tool.ai.keyword_recommendation.promote",
+        "ai-keyword-promotion.schema.json",
+        "ai-keyword-promotion.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
+        "ai.capabilities",
+        "ai.capabilities",
+        "tool.ai.capabilities",
+        "ai-provider-capability.schema.json",
+        "ai-provider-capability.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        False,
+        False,
+        False,
+        True,
+        False,
         1,
     ),
 )
@@ -2618,12 +2870,14 @@ class EngineInterfaceService:
         repository: Any,
         contexts: ContextService,
         views: ViewProjectionService,
+        ai: Any | None = None,
         clock: Clock,
         id_generator: IdGenerator,
     ) -> None:
         self._repository = repository
         self._contexts = contexts
         self._views = views
+        self._ai = ai
         self._clock = clock
         self._id_generator = id_generator
         self._register_default_tool_descriptors()
@@ -2644,11 +2898,17 @@ class EngineInterfaceService:
                 "CONTEXT_SNAPSHOT",
                 "SIMPLE_DETAILED_RAW_VIEW",
                 "MCP_ADAPTER_DESCRIPTOR",
+                "AI_ASSISTANCE_ENGINE_CONTRACT",
+                "AI_RESULT_VALIDATION",
+                "AI_HUMAN_VERIFICATION",
+                "AI_KEYWORD_PROMOTION",
             ],
             unavailable_capabilities=[
                 "REST_SERVER",
                 "MCP_SERVER",
                 "LLM_PROVIDER",
+                "RUNTIME_AI_PROVIDER",
+                "PROMPT_TEMPLATE",
                 "DISK_IMAGE_RAW_OFFSET",
             ],
             generated_at=self._clock.now(),
@@ -2817,11 +3077,268 @@ class EngineInterfaceService:
                     request_id=request_id,
                     correlation_id=correlation_id,
                 )
+            if canonical_operation.startswith("ai."):
+                ai = self._require_ai_service()
+                if canonical_operation == "ai.capabilities":
+                    return self.success(
+                        ai.capabilities(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.request.create":
+                    ai_request = ai.create_request_from_context_snapshot(
+                        case_id=self._required_string(request, "case_id"),
+                        context_snapshot_id=self._required_string(
+                            request, "context_snapshot_id"
+                        ),
+                        purpose=self._optional_enum(
+                            request,
+                            "purpose",
+                            AiAssistancePurpose,
+                            AiAssistancePurpose.INVESTIGATION_ASSISTANCE,
+                        ),
+                        requested_operations=self._optional_string_list(
+                            request, "requested_operations"
+                        ),
+                        requested_scopes=self._optional_string_list(
+                            request, "requested_scopes"
+                        ),
+                        scope_context_ids=self._optional_string_list(
+                            request, "scope_context_ids"
+                        ),
+                        locale=self._optional_string(request, "locale"),
+                        timezone=self._optional_string(request, "timezone"),
+                        max_keyword_candidates=self._optional_integer(
+                            request, "max_keyword_candidates", 100, minimum=1
+                        ),
+                        max_summary_length=self._optional_integer(
+                            request, "max_summary_length", 4000, minimum=1
+                        ),
+                        correlation_id=correlation_id
+                        or self._optional_string(request, "correlation_id"),
+                    )
+                    return self.success(
+                        ai_request.to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.request.get":
+                    return self.success(
+                        ai.get_request(
+                            self._required_string(request, "assistance_request_id")
+                        ).to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.request.list":
+                    return self.success(
+                        [
+                            item.to_schema_dict()
+                            for item in ai.list_requests_by_case(
+                                self._required_string(request, "case_id"),
+                                limit=self._optional_integer(
+                                    request, "limit", 100, minimum=1
+                                ),
+                            )
+                        ],
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.keyword-batch.ingest":
+                    return self.success(
+                        ai.ingest_keyword_batch(
+                            assistance_request_id=self._required_string(
+                                request, "assistance_request_id"
+                            ),
+                            payload=self._object_payload(request),
+                        ),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.keyword-batch.get":
+                    return self.success(
+                        ai.get_keyword_batch(
+                            self._required_string(request, "recommendation_batch_id")
+                        ),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.keyword-recommendation.get":
+                    return self.success(
+                        ai.get_keyword_recommendation(
+                            self._required_string(request, "recommendation_id")
+                        ).to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.keyword-recommendation.list":
+                    return self.success(
+                        ai.list_keyword_recommendations(
+                            case_id=self._required_string(request, "case_id"),
+                            recommendation_batch_id=self._optional_string(
+                                request, "recommendation_batch_id"
+                            ),
+                            cursor=self._optional_string(request, "cursor"),
+                            limit=self._optional_integer(request, "limit", 100, minimum=1),
+                        ),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.scope-summary.ingest":
+                    return self.success(
+                        ai.ingest_scope_summary(
+                            assistance_request_id=self._required_string(
+                                request, "assistance_request_id"
+                            ),
+                            payload=self._object_payload(request),
+                        ).to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.scope-summary.get":
+                    return self.success(
+                        ai.get_scope_summary(
+                            self._required_string(request, "scope_summary_id")
+                        ).to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.scope-summary.list":
+                    return self.success(
+                        [
+                            item.to_schema_dict()
+                            for item in ai.list_scope_summaries(
+                                case_id=self._required_string(request, "case_id"),
+                                context_snapshot_id=self._optional_string(
+                                    request, "context_snapshot_id"
+                                ),
+                                scope_context_id=self._optional_string(
+                                    request, "scope_context_id"
+                                ),
+                                limit=self._optional_integer(
+                                    request, "limit", 100, minimum=1
+                                ),
+                            )
+                        ],
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.keyword-recommendation.review":
+                    return self.success(
+                        ai.review_keyword_recommendation(
+                            recommendation_id=self._required_string(
+                                request, "recommendation_id"
+                            ),
+                            action=self._required_enum(
+                                request, "action", AiVerificationAction
+                            ),
+                            actor_id=self._required_string(request, "actor_id"),
+                            reason=self._required_string(request, "reason"),
+                            expected_review_revision=self._optional_integer_or_none(
+                                request, "expected_review_revision", minimum=0
+                            ),
+                            corrected_value=self._optional_string(
+                                request, "corrected_value"
+                            ),
+                            corrected_reason=self._optional_string(
+                                request, "corrected_reason"
+                            ),
+                        ).to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.scope-summary.review":
+                    return self.success(
+                        ai.review_scope_summary(
+                            scope_summary_id=self._required_string(
+                                request, "scope_summary_id"
+                            ),
+                            action=self._required_enum(
+                                request, "action", AiVerificationAction
+                            ),
+                            actor_id=self._required_string(request, "actor_id"),
+                            reason=self._required_string(request, "reason"),
+                            expected_review_revision=self._optional_integer_or_none(
+                                request, "expected_review_revision", minimum=0
+                            ),
+                            corrected_value=self._optional_string(
+                                request, "corrected_value"
+                            ),
+                            corrected_reason=self._optional_string(
+                                request, "corrected_reason"
+                            ),
+                        ).to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.verification.history":
+                    return self.success(
+                        [
+                            item.to_schema_dict()
+                            for item in ai.review_history(
+                                target_type=self._required_string(request, "target_type"),
+                                target_id=self._required_string(request, "target_id"),
+                            )
+                        ],
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.promotion.preview":
+                    return self.success(
+                        ai.preview_keyword_promotion(
+                            recommendation_id=self._required_string(
+                                request, "recommendation_id"
+                            ),
+                            keyword_set_id=self._required_string(
+                                request, "keyword_set_id"
+                            ),
+                            regex_confirmed=bool(request.get("regex_confirmed", False)),
+                        ),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
+                if canonical_operation == "ai.keyword-recommendation.promote":
+                    return self.success(
+                        ai.promote_accepted_keyword(
+                            recommendation_id=self._required_string(
+                                request, "recommendation_id"
+                            ),
+                            keyword_set_id=self._required_string(
+                                request, "keyword_set_id"
+                            ),
+                            actor_id=self._required_string(request, "actor_id"),
+                            reason=self._required_string(request, "reason"),
+                            expected_review_revision=self._optional_integer_or_none(
+                                request, "expected_review_revision", minimum=0
+                            ),
+                            regex_confirmed=bool(request.get("regex_confirmed", False)),
+                            confirmation_metadata=self._optional_object_payload(
+                                request, "confirmation_metadata"
+                            ),
+                        ).to_schema_dict(),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
             raise UnsupportedCapabilityError(
                 "Unknown public read operation.", target="operation", required_capability=operation
             )
         except ApexError as apex_error:
             return self.error(apex_error, request_id=request_id, correlation_id=correlation_id)
+
+    def invoke_mutation(
+        self,
+        operation: str,
+        payload: Mapping[str, Any],
+        *,
+        request_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        return self.invoke_read(
+            operation,
+            payload,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
 
     @staticmethod
     def _request_payload(payload: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -2832,6 +3349,30 @@ class EngineInterfaceService:
                 details={"payload_type": type(payload).__name__},
             )
         return payload
+
+    def _object_payload(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nested = payload.get("payload")
+        if nested is None:
+            return payload
+        if not isinstance(nested, Mapping):
+            raise ValidationError(
+                "Invocation payload field must be a JSON object.",
+                target="payload",
+        )
+        return nested
+
+    def _optional_object_payload(
+        self, payload: Mapping[str, Any], field: str
+    ) -> dict[str, Any]:
+        nested = payload.get(field)
+        if nested is None:
+            return {}
+        if not isinstance(nested, Mapping):
+            raise ValidationError(
+                f"Invocation {field} field must be a JSON object.",
+                target=field,
+            )
+        return dict(nested)
 
     @staticmethod
     def _canonical_operation(operation: str) -> str:
@@ -2886,6 +3427,39 @@ class EngineInterfaceService:
         maximum: int | None = None,
     ) -> int:
         value = payload.get(field, default)
+        if isinstance(value, bool):
+            raise ValidationError(
+                "Invocation payload field must be an integer.",
+                target=field,
+                details={"value": value},
+            )
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError) as error:
+            raise ValidationError(
+                "Invocation payload field must be an integer.",
+                target=field,
+                details={"value": value},
+            ) from error
+        if parsed < minimum or (maximum is not None and parsed > maximum):
+            raise ValidationError(
+                "Invocation payload integer is outside the allowed range.",
+                target=field,
+                details={"value": parsed, "minimum": minimum, "maximum": maximum},
+            )
+        return parsed
+
+    @staticmethod
+    def _optional_integer_or_none(
+        payload: Mapping[str, Any],
+        field: str,
+        *,
+        minimum: int,
+        maximum: int | None = None,
+    ) -> int | None:
+        if field not in payload or payload[field] is None:
+            return None
+        value = payload[field]
         if isinstance(value, bool):
             raise ValidationError(
                 "Invocation payload field must be an integer.",
@@ -2964,6 +3538,30 @@ class EngineInterfaceService:
                     details={"value": item},
                 ) from error
         return scopes
+
+    @staticmethod
+    def _optional_string_list(payload: Mapping[str, Any], field: str) -> list[str] | None:
+        value = payload.get(field)
+        if value is None:
+            return None
+        if not isinstance(value, list) or any(
+            not isinstance(item, str) or not item for item in value
+        ):
+            raise ValidationError(
+                "Invocation payload field must be a list of non-empty strings.",
+                target=field,
+                details={"value": value},
+            )
+        return list(dict.fromkeys(value))
+
+    def _require_ai_service(self) -> Any:
+        if self._ai is None:
+            raise UnsupportedCapabilityError(
+                "AI assistance service is not available.",
+                target="operation",
+                required_capability="AI_ASSISTANCE_ENGINE_CONTRACT",
+            )
+        return self._ai
 
     def _register_default_tool_descriptors(self) -> None:
         for spec in _TOOL_DESCRIPTOR_SPECS:

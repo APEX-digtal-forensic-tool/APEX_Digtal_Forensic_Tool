@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-assistance-request.schema.json",
+  "title": "APEX AI Assistance Request",
+  "$ref": "#/$defs/aiAssistanceRequest",
+  "$defs": {
+    "scope": {
+      "enum": [
+        "case",
+        "evidence",
+        "filesystem",
+        "registry",
+        "eventlog",
+        "prefetch",
+        "browser",
+        "media",
+        "timeline",
+        "keyword_search",
+        "machine_candidate",
+        "chain_of_custody",
+        "report",
+        "selection"
+      ]
+    },
+    "purpose": {
+      "enum": [
+        "KEYWORD_RECOMMENDATION",
+        "SCOPE_SUMMARY",
+        "REPORT_INPUT",
+        "INVESTIGATION_ASSISTANCE",
+        "OTHER"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "RECOMMEND_KEYWORDS",
+        "SUMMARIZE_SCOPE",
+        "EXPLAIN_SELECTION",
+        "SUGGEST_NEXT_ANALYSIS",
+        "OTHER"
+      ]
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "coverageSummary": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "aiAssistanceRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assistance_request_id",
+        "case_id",
+        "context_snapshot_id",
+        "purpose",
+        "requested_operations",
+        "requested_scopes",
+        "scope_context_ids",
+        "locale",
+        "timezone",
+        "context_fingerprint",
+        "source_revision_fingerprint",
+        "is_partial",
+        "is_stale",
+        "coverage_summary",
+        "warnings",
+        "citations",
+        "max_keyword_candidates",
+        "max_summary_length",
+        "requested_at",
+        "expires_at",
+        "request_version",
+        "correlation_id",
+        "request_fingerprint",
+        "resource_count"
+      ],
+      "properties": {
+        "assistance_request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "context_snapshot_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "purpose": { "$ref": "#/$defs/purpose" },
+        "requested_operations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/operation" }
+        },
+        "requested_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/scope" }
+        },
+        "scope_context_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "locale": { "$ref": "common.schema.json#/$defs/locale" },
+        "timezone": { "$ref": "common.schema.json#/$defs/timezone" },
+        "context_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "source_revision_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "is_partial": { "type": "boolean" },
+        "is_stale": { "type": "boolean" },
+        "coverage_summary": { "$ref": "#/$defs/coverageSummary" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "citations": {
+          "type": "array",
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+        },
+        "max_keyword_candidates": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "max_summary_length": { "type": "integer", "minimum": 1, "maximum": 20000 },
+        "requested_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "expires_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "request_version": { "type": "string", "minLength": 1 },
+        "correlation_id": { "type": ["string", "null"], "minLength": 1 },
+        "request_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "resource_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

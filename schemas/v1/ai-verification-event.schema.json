@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-verification-event.schema.json",
+  "title": "APEX AI Verification Event",
+  "$ref": "#/$defs/aiVerificationEvent",
+  "$defs": {
+    "targetType": {
+      "enum": ["KEYWORD_RECOMMENDATION", "SCOPE_SUMMARY"]
+    },
+    "action": {
+      "enum": ["ACCEPT", "REJECT", "CORRECT", "COMMENT"]
+    },
+    "reviewStatus": {
+      "enum": ["UNREVIEWED", "ACCEPTED", "REJECTED", "CORRECTED"]
+    },
+    "aiVerificationEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verification_event_id",
+        "case_id",
+        "target_type",
+        "target_id",
+        "action",
+        "previous_status",
+        "new_status",
+        "actor_id",
+        "reason",
+        "corrected_value",
+        "corrected_reason",
+        "review_revision",
+        "previous_event_hash",
+        "event_hash",
+        "created_at"
+      ],
+      "properties": {
+        "verification_event_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "target_type": { "$ref": "#/$defs/targetType" },
+        "target_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "action": { "$ref": "#/$defs/action" },
+        "previous_status": { "$ref": "#/$defs/reviewStatus" },
+        "new_status": { "$ref": "#/$defs/reviewStatus" },
+        "actor_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "corrected_value": { "type": ["string", "null"], "minLength": 1 },
+        "corrected_reason": { "type": ["string", "null"], "maxLength": 4000 },
+        "review_revision": { "type": "integer", "minimum": 1 },
+        "previous_event_hash": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "event_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    }
+  }
+}
