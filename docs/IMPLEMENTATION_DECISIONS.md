@@ -65,3 +65,35 @@ Foundation. The implementation keeps Phase 2+ behavior out of runtime code.
 | Candidate review is implemented without OCR/STT execution | OCR/STT output must stay provider-neutral and cannot become observed fact automatically. | `MachineExtractionService` persists unavailable OCR/STT capabilities, immutable candidates, append-only review events, and requires correction text for `CORRECTED`. |
 | Corrupt media/browser sources produce partial facts | One damaged file or SQLite database must not stop the whole artifact job. | Damaged media and browser DBs return `CORRUPT`/`UNSUPPORTED` artifacts with warnings; the coordinator continues remaining sources and marks coverage partial. |
 | Email and messengers remain plugin scope | The Phase 5 roadmap explicitly excludes Email, Discord, Telegram, KakaoTalk, and other messengers from completion criteria. | No messenger parser is registered in core; browser cache bodies, passwords, deleted records, and cloud sync stay unsupported. |
+
+## Phase 6 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| Live context and immutable snapshots use separate tables | GUI state changes frequently, while AI/report context needs reproducible evidence bundles. | `gui_session_contexts` remains mutable until TTL expiry; `analysis_context_snapshots` is append-only and content-fingerprinted. |
+| Context fingerprints exclude transient provenance | Snapshot IDs, creation timestamps, actor IDs, and previous links should not change the hash of equivalent selected evidence. | Equivalent resolved context produces stable SHA-256 fingerprints while previous-snapshot lineage is stored separately. |
+| Raw reads are service-level bounded operations | Raw View must not load full evidence files or bypass case/evidence validation. | `SafeRawRangeReader` enforces root containment, offset/length limits, logical locator rules, EOF behavior, and audit records. |
+| MCP is represented as an adapter boundary only | Core Phase 6 must expose contracts without coupling to a transport, prompts, or provider credentials. | `EngineInterfaceService` publishes version/capability/tool descriptors and structured responses; no MCP server or LLM code is imported. |
+| Scope paging uses persisted resource membership | Large analysis contexts should not require reserializing a full snapshot for every page. | Snapshot and scope resource tables preserve included/excluded resource IDs for bounded pagination and stale-source refresh. |
+
+## Phase 7 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| AI Assistance is snapshot-first | AI output must be reproducible against the exact context the external adapter saw. | `AiAssistanceRequest` stores snapshot ID, source revision fingerprint, coverage, citations, TTL, and a deterministic request fingerprint. |
+| Provider output is never trusted directly | A future adapter may have different models or providers, but the engine must enforce one forensic contract. | Provider results and CLI JSON ingestion both pass through the same keyword/summary validators before persistence. |
+| AI results are not observed facts | AI text can assist analysis but must not modify artifacts, timeline events, filesystem nodes, or evidence. | Keyword recommendations and summaries store `NOT_OBSERVED_FACT` and remain in AI tables with citations and provenance warnings. |
+| Review is append-only | Analyst acceptance, rejection, and correction need an auditable history. | `ai_verification_events` records revision, actor, reason, previous hash, and event hash; original AI result rows are not overwritten. |
+| Keyword promotion reuses existing set versioning | Search reproduction already depends on keyword-set versions. | Accepted/corrected recommendations create draft keyword-set versions with AI provenance and do not execute search or activate the set. |
+| Runtime AI execution remains outside core | Phase 7 is an engine contract, not an LLM integration phase. | The default provider returns `CAPABILITY_UNAVAILABLE`; no MCP SDK, LLM SDK, prompt, API-key, chain-of-thought, or network provider code is added. |
+
+## Phase 8 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| Reports use a mutable aggregate header plus immutable versions | Workflow state and active-version pointers change, but report content must remain reviewable and reproducible. | `reports` stores the header; `report_versions` and section/reference tables are append-only and content-fingerprinted. |
+| Content fingerprints exclude sequence metadata | Idempotent draft replay should not create a new version solely because the current active pointer changed. | Fingerprints cover content, source kind, citations, references, limitations, coverage, and source revisions while version number and previous-version link are stored separately. |
+| AI draft ingest is validation-only | Phase 8 must not generate report text or persist prompts/raw provider bodies. | `ingest_ai_draft()` requires an existing assistance request, stores provider metadata/response hash only, and marks source kind `AI_DRAFT`. |
+| Review and approval are append-only hash chains | Report decisions need audit history and optimistic-lock conflict detection. | `report_review_events` and `report_approval_records` store sequential revisions, previous hashes, and event hashes with update/delete triggers. |
+| Approval requires custody verification | Exporting an approved report should not hide broken custody metadata. | Approval creates or checks a custody snapshot and blocks when verification is not `VERIFIED`. |
+| Export is a contract, not rendering | PDF/HTML rendering dependencies and command execution are outside the engine boundary. | `ReportRendererPort` exists, default capability is `CAPABILITY_UNAVAILABLE`, and only metadata returned through service validation is persisted. |

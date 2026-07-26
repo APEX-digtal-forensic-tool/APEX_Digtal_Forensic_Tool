@@ -11,7 +11,9 @@ from typing import Any
 
 from apex_forensic.config import build_services
 from apex_forensic.domain.enums import (
+    AnalysisContextPurpose,
     AnalysisProfileType,
+    AnalysisScopeType,
     ArtifactParseStatus,
     ArtifactType,
     CaseStatus,
@@ -20,6 +22,7 @@ from apex_forensic.domain.enums import (
     KeywordMatchMode,
     KeywordSetStatus,
     KeywordType,
+    ResourceType,
     SearchDocumentType,
     SearchQueryMode,
     SearchSourceType,
@@ -76,12 +79,22 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _media(args, services)
     if args.command == "candidate":
         return _candidate(args, services)
+    if args.command == "ai":
+        return _ai(args, services)
     if args.command == "search":
         return _search(args, services)
     if args.command == "keyword-set":
         return _keyword_set(args, services)
     if args.command == "timeline":
         return _timeline(args, services)
+    if args.command == "context":
+        return _context(args, services)
+    if args.command == "view":
+        return _view(args, services)
+    if args.command == "report":
+        return _report(args, services)
+    if args.command == "interface":
+        return _interface(args, services)
     raise ValidationError("Unknown command.", target="command")
 
 
@@ -448,6 +461,133 @@ def _candidate(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown candidate command.", target="candidate_command")
 
 
+def _ai(args: Namespace, services: Any) -> Any:
+    if args.ai_command == "request-capabilities":
+        return services.ai.capabilities()
+    if args.ai_command == "request-create":
+        return services.ai.create_request_from_context_snapshot(
+            case_id=args.case_id,
+            context_snapshot_id=args.context_snapshot_id,
+            purpose=args.purpose,
+            requested_operations=args.operation or None,
+            requested_scopes=args.scope or None,
+            scope_context_ids=args.scope_context_id or None,
+            locale=args.locale,
+            timezone=args.timezone,
+            max_keyword_candidates=args.max_keyword_candidates,
+            max_summary_length=args.max_summary_length,
+            ttl_seconds=args.ttl_seconds,
+            correlation_id=args.correlation_id,
+        ).to_schema_dict()
+    if args.ai_command == "request-show":
+        return services.ai.get_request(args.assistance_request_id).to_schema_dict()
+    if args.ai_command == "request-list":
+        return [
+            item.to_schema_dict()
+            for item in services.ai.list_requests_by_case(args.case_id, limit=args.limit)
+        ]
+    if args.ai_command == "request-compare":
+        return services.ai.compare_requests(args.left_request_id, args.right_request_id)
+    if args.ai_command == "keyword-ingest":
+        return services.ai.ingest_keyword_batch(
+            assistance_request_id=args.assistance_request_id,
+            payload=_json_input(args),
+        )
+    if args.ai_command == "keyword-batch-show":
+        return services.ai.get_keyword_batch(args.recommendation_batch_id)
+    if args.ai_command == "keyword-list":
+        return services.ai.list_keyword_recommendations(
+            case_id=args.case_id,
+            recommendation_batch_id=args.recommendation_batch_id,
+            cursor=args.cursor,
+            limit=args.limit,
+        )
+    if args.ai_command == "keyword-show":
+        return services.ai.get_keyword_recommendation(args.recommendation_id).to_schema_dict()
+    if args.ai_command == "keyword-review":
+        return services.ai.review_keyword_recommendation(
+            recommendation_id=args.recommendation_id,
+            action=args.action,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.ai_command == "keyword-correct":
+        return services.ai.review_keyword_recommendation(
+            recommendation_id=args.recommendation_id,
+            action="CORRECT",
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+            corrected_value=args.corrected_value,
+            corrected_reason=args.corrected_reason,
+        ).to_schema_dict()
+    if args.ai_command == "keyword-promotion-preview":
+        return services.ai.preview_keyword_promotion(
+            recommendation_id=args.recommendation_id,
+            keyword_set_id=args.keyword_set_id,
+            regex_confirmed=args.regex_confirmed,
+        )
+    if args.ai_command == "keyword-promote":
+        return services.ai.promote_accepted_keyword(
+            recommendation_id=args.recommendation_id,
+            keyword_set_id=args.keyword_set_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+            regex_confirmed=args.regex_confirmed,
+            confirmation_metadata=_json_arg(args.confirmation_json, "confirmation_json")
+            if args.confirmation_json is not None
+            else None,
+        ).to_schema_dict()
+    if args.ai_command == "summary-ingest":
+        return services.ai.ingest_scope_summary(
+            assistance_request_id=args.assistance_request_id,
+            payload=_json_input(args),
+        ).to_schema_dict()
+    if args.ai_command == "summary-list":
+        if args.scope_summary_id is not None:
+            return services.ai.get_scope_summary(args.scope_summary_id).to_schema_dict()
+        return [
+            item.to_schema_dict()
+            for item in services.ai.list_scope_summaries(
+                case_id=args.case_id,
+                context_snapshot_id=args.context_snapshot_id,
+                scope_context_id=args.scope_context_id,
+                limit=args.limit,
+            )
+        ]
+    if args.ai_command == "summary-show":
+        return services.ai.get_scope_summary(args.scope_summary_id).to_schema_dict()
+    if args.ai_command == "summary-review":
+        return services.ai.review_scope_summary(
+            scope_summary_id=args.scope_summary_id,
+            action=args.action,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.ai_command == "summary-correct":
+        return services.ai.review_scope_summary(
+            scope_summary_id=args.scope_summary_id,
+            action="CORRECT",
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+            corrected_value=args.corrected_value,
+            corrected_reason=args.corrected_reason,
+        ).to_schema_dict()
+    if args.ai_command == "review-history":
+        return [
+            item.to_schema_dict()
+            for item in services.ai.review_history(
+                target_type=args.target_type,
+                target_id=args.target_id,
+            )
+        ]
+    raise ValidationError("Unknown AI command.", target="ai_command")
+
+
 def _custody(args: Namespace, services: Any) -> Any:
     if args.custody_command == "list":
         return [event.to_schema_dict() for event in services.custody.list_events(args.evidence_id)]
@@ -623,6 +763,353 @@ def _timeline(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown timeline command.", target="timeline_command")
 
 
+def _context(args: Namespace, services: Any) -> Any:
+    if args.context_command == "create":
+        return services.contexts.create(
+            session_id=args.session_id,
+            case_id=args.case_id,
+            actor_id=args.actor_id,
+            locale=args.locale,
+            timezone=args.timezone,
+            current_route=args.current_route,
+            current_panel=args.current_panel,
+            active_evidence_id=args.evidence_id,
+            selected_file_node_ids=args.file_node_id,
+            selected_artifact_ids=args.artifact_id,
+            selected_timeline_event_ids=args.timeline_event_id,
+            selected_search_result_ids=args.search_result_id,
+            selected_media_artifact_ids=args.media_artifact_id,
+            selected_browser_artifact_ids=args.browser_artifact_id,
+            selected_candidate_ids=args.candidate_id,
+            active_filters=_json_arg(args.filters_json, "filters_json"),
+            active_sort=_json_arg(args.sort_json, "sort_json"),
+            active_time_range=_json_arg(args.time_range_json, "time_range_json"),
+            active_keyword_set_id=args.keyword_set_id,
+            active_keyword_set_version=args.keyword_set_version,
+            active_search_execution_id=args.search_execution_id,
+            active_timeline_revision=args.timeline_revision,
+            active_context_scope=AnalysisScopeType(args.scope),
+            ui_preferences=_json_arg(args.ui_preferences_json, "ui_preferences_json"),
+            expires_at=args.expires_at,
+        ).to_schema_dict()
+    if args.context_command == "get":
+        return services.contexts.get(args.session_context_id).to_schema_dict()
+    if args.context_command == "update":
+        updates = _context_updates(args)
+        return services.contexts.update(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+            **updates,
+        ).to_schema_dict()
+    if args.context_command == "select":
+        return services.contexts.select_items(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+            resource_type=ResourceType(args.resource_type),
+            resource_ids=args.resource_id,
+            mode=args.mode,
+        ).to_schema_dict()
+    if args.context_command == "filters":
+        return services.contexts.set_filters(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+            filters=_json_arg(args.filters_json, "filters_json"),
+        ).to_schema_dict()
+    if args.context_command == "snapshot":
+        return services.contexts.build_from_session(
+            args.session_context_id,
+            purpose=AnalysisContextPurpose(args.purpose),
+            scopes=args.scope,
+            previous_snapshot_id=args.previous_snapshot_id,
+        ).to_schema_dict()
+    if args.context_command == "snapshot-show":
+        return services.contexts.get_snapshot(args.context_snapshot_id).to_schema_dict()
+    if args.context_command == "compare":
+        if args.left_snapshot_id and args.right_snapshot_id:
+            return services.contexts.compare(args.left_snapshot_id, args.right_snapshot_id)
+        return services.contexts.compare_revisions(
+            args.session_context_id,
+            args.left_revision,
+            args.right_revision,
+        )
+    if args.context_command == "scopes":
+        return [
+            item.to_schema_dict()
+            for item in services.contexts.list_scopes(args.context_snapshot_id)
+        ]
+    if args.context_command == "scope-page":
+        return services.contexts.paginate_scope(
+            args.context_snapshot_id,
+            AnalysisScopeType(args.scope),
+            cursor=args.cursor,
+            limit=args.limit,
+        )
+    if args.context_command == "refresh":
+        if args.context_snapshot_id:
+            return services.contexts.refresh(args.context_snapshot_id).to_schema_dict()
+        return services.contexts.refresh_revision_state(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+        )
+    if args.context_command == "expire":
+        return services.contexts.expire(
+            args.session_context_id,
+            expected_revision=args.expected_revision,
+        ).to_schema_dict()
+    raise ValidationError("Unknown context command.", target="context_command")
+
+
+def _view(args: Namespace, services: Any) -> Any:
+    if args.view_command == "simple":
+        return services.views.simple(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            redaction_policy=args.redaction_policy,
+        ).to_schema_dict()
+    if args.view_command == "detailed":
+        return services.views.detailed(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            redaction_policy=args.redaction_policy,
+        ).to_schema_dict()
+    if args.view_command == "raw":
+        return services.views.raw(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            redaction_policy=args.redaction_policy,
+        ).to_schema_dict()
+    if args.view_command == "raw-read":
+        return services.views.raw_read(
+            case_id=args.case_id,
+            resource_type=ResourceType(args.resource_type),
+            resource_id=args.resource_id,
+            offset=args.offset,
+            length=args.length,
+            correlation_id=args.correlation_id,
+        ).to_schema_dict()
+    if args.view_command == "capabilities":
+        return services.views.capabilities()
+    raise ValidationError("Unknown view command.", target="view_command")
+
+
+def _report(args: Namespace, services: Any) -> Any:
+    if args.report_command == "create":
+        return services.reports.create_report(
+            case_id=args.case_id,
+            title=args.title,
+            created_by=args.created_by,
+            description=args.description,
+            report_type=args.report_type,
+            locale=args.locale,
+            timezone=args.timezone,
+        ).to_schema_dict()
+    if args.report_command == "list":
+        return services.reports.list_reports(
+            case_id=args.case_id,
+            cursor=args.cursor,
+            limit=args.limit,
+        )
+    if args.report_command == "show":
+        return services.reports.get_report(args.report_id).to_schema_dict()
+    if args.report_command == "version-create":
+        payload = _json_input(args)
+        return services.reports.create_version(
+            report_id=args.report_id,
+            source_kind=args.source_kind,
+            created_by=args.created_by,
+            title=_required_json_field(payload, "title"),
+            executive_summary=_required_json_field(payload, "executive_summary"),
+            sections=_required_json_list(payload, "sections"),
+            source_reference_id=payload.get("source_reference_id"),
+            context_snapshot_ids=payload.get("context_snapshot_ids"),
+            evidence_ids=payload.get("evidence_ids"),
+            search_execution_ids=payload.get("search_execution_ids"),
+            timeline_revisions=payload.get("timeline_revisions"),
+            ai_assistance_request_ids=payload.get("ai_assistance_request_ids"),
+            ai_result_ids=payload.get("ai_result_ids"),
+            citations=payload.get("citations"),
+            limitations=payload.get("limitations"),
+            analyzer_versions=payload.get("analyzer_versions"),
+        ).to_schema_dict()
+    if args.report_command == "version-list":
+        return [item.to_schema_dict() for item in services.reports.list_versions(args.report_id)]
+    if args.report_command == "version-show":
+        return services.reports.get_version(args.report_version_id).to_schema_dict()
+    if args.report_command == "version-compare":
+        return services.reports.compare_versions(
+            args.left_report_version_id,
+            args.right_report_version_id,
+        )
+    if args.report_command == "ai-draft-ingest":
+        return services.reports.ingest_ai_draft(
+            payload=_json_input(args),
+            report_id=args.report_id,
+            created_by=args.created_by,
+        ).to_schema_dict()
+    if args.report_command == "archive":
+        return services.reports.archive_report(
+            report_id=args.report_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+        ).to_schema_dict()
+    if args.report_command == "review-submit":
+        return services.reports.submit_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-comment":
+        return services.reports.comment_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            comment=args.comment,
+            section_id=args.section_id,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-request-changes":
+        return services.reports.request_changes(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            requested_changes=args.requested_change,
+            section_id=args.section_id,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-accept-section":
+        return services.reports.accept_section(
+            report_version_id=args.report_version_id,
+            section_id=args.section_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            comment=args.comment,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-reject-section":
+        return services.reports.reject_section(
+            report_version_id=args.report_version_id,
+            section_id=args.section_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            requested_changes=args.requested_change,
+            comment=args.comment,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-complete":
+        return services.reports.complete_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-reopen":
+        return services.reports.reopen_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-history":
+        return [
+            item.to_schema_dict()
+            for item in services.reports.review_history(args.report_version_id)
+        ]
+    if args.report_command == "approve":
+        return services.reports.approve(
+            report_version_id=args.report_version_id,
+            approver_id=args.approver_id,
+            reason=args.reason,
+            custody_snapshot_id=args.custody_snapshot_id,
+            expected_review_revision=args.expected_review_revision,
+            expected_approval_revision=args.expected_approval_revision,
+        ).to_schema_dict()
+    if args.report_command == "reject":
+        return services.reports.reject(
+            report_version_id=args.report_version_id,
+            approver_id=args.approver_id,
+            reason=args.reason,
+            expected_approval_revision=args.expected_approval_revision,
+        ).to_schema_dict()
+    if args.report_command == "revoke-approval":
+        return services.reports.revoke_approval(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_approval_revision=args.expected_approval_revision,
+        ).to_schema_dict()
+    if args.report_command == "approval-show":
+        approval = services.reports.get_approval(args.report_version_id)
+        return None if approval is None else approval.to_schema_dict()
+    if args.report_command == "custody-snapshot-create":
+        return services.reports.create_custody_snapshot(
+            report_version_id=args.report_version_id,
+            captured_by=args.captured_by,
+            evidence_ids=args.evidence_id or None,
+        ).to_schema_dict()
+    if args.report_command == "custody-snapshot-show":
+        return services.reports.get_custody_snapshot(args.custody_snapshot_id).to_schema_dict()
+    if args.report_command == "package-create":
+        return services.reports.create_render_package(
+            report_version_id=args.report_version_id,
+            created_by=args.created_by,
+            for_export=args.for_export,
+            custody_snapshot_id=args.custody_snapshot_id,
+            stale_confirmed=args.stale_confirmed,
+        ).to_schema_dict()
+    if args.report_command == "package-show":
+        return services.reports.get_render_package(args.package_id).to_schema_dict()
+    if args.report_command == "export-prepare":
+        return services.reports.prepare_export(
+            report_version_id=args.report_version_id,
+            format=args.format,
+            filename=args.filename,
+            created_by=args.created_by,
+            redaction_policy=args.redaction_policy,
+            overwrite_policy=args.overwrite_policy,
+            include_citations=not args.no_citations,
+            include_custody=not args.no_custody,
+            include_technical_appendix=not args.no_technical_appendix,
+            stale_confirmed=args.stale_confirmed,
+        ).to_schema_dict()
+    if args.report_command == "export-status":
+        return services.reports.export_status(args.export_manifest_id)
+    if args.report_command == "export-record-result":
+        result = services.reports.record_export_result(
+            export_manifest_id=args.export_manifest_id,
+            payload=_json_input(args),
+        )
+        return result.to_schema_dict()
+    if args.report_command == "export-capabilities":
+        return services.reports.renderer_capabilities().to_schema_dict()
+    raise ValidationError("Unknown report command.", target="report_command")
+
+
+def _interface(args: Namespace, services: Any) -> Any:
+    if args.interface_command == "version":
+        return services.interface.version().to_schema_dict()
+    if args.interface_command == "tools":
+        return [item.to_schema_dict() for item in services.interface.tools()]
+    if args.interface_command == "capability":
+        return services.interface.capability(args.capability)
+    if args.interface_command == "invoke-read":
+        return services.interface.invoke_read(
+            args.operation,
+            _json_arg(args.payload_json, "payload_json"),
+            correlation_id=args.correlation_id,
+        )
+    if args.interface_command == "invoke-mutation":
+        return services.interface.invoke_mutation(
+            args.operation,
+            _json_arg(args.payload_json, "payload_json"),
+            correlation_id=args.correlation_id,
+        )
+    raise ValidationError("Unknown interface command.", target="interface_command")
+
+
 def _hash_record_output(record: Any) -> dict[str, Any]:
     return {
         "hash_id": record.hash_id,
@@ -636,6 +1123,85 @@ def _hash_record_output(record: Any) -> dict[str, Any]:
         "verification_status": record.verification_status,
         "bytes_hashed": record.bytes_hashed,
     }
+
+
+def _json_arg(value: str | None, target: str) -> dict[str, Any]:
+    if value in {None, ""}:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValidationError("Invalid JSON option.", target=target) from error
+    if not isinstance(parsed, dict):
+        raise ValidationError("JSON option must be an object.", target=target)
+    return parsed
+
+
+def _json_input(args: Namespace) -> dict[str, Any]:
+    if getattr(args, "input_json", None) and getattr(args, "input_file", None):
+        raise ValidationError("Use either --input-json or --input-file, not both.", target="input")
+    if getattr(args, "input_file", None) is not None:
+        path = args.input_file
+        if path.stat().st_size > 1024 * 1024:
+            raise ValidationError("Input JSON file exceeds the size limit.", target="input_file")
+        value = path.read_text(encoding="utf-8")
+    else:
+        value = getattr(args, "input_json", None)
+    if not value:
+        raise ValidationError("JSON input is required.", target="input_json")
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValidationError("Invalid JSON input.", target="input_json") from error
+    if not isinstance(parsed, dict):
+        raise ValidationError("JSON input must be an object.", target="input_json")
+    return parsed
+
+
+def _required_json_field(payload: dict[str, Any], field: str) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or value == "":
+        raise ValidationError("JSON input field must be a non-empty string.", target=field)
+    return value
+
+
+def _required_json_list(payload: dict[str, Any], field: str) -> list[Any]:
+    value = payload.get(field)
+    if not isinstance(value, list):
+        raise ValidationError("JSON input field must be a list.", target=field)
+    return value
+
+
+def _context_updates(args: Namespace) -> dict[str, Any]:
+    updates: dict[str, Any] = {}
+    for attr in (
+        "session_id",
+        "actor_id",
+        "locale",
+        "timezone",
+        "current_route",
+        "current_panel",
+        "active_evidence_id",
+        "active_keyword_set_id",
+        "active_keyword_set_version",
+        "active_search_execution_id",
+        "active_timeline_revision",
+        "expires_at",
+    ):
+        value = getattr(args, attr, None)
+        if value is not None:
+            updates[attr] = value
+    if args.scope is not None:
+        updates["active_context_scope"] = args.scope
+    if args.filters_json is not None:
+        updates["active_filters"] = _json_arg(args.filters_json, "filters_json")
+    if args.sort_json is not None:
+        updates["active_sort"] = _json_arg(args.sort_json, "sort_json")
+    if args.time_range_json is not None:
+        updates["active_time_range"] = _json_arg(args.time_range_json, "time_range_json")
+    if args.ui_preferences_json is not None:
+        updates["ui_preferences"] = _json_arg(args.ui_preferences_json, "ui_preferences_json")
+    return updates
 
 
 def _parse_algorithm(value: str) -> HashAlgorithm:

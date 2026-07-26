@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-section.schema.json",
+  "title": "APEX Report Section",
+  "$ref": "#/$defs/reportSection",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+    "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "propertyNames": {
+        "not": {
+          "pattern": "(?:[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Rr][Oo][Mm][Pp][Tt]|[Cc][Hh][Aa][Ii][Nn][-_]?[Oo][Ff][-_]?[Tt][Hh][Oo][Uu][Gg][Hh][Tt]|[Rr][Aa][Ww][-_]?[Rr][Ee][Ss][Pp][Oo][Nn][Ss][Ee]|[Rr][Aa][Ww][-_]?[Bb][Oo][Dd][Yy]|[Bb][Aa][Ss][Ee]64|[Aa][Tt][Tt][Aa][Cc][Hh][Mm][Ee][Nn][Tt][-_]?[Bb][Yy][Tt][Ee][Ss])"
+        }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "developer_message": { "type": ["string", "null"], "maxLength": 2000 },
+        "details": { "$ref": "#/$defs/metadata" }
+      }
+    },
+    "citationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "source_kind", "source_id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nullableId" },
+        "label": { "type": ["string", "null"], "maxLength": 100 },
+        "case_id": { "$ref": "#/$defs/id" },
+        "evidence_id": { "$ref": "#/$defs/nullableId" },
+        "source_kind": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "source_id": { "$ref": "#/$defs/id" },
+        "file_id": { "$ref": "#/$defs/nullableId" },
+        "artifact_id": { "$ref": "#/$defs/nullableId" },
+        "timeline_event_id": { "$ref": "#/$defs/nullableId" },
+        "search_result_id": { "$ref": "#/$defs/nullableId" },
+        "source_path": { "type": ["string", "null"], "maxLength": 4096 },
+        "source_offset": { "type": ["integer", "null"], "minimum": 0 },
+        "source_reference": { "type": ["string", "null"], "maxLength": 4096 },
+        "excerpt": { "type": ["string", "null"], "maxLength": 4000 },
+        "content_sha256": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        },
+        "created_at": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+        },
+        "source_length": { "type": ["integer", "null"], "minimum": 0 },
+        "encoding": { "type": ["string", "null"], "maxLength": 80 },
+        "raw_locator": {
+          "oneOf": [{ "$ref": "#/$defs/metadata" }, { "type": "null" }]
+        }
+      }
+    },
+    "reportSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_id",
+        "section_type",
+        "title",
+        "order",
+        "content_kind",
+        "content",
+        "structured_data",
+        "source_kind",
+        "source_resource_ids",
+        "context_snapshot_ids",
+        "citations",
+        "is_partial",
+        "stale_reasons",
+        "coverage",
+        "warnings",
+        "section_fingerprint"
+      ],
+      "properties": {
+        "section_id": { "$ref": "#/$defs/id" },
+        "section_type": {
+          "enum": [
+            "CASE_OVERVIEW",
+            "ANALYSIS_PURPOSE",
+            "EVIDENCE",
+            "HASH_INTEGRITY",
+            "CHAIN_OF_CUSTODY",
+            "ANALYSIS_ENVIRONMENT",
+            "ANALYSIS_SCOPE",
+            "PARTIAL_STALE_WARNING",
+            "TIMEZONE",
+            "KEY_FINDINGS",
+            "FILE_SYSTEM",
+            "WINDOWS_ARTIFACT",
+            "BROWSER",
+            "MEDIA",
+            "TIMELINE",
+            "KEYWORD_SEARCH",
+            "AI_ASSISTANCE",
+            "MACHINE_CANDIDATE",
+            "LIMITATIONS",
+            "CONCLUSION",
+            "RECOMMENDATION",
+            "TECHNICAL_APPENDIX",
+            "OTHER"
+          ]
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "order": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "content_kind": {
+          "enum": [
+            "PLAIN_TEXT",
+            "MARKDOWN_SUBSET",
+            "STRUCTURED_DATA",
+            "REFERENCE_LIST",
+            "TABLE_DATA",
+            "OTHER"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 20000,
+          "not": { "pattern": "(?:<\\s*(?:[Ss][Cc][Rr][Ii][Pp][Tt]|[Ii][Ff][Rr][Aa][Mm][Ee]|[Oo][Bb][Jj][Ee][Cc][Tt]|[Ee][Mm][Bb][Ee][Dd]|[Ii][Mm][Gg]|[Ss][Vv][Gg]|[Hh][Tt][Mm][Ll])\\b|[Dd][Aa][Tt][Aa]\\s*:[^;]+;\\s*[Bb][Aa][Ss][Ee]64\\s*,)" }
+        },
+        "structured_data": { "$ref": "#/$defs/metadata" },
+        "source_kind": {
+          "enum": [
+            "ANALYST_DRAFT",
+            "AI_DRAFT",
+            "IMPORTED_DRAFT",
+            "SYSTEM_ASSEMBLED_DATA",
+            "OTHER"
+          ]
+        },
+        "source_resource_ids": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "context_snapshot_ids": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "citations": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/citationRef" }
+        },
+        "is_partial": { "type": "boolean" },
+        "stale_reasons": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "coverage": { "$ref": "#/$defs/metadata" },
+        "warnings": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "section_fingerprint": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

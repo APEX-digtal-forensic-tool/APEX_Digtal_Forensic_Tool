@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-keyword-recommendation-batch.schema.json",
+  "title": "APEX AI Keyword Recommendation Batch",
+  "$ref": "#/$defs/aiKeywordRecommendationBatch",
+  "$defs": {
+    "state": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "aiKeywordRecommendationBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendation_batch_id",
+        "assistance_request_id",
+        "case_id",
+        "context_snapshot_id",
+        "provider_id",
+        "provider_version",
+        "model_id",
+        "external_request_id",
+        "generation_started_at",
+        "generation_completed_at",
+        "result_hash",
+        "recommendation_count",
+        "partial_state",
+        "stale_state",
+        "warnings",
+        "created_at",
+        "batch_version"
+      ],
+      "properties": {
+        "recommendation_batch_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "assistance_request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "context_snapshot_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "provider_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "provider_version": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "model_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "external_request_id": { "type": ["string", "null"], "minLength": 1 },
+        "generation_started_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "generation_completed_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "result_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+        "recommendation_count": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "partial_state": { "$ref": "#/$defs/state" },
+        "stale_state": { "$ref": "#/$defs/state" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "batch_version": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

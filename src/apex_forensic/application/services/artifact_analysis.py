@@ -7,6 +7,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import stat
 import time
 import unicodedata
 from collections.abc import Callable, Sequence
@@ -1010,6 +1011,11 @@ class ArtifactAnalysisService:
 
     def _path_for_node(self, evidence: Evidence, node: Any) -> Path:
         root = evidence.source_path.resolve(strict=True)
+        if getattr(node, "is_link", False):
+            raise ValidationError(
+                "Artifact source links are not followed by policy.",
+                target="source_file_node_id",
+            )
         if root.is_dir():
             relative_path = self._clean_relative_path(node.original_relative_path)
             candidate = (
@@ -1022,9 +1028,25 @@ class ArtifactAnalysisService:
                     target="source_file_node_id",
                 )
             candidate = root
-        candidate_absolute = candidate.absolute()
         try:
-            common = os.path.commonpath([str(root), str(candidate_absolute)])
+            stat_result = candidate.stat(follow_symlinks=False)
+            if candidate.is_symlink() or bool(
+                getattr(stat_result, "st_file_attributes", 0)
+                & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+            ):
+                raise ValidationError(
+                    "Artifact source links are not followed by policy.",
+                    target="source_file_node_id",
+                )
+            candidate_resolved = candidate.resolve(strict=True)
+        except OSError as error:
+            raise ValidationError(
+                "Artifact source changed before analysis.",
+                target="source_file_node_id",
+                details={"path": str(candidate), "error": str(error)},
+            ) from error
+        try:
+            common = os.path.commonpath([str(root), str(candidate_resolved)])
         except ValueError as error:
             raise ValidationError(
                 "Artifact source escapes evidence root.", target="source_file_node_id"
@@ -1033,7 +1055,7 @@ class ArtifactAnalysisService:
             raise ValidationError(
                 "Artifact source escapes evidence root.", target="source_file_node_id"
             )
-        return candidate
+        return candidate_resolved
 
     def _options(
         self,

@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/gui-session-context.schema.json",
+  "title": "APEX GUI Session Context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_context_id",
+    "session_id",
+    "case_id",
+    "actor_id",
+    "locale",
+    "timezone",
+    "current_route",
+    "current_panel",
+    "active_evidence_id",
+    "selected_file_node_ids",
+    "selected_artifact_ids",
+    "selected_timeline_event_ids",
+    "selected_search_result_ids",
+    "selected_media_artifact_ids",
+    "selected_browser_artifact_ids",
+    "selected_candidate_ids",
+    "active_filters",
+    "active_sort",
+    "active_time_range",
+    "active_keyword_set_id",
+    "active_keyword_set_version",
+    "active_search_execution_id",
+    "active_timeline_revision",
+    "active_context_scope",
+    "ui_preferences",
+    "context_revision",
+    "source_revision_fingerprint",
+    "is_partial",
+    "stale_reasons",
+    "created_at",
+    "updated_at",
+    "expires_at"
+  ],
+  "properties": {
+    "session_context_id": {
+      "$ref": "#/$defs/id"
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "case_id": {
+      "$ref": "#/$defs/id"
+    },
+    "actor_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "locale": {
+      "$ref": "common.schema.json#/$defs/locale"
+    },
+    "timezone": {
+      "$ref": "common.schema.json#/$defs/timezone"
+    },
+    "current_route": {
+      "enum": [
+        "CASE_OVERVIEW",
+        "EVIDENCE",
+        "FILE_SYSTEM",
+        "ARTIFACTS",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "SEARCH",
+        "TIMELINE",
+        "CANDIDATES",
+        "CHAIN_OF_CUSTODY",
+        "REPORT",
+        "SETTINGS",
+        "UNKNOWN"
+      ]
+    },
+    "current_panel": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "active_evidence_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "selected_file_node_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "selected_artifact_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "selected_timeline_event_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "selected_search_result_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "selected_media_artifact_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "selected_browser_artifact_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "selected_candidate_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "active_filters": {
+      "$ref": "#/$defs/metadata"
+    },
+    "active_sort": {
+      "$ref": "#/$defs/metadata"
+    },
+    "active_time_range": {
+      "$ref": "#/$defs/metadata"
+    },
+    "active_keyword_set_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "active_keyword_set_version": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "active_search_execution_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "active_timeline_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "active_context_scope": {
+      "enum": [
+        "case",
+        "evidence",
+        "filesystem",
+        "registry",
+        "eventlog",
+        "prefetch",
+        "browser",
+        "media",
+        "timeline",
+        "keyword_search",
+        "machine_candidate",
+        "chain_of_custody",
+        "report",
+        "selection"
+      ]
+    },
+    "ui_preferences": {
+      "$ref": "#/$defs/metadata"
+    },
+    "context_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source_revision_fingerprint": {
+      "type": "string"
+    },
+    "is_partial": {
+      "type": "boolean"
+    },
+    "stale_reasons": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/timestampOrNull"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "warningArray": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/warning"
+      }
+    },
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    }
+  }
+}

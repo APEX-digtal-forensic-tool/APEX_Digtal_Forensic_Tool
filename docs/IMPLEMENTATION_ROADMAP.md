@@ -358,3 +358,21 @@ Still deferred to later phases: arbitrary file body FTS, Office/PDF extraction, 
 artifact parsers, deleted/slack/unallocated search, disk image internal parsers, YARA, AI keyword
 recommendation, LLM/agent loops, GUI/web/MCP server, report rendering, broad timezone auto-confirmation,
 and benchmark performance claims.
+
+## Phase 6 Implementation Status
+
+Phase 6 is implemented for the Python/SQLite engine: revisioned live context, immutable analysis snapshots, scope-specific context, stale/partial source tracking, Simple/Detailed/Raw projections, bounded read-only raw range access, public engine interface metadata, CLI coverage, JSON schemas, and unit/integration tests are present.
+
+The deferred boundary is unchanged: actual MCP server registration, GUI transport, LLM provider calls, prompts, agent loops, and runtime AI generation remain outside Phase 6 and belong to adapter or later integration work.
+
+## Phase 7 Implementation Status
+
+Phase 7 is implemented as an engine-side AI Assistance contract. Completed scope includes snapshot-based assistance request creation, deterministic fingerprints, TTL and current-revision checks, external keyword recommendation and scope-summary ingestion, citation and scope validation, partial/stale/coverage warning propagation, append-only human verification, reviewed keyword promotion into draft keyword-set versions, CLI coverage, public interface tool descriptors, JSON schemas, SQLite migration, and unit/integration tests.
+
+The implemented boundary is intentionally non-generative. The default provider returns `CAPABILITY_UNAVAILABLE`, and the core package still has no MCP server, LLM SDK, prompt template, API-key handling, chain-of-thought storage, runtime provider call, token accounting, automatic keyword search, report drafting, or fact promotion from AI output.
+
+## Phase 8 Implementation Status
+
+Phase 8 is implemented as an engine-side Report Review, Approval, Custody Snapshot, and Export Contract. Completed scope includes report aggregate headers, immutable versions, deterministic section/content/package/export fingerprints, analyst draft ingest, external AI draft ingest, citation/context/evidence/search/timeline/AI reference validation, partial/stale/coverage/limitations propagation, append-only review and approval hash chains, section review state, approval bound to content fingerprint, custody snapshot verification metadata, render packages, export manifests, rendered artifact metadata validation, export audit events, public interface descriptors, CLI coverage, SQLite migration/triggers, JSON schemas, and unit/integration tests.
+
+The boundary remains non-rendering and non-generative. The engine does not create AI report prose, run LLMs, store prompts, register MCP tools, provide GUI preview, render HTML/PDF, call renderer networks, execute renderer shells, or accept arbitrary output paths. Runtime renderer support is represented only by `ReportRendererPort`; the default implementation reports `CAPABILITY_UNAVAILABLE`, and fake renderers are test-only.

@@ -310,6 +310,148 @@ def build_parser() -> argparse.ArgumentParser:
     candidate_capabilities.add_argument("--type")
     candidate_capabilities.add_argument("--json", action="store_true")
 
+    ai_parser = subcommands.add_parser("ai", help="AI assistance contract commands")
+    ai_commands = ai_parser.add_subparsers(dest="ai_command", required=True)
+    ai_request_create = ai_commands.add_parser("request-create")
+    ai_request_create.add_argument("--case-id", required=True)
+    ai_request_create.add_argument("--context-snapshot-id", required=True)
+    ai_request_create.add_argument(
+        "--purpose",
+        default="INVESTIGATION_ASSISTANCE",
+        choices=[
+            "KEYWORD_RECOMMENDATION",
+            "SCOPE_SUMMARY",
+            "REPORT_INPUT",
+            "INVESTIGATION_ASSISTANCE",
+            "OTHER",
+        ],
+    )
+    ai_request_create.add_argument("--operation", action="append", default=[])
+    ai_request_create.add_argument("--scope", action="append", default=[])
+    ai_request_create.add_argument("--scope-context-id", action="append", default=[])
+    ai_request_create.add_argument("--locale")
+    ai_request_create.add_argument("--timezone")
+    ai_request_create.add_argument("--max-keyword-candidates", type=int, default=100)
+    ai_request_create.add_argument("--max-summary-length", type=int, default=4000)
+    ai_request_create.add_argument("--ttl-seconds", type=int, default=3600)
+    ai_request_create.add_argument("--correlation-id")
+    ai_request_create.add_argument("--json", action="store_true")
+
+    ai_request_show = ai_commands.add_parser("request-show")
+    ai_request_show.add_argument("--assistance-request-id", required=True)
+    ai_request_show.add_argument("--json", action="store_true")
+
+    ai_request_list = ai_commands.add_parser("request-list")
+    ai_request_list.add_argument("--case-id", required=True)
+    ai_request_list.add_argument("--limit", type=int, default=100)
+    ai_request_list.add_argument("--json", action="store_true")
+
+    ai_request_compare = ai_commands.add_parser("request-compare")
+    ai_request_compare.add_argument("--left-request-id", required=True)
+    ai_request_compare.add_argument("--right-request-id", required=True)
+    ai_request_compare.add_argument("--json", action="store_true")
+
+    ai_request_capabilities = ai_commands.add_parser("request-capabilities")
+    ai_request_capabilities.add_argument("--json", action="store_true")
+
+    ai_keyword_ingest = ai_commands.add_parser("keyword-ingest")
+    ai_keyword_ingest.add_argument("--assistance-request-id", required=True)
+    ai_keyword_ingest.add_argument("--input-json")
+    ai_keyword_ingest.add_argument("--input-file", type=Path)
+    ai_keyword_ingest.add_argument("--json", action="store_true")
+
+    ai_keyword_batch_show = ai_commands.add_parser("keyword-batch-show")
+    ai_keyword_batch_show.add_argument("--recommendation-batch-id", required=True)
+    ai_keyword_batch_show.add_argument("--json", action="store_true")
+
+    ai_keyword_list = ai_commands.add_parser("keyword-list")
+    ai_keyword_list.add_argument("--case-id", required=True)
+    ai_keyword_list.add_argument("--recommendation-batch-id")
+    ai_keyword_list.add_argument("--cursor")
+    ai_keyword_list.add_argument("--limit", type=int, default=100)
+    ai_keyword_list.add_argument("--json", action="store_true")
+
+    ai_keyword_show = ai_commands.add_parser("keyword-show")
+    ai_keyword_show.add_argument("--recommendation-id", required=True)
+    ai_keyword_show.add_argument("--json", action="store_true")
+
+    ai_keyword_review = ai_commands.add_parser("keyword-review")
+    ai_keyword_review.add_argument("--recommendation-id", required=True)
+    ai_keyword_review.add_argument(
+        "--action", required=True, choices=["ACCEPT", "REJECT", "COMMENT"]
+    )
+    ai_keyword_review.add_argument("--actor-id", required=True)
+    ai_keyword_review.add_argument("--reason", required=True)
+    ai_keyword_review.add_argument("--expected-review-revision", type=int)
+    ai_keyword_review.add_argument("--json", action="store_true")
+
+    ai_keyword_correct = ai_commands.add_parser("keyword-correct")
+    ai_keyword_correct.add_argument("--recommendation-id", required=True)
+    ai_keyword_correct.add_argument("--actor-id", required=True)
+    ai_keyword_correct.add_argument("--reason", required=True)
+    ai_keyword_correct.add_argument("--corrected-value", required=True)
+    ai_keyword_correct.add_argument("--corrected-reason")
+    ai_keyword_correct.add_argument("--expected-review-revision", type=int)
+    ai_keyword_correct.add_argument("--json", action="store_true")
+
+    ai_keyword_promotion_preview = ai_commands.add_parser("keyword-promotion-preview")
+    ai_keyword_promotion_preview.add_argument("--recommendation-id", required=True)
+    ai_keyword_promotion_preview.add_argument("--keyword-set-id", required=True)
+    ai_keyword_promotion_preview.add_argument("--regex-confirmed", action="store_true")
+    ai_keyword_promotion_preview.add_argument("--json", action="store_true")
+
+    ai_keyword_promote = ai_commands.add_parser("keyword-promote")
+    ai_keyword_promote.add_argument("--recommendation-id", required=True)
+    ai_keyword_promote.add_argument("--keyword-set-id", required=True)
+    ai_keyword_promote.add_argument("--actor-id", required=True)
+    ai_keyword_promote.add_argument("--reason", required=True)
+    ai_keyword_promote.add_argument("--expected-review-revision", type=int)
+    ai_keyword_promote.add_argument("--regex-confirmed", action="store_true")
+    ai_keyword_promote.add_argument("--confirmation-json")
+    ai_keyword_promote.add_argument("--json", action="store_true")
+
+    ai_summary_ingest = ai_commands.add_parser("summary-ingest")
+    ai_summary_ingest.add_argument("--assistance-request-id", required=True)
+    ai_summary_ingest.add_argument("--input-json")
+    ai_summary_ingest.add_argument("--input-file", type=Path)
+    ai_summary_ingest.add_argument("--json", action="store_true")
+
+    ai_summary_list = ai_commands.add_parser("summary-list")
+    ai_summary_list.add_argument("--case-id", required=True)
+    ai_summary_list.add_argument("--context-snapshot-id")
+    ai_summary_list.add_argument("--scope-summary-id")
+    ai_summary_list.add_argument("--scope-context-id")
+    ai_summary_list.add_argument("--limit", type=int, default=100)
+    ai_summary_list.add_argument("--json", action="store_true")
+
+    ai_summary_show = ai_commands.add_parser("summary-show")
+    ai_summary_show.add_argument("--scope-summary-id", required=True)
+    ai_summary_show.add_argument("--json", action="store_true")
+
+    ai_summary_review = ai_commands.add_parser("summary-review")
+    ai_summary_review.add_argument("--scope-summary-id", required=True)
+    ai_summary_review.add_argument(
+        "--action", required=True, choices=["ACCEPT", "REJECT", "COMMENT"]
+    )
+    ai_summary_review.add_argument("--actor-id", required=True)
+    ai_summary_review.add_argument("--reason", required=True)
+    ai_summary_review.add_argument("--expected-review-revision", type=int)
+    ai_summary_review.add_argument("--json", action="store_true")
+
+    ai_summary_correct = ai_commands.add_parser("summary-correct")
+    ai_summary_correct.add_argument("--scope-summary-id", required=True)
+    ai_summary_correct.add_argument("--actor-id", required=True)
+    ai_summary_correct.add_argument("--reason", required=True)
+    ai_summary_correct.add_argument("--corrected-value", required=True)
+    ai_summary_correct.add_argument("--corrected-reason")
+    ai_summary_correct.add_argument("--expected-review-revision", type=int)
+    ai_summary_correct.add_argument("--json", action="store_true")
+
+    ai_review_history = ai_commands.add_parser("review-history")
+    ai_review_history.add_argument("--target-type", required=True)
+    ai_review_history.add_argument("--target-id", required=True)
+    ai_review_history.add_argument("--json", action="store_true")
+
     search_parser = subcommands.add_parser("search", help="Search index and query commands")
     search_commands = search_parser.add_subparsers(dest="search_command", required=True)
     search_index = search_commands.add_parser("index", help="Build metadata/artifact search index")
@@ -476,6 +618,351 @@ def build_parser() -> argparse.ArgumentParser:
     timeline_show.add_argument("--timeline-event-id", required=True)
     timeline_show.add_argument("--json", action="store_true")
 
+    context_parser = subcommands.add_parser("context", help="GUI session context commands")
+    context_commands = context_parser.add_subparsers(dest="context_command", required=True)
+    context_create = context_commands.add_parser("create")
+    context_create.add_argument("--case-id", required=True)
+    context_create.add_argument("--session-id", required=True)
+    context_create.add_argument("--actor-id")
+    context_create.add_argument("--locale", default="ko-KR")
+    context_create.add_argument("--timezone", default="Asia/Seoul")
+    context_create.add_argument("--current-route", default="CASE_OVERVIEW", choices=_gui_routes())
+    context_create.add_argument("--current-panel")
+    context_create.add_argument("--evidence-id")
+    _add_context_selection_args(context_create)
+    context_create.add_argument("--filters-json")
+    context_create.add_argument("--sort-json")
+    context_create.add_argument("--time-range-json")
+    context_create.add_argument("--keyword-set-id")
+    context_create.add_argument("--keyword-set-version", type=int)
+    context_create.add_argument("--search-execution-id")
+    context_create.add_argument("--timeline-revision", type=int)
+    context_create.add_argument("--scope", default="case", choices=_analysis_scopes())
+    context_create.add_argument("--ui-preferences-json")
+    context_create.add_argument("--expires-at")
+    context_create.add_argument("--json", action="store_true")
+
+    context_get = context_commands.add_parser("get")
+    context_get.add_argument("--session-context-id", required=True)
+    context_get.add_argument("--json", action="store_true")
+
+    context_update = context_commands.add_parser("update")
+    context_update.add_argument("--session-context-id", required=True)
+    context_update.add_argument("--expected-revision", type=int, required=True)
+    context_update.add_argument("--session-id")
+    context_update.add_argument("--actor-id")
+    context_update.add_argument("--locale")
+    context_update.add_argument("--timezone")
+    context_update.add_argument("--current-route", choices=_gui_routes())
+    context_update.add_argument("--current-panel")
+    context_update.add_argument("--active-evidence-id")
+    context_update.add_argument("--filters-json")
+    context_update.add_argument("--sort-json")
+    context_update.add_argument("--time-range-json")
+    context_update.add_argument("--keyword-set-id", dest="active_keyword_set_id")
+    context_update.add_argument(
+        "--keyword-set-version",
+        dest="active_keyword_set_version",
+        type=int,
+    )
+    context_update.add_argument("--search-execution-id", dest="active_search_execution_id")
+    context_update.add_argument("--timeline-revision", dest="active_timeline_revision", type=int)
+    context_update.add_argument("--scope", choices=_analysis_scopes())
+    context_update.add_argument("--ui-preferences-json")
+    context_update.add_argument("--expires-at")
+    context_update.add_argument("--json", action="store_true")
+
+    context_select = context_commands.add_parser("select")
+    context_select.add_argument("--session-context-id", required=True)
+    context_select.add_argument("--expected-revision", type=int, required=True)
+    context_select.add_argument("--resource-type", required=True, choices=_resource_types())
+    context_select.add_argument("--resource-id", action="append", default=[])
+    context_select.add_argument(
+        "--mode",
+        default="replace",
+        choices=["replace", "append", "remove"],
+    )
+    context_select.add_argument("--json", action="store_true")
+
+    context_filters = context_commands.add_parser("filters")
+    context_filters.add_argument("--session-context-id", required=True)
+    context_filters.add_argument("--expected-revision", type=int, required=True)
+    context_filters.add_argument("--filters-json", required=True)
+    context_filters.add_argument("--json", action="store_true")
+
+    context_snapshot = context_commands.add_parser("snapshot")
+    context_snapshot.add_argument("--session-context-id", required=True)
+    context_snapshot.add_argument("--purpose", default="MCP_REQUEST", choices=_context_purposes())
+    context_snapshot.add_argument("--scope", action="append", default=[])
+    context_snapshot.add_argument("--previous-snapshot-id")
+    context_snapshot.add_argument("--json", action="store_true")
+
+    context_snapshot_show = context_commands.add_parser("snapshot-show")
+    context_snapshot_show.add_argument("--context-snapshot-id", required=True)
+    context_snapshot_show.add_argument("--json", action="store_true")
+
+    context_compare = context_commands.add_parser("compare")
+    context_compare.add_argument("--session-context-id")
+    context_compare.add_argument("--left-revision", type=int)
+    context_compare.add_argument("--right-revision", type=int)
+    context_compare.add_argument("--left-snapshot-id")
+    context_compare.add_argument("--right-snapshot-id")
+    context_compare.add_argument("--json", action="store_true")
+
+    context_scopes = context_commands.add_parser("scopes")
+    context_scopes.add_argument("--context-snapshot-id", required=True)
+    context_scopes.add_argument("--json", action="store_true")
+
+    context_scope_page = context_commands.add_parser("scope-page")
+    context_scope_page.add_argument("--context-snapshot-id", required=True)
+    context_scope_page.add_argument("--scope", required=True, choices=_analysis_scopes())
+    context_scope_page.add_argument("--cursor")
+    context_scope_page.add_argument("--limit", type=int, default=100)
+    context_scope_page.add_argument("--json", action="store_true")
+
+    context_refresh = context_commands.add_parser("refresh")
+    context_refresh.add_argument("--session-context-id")
+    context_refresh.add_argument("--context-snapshot-id")
+    context_refresh.add_argument("--expected-revision", type=int)
+    context_refresh.add_argument("--json", action="store_true")
+
+    context_expire = context_commands.add_parser("expire")
+    context_expire.add_argument("--session-context-id", required=True)
+    context_expire.add_argument("--expected-revision", type=int)
+    context_expire.add_argument("--json", action="store_true")
+
+    view_parser = subcommands.add_parser("view", help="Simple, detailed, and raw view commands")
+    view_commands = view_parser.add_subparsers(dest="view_command", required=True)
+    for command_name in ("simple", "detailed", "raw"):
+        view_command = view_commands.add_parser(command_name)
+        _add_view_resource_args(view_command)
+    view_raw_read = view_commands.add_parser("raw-read")
+    _add_view_resource_args(view_raw_read)
+    view_raw_read.add_argument("--offset", type=int, default=0)
+    view_raw_read.add_argument("--length", type=int)
+    view_raw_read.add_argument("--correlation-id")
+    view_capabilities = view_commands.add_parser("capabilities")
+    view_capabilities.add_argument("--json", action="store_true")
+
+    report_parser = subcommands.add_parser("report", help="Report contract commands")
+    report_commands = report_parser.add_subparsers(dest="report_command", required=True)
+    report_create = report_commands.add_parser("create")
+    report_create.add_argument("--case-id", required=True)
+    report_create.add_argument("--title", required=True)
+    report_create.add_argument("--created-by", required=True)
+    report_create.add_argument("--description")
+    report_create.add_argument(
+        "--report-type",
+        default="INVESTIGATION",
+        choices=[
+            "INVESTIGATION",
+            "TRIAGE",
+            "INCIDENT_RESPONSE",
+            "EVIDENCE_SUMMARY",
+            "CHAIN_OF_CUSTODY",
+            "TECHNICAL_APPENDIX",
+            "OTHER",
+        ],
+    )
+    report_create.add_argument("--locale")
+    report_create.add_argument("--timezone")
+    report_create.add_argument("--correlation-id")
+    report_create.add_argument("--json", action="store_true")
+
+    report_list = report_commands.add_parser("list")
+    report_list.add_argument("--case-id", required=True)
+    report_list.add_argument("--cursor")
+    report_list.add_argument("--limit", type=int, default=100)
+    report_list.add_argument("--correlation-id")
+    report_list.add_argument("--json", action="store_true")
+
+    report_show = report_commands.add_parser("show")
+    report_show.add_argument("--report-id", required=True)
+    report_show.add_argument("--correlation-id")
+    report_show.add_argument("--json", action="store_true")
+
+    report_version_create = report_commands.add_parser("version-create")
+    report_version_create.add_argument("--report-id", required=True)
+    report_version_create.add_argument("--created-by", required=True)
+    report_version_create.add_argument("--source-kind", default="ANALYST_DRAFT")
+    report_version_create.add_argument("--input-json")
+    report_version_create.add_argument("--input-file", type=Path)
+    report_version_create.add_argument("--correlation-id")
+    report_version_create.add_argument("--json", action="store_true")
+
+    report_version_list = report_commands.add_parser("version-list")
+    report_version_list.add_argument("--report-id", required=True)
+    report_version_list.add_argument("--correlation-id")
+    report_version_list.add_argument("--json", action="store_true")
+
+    report_version_show = report_commands.add_parser("version-show")
+    report_version_show.add_argument("--report-version-id", required=True)
+    report_version_show.add_argument("--correlation-id")
+    report_version_show.add_argument("--json", action="store_true")
+
+    report_version_compare = report_commands.add_parser("version-compare")
+    report_version_compare.add_argument("--left-report-version-id", required=True)
+    report_version_compare.add_argument("--right-report-version-id", required=True)
+    report_version_compare.add_argument("--correlation-id")
+    report_version_compare.add_argument("--json", action="store_true")
+
+    report_ai_draft = report_commands.add_parser("ai-draft-ingest")
+    report_ai_draft.add_argument("--report-id")
+    report_ai_draft.add_argument("--created-by", default="external-ai-layer")
+    report_ai_draft.add_argument("--input-json")
+    report_ai_draft.add_argument("--input-file", type=Path)
+    report_ai_draft.add_argument("--correlation-id")
+    report_ai_draft.add_argument("--json", action="store_true")
+
+    report_archive = report_commands.add_parser("archive")
+    report_archive.add_argument("--report-id", required=True)
+    report_archive.add_argument("--actor-id", required=True)
+    report_archive.add_argument("--reason", required=True)
+    report_archive.add_argument("--correlation-id")
+    report_archive.add_argument("--json", action="store_true")
+
+    report_review_submit = report_commands.add_parser("review-submit")
+    _add_report_review_args(report_review_submit)
+
+    report_review_comment = report_commands.add_parser("review-comment")
+    _add_report_review_args(report_review_comment)
+    report_review_comment.add_argument("--comment", required=True)
+    report_review_comment.add_argument("--section-id")
+
+    report_review_changes = report_commands.add_parser("review-request-changes")
+    _add_report_review_args(report_review_changes)
+    report_review_changes.add_argument("--requested-change", action="append", default=[])
+    report_review_changes.add_argument("--section-id")
+
+    report_review_accept = report_commands.add_parser("review-accept-section")
+    _add_report_review_args(report_review_accept)
+    report_review_accept.add_argument("--section-id", required=True)
+    report_review_accept.add_argument("--comment")
+
+    report_review_reject = report_commands.add_parser("review-reject-section")
+    _add_report_review_args(report_review_reject)
+    report_review_reject.add_argument("--section-id", required=True)
+    report_review_reject.add_argument("--requested-change", action="append", default=[])
+    report_review_reject.add_argument("--comment")
+
+    report_review_complete = report_commands.add_parser("review-complete")
+    _add_report_review_args(report_review_complete)
+
+    report_review_reopen = report_commands.add_parser("review-reopen")
+    _add_report_review_args(report_review_reopen)
+
+    report_review_history = report_commands.add_parser("review-history")
+    report_review_history.add_argument("--report-version-id", required=True)
+    report_review_history.add_argument("--correlation-id")
+    report_review_history.add_argument("--json", action="store_true")
+
+    report_approve = report_commands.add_parser("approve")
+    report_approve.add_argument("--report-version-id", required=True)
+    report_approve.add_argument("--approver-id", required=True)
+    report_approve.add_argument("--reason", required=True)
+    report_approve.add_argument("--custody-snapshot-id")
+    report_approve.add_argument("--expected-review-revision", type=int)
+    report_approve.add_argument("--expected-approval-revision", type=int)
+    report_approve.add_argument("--correlation-id")
+    report_approve.add_argument("--json", action="store_true")
+
+    report_reject = report_commands.add_parser("reject")
+    report_reject.add_argument("--report-version-id", required=True)
+    report_reject.add_argument("--approver-id", required=True)
+    report_reject.add_argument("--reason", required=True)
+    report_reject.add_argument("--expected-approval-revision", type=int)
+    report_reject.add_argument("--correlation-id")
+    report_reject.add_argument("--json", action="store_true")
+
+    report_revoke = report_commands.add_parser("revoke-approval")
+    report_revoke.add_argument("--report-version-id", required=True)
+    report_revoke.add_argument("--actor-id", required=True)
+    report_revoke.add_argument("--reason", required=True)
+    report_revoke.add_argument("--expected-approval-revision", type=int)
+    report_revoke.add_argument("--correlation-id")
+    report_revoke.add_argument("--json", action="store_true")
+
+    report_approval_show = report_commands.add_parser("approval-show")
+    report_approval_show.add_argument("--report-version-id", required=True)
+    report_approval_show.add_argument("--correlation-id")
+    report_approval_show.add_argument("--json", action="store_true")
+
+    report_custody_create = report_commands.add_parser("custody-snapshot-create")
+    report_custody_create.add_argument("--report-version-id", required=True)
+    report_custody_create.add_argument("--captured-by", required=True)
+    report_custody_create.add_argument("--evidence-id", action="append", default=[])
+    report_custody_create.add_argument("--correlation-id")
+    report_custody_create.add_argument("--json", action="store_true")
+
+    report_custody_show = report_commands.add_parser("custody-snapshot-show")
+    report_custody_show.add_argument("--custody-snapshot-id", required=True)
+    report_custody_show.add_argument("--correlation-id")
+    report_custody_show.add_argument("--json", action="store_true")
+
+    report_package_create = report_commands.add_parser("package-create")
+    report_package_create.add_argument("--report-version-id", required=True)
+    report_package_create.add_argument("--created-by", required=True)
+    report_package_create.add_argument("--for-export", action="store_true")
+    report_package_create.add_argument("--custody-snapshot-id")
+    report_package_create.add_argument("--stale-confirmed", action="store_true")
+    report_package_create.add_argument("--correlation-id")
+    report_package_create.add_argument("--json", action="store_true")
+
+    report_package_show = report_commands.add_parser("package-show")
+    report_package_show.add_argument("--package-id", required=True)
+    report_package_show.add_argument("--correlation-id")
+    report_package_show.add_argument("--json", action="store_true")
+
+    report_export_prepare = report_commands.add_parser("export-prepare")
+    report_export_prepare.add_argument("--report-version-id", required=True)
+    report_export_prepare.add_argument("--format", required=True, choices=["PDF", "HTML"])
+    report_export_prepare.add_argument("--filename", required=True)
+    report_export_prepare.add_argument("--created-by", required=True)
+    report_export_prepare.add_argument("--redaction-policy", default="STANDARD")
+    report_export_prepare.add_argument("--overwrite-policy", default="DENY")
+    report_export_prepare.add_argument("--no-citations", action="store_true")
+    report_export_prepare.add_argument("--no-custody", action="store_true")
+    report_export_prepare.add_argument("--no-technical-appendix", action="store_true")
+    report_export_prepare.add_argument("--stale-confirmed", action="store_true")
+    report_export_prepare.add_argument("--correlation-id")
+    report_export_prepare.add_argument("--json", action="store_true")
+
+    report_export_status = report_commands.add_parser("export-status")
+    report_export_status.add_argument("--export-manifest-id", required=True)
+    report_export_status.add_argument("--correlation-id")
+    report_export_status.add_argument("--json", action="store_true")
+
+    report_export_record = report_commands.add_parser("export-record-result")
+    report_export_record.add_argument("--export-manifest-id", required=True)
+    report_export_record.add_argument("--input-json")
+    report_export_record.add_argument("--input-file", type=Path)
+    report_export_record.add_argument("--correlation-id")
+    report_export_record.add_argument("--json", action="store_true")
+
+    report_export_capabilities = report_commands.add_parser("export-capabilities")
+    report_export_capabilities.add_argument("--correlation-id")
+    report_export_capabilities.add_argument("--json", action="store_true")
+
+    interface_parser = subcommands.add_parser("interface", help="Public engine interface commands")
+    interface_commands = interface_parser.add_subparsers(dest="interface_command", required=True)
+    interface_version = interface_commands.add_parser("version")
+    interface_version.add_argument("--json", action="store_true")
+    interface_tools = interface_commands.add_parser("tools")
+    interface_tools.add_argument("--json", action="store_true")
+    interface_capability = interface_commands.add_parser("capability")
+    interface_capability.add_argument("--capability")
+    interface_capability.add_argument("--json", action="store_true")
+    interface_invoke = interface_commands.add_parser("invoke-read")
+    interface_invoke.add_argument("--operation", required=True)
+    interface_invoke.add_argument("--payload-json", required=True)
+    interface_invoke.add_argument("--correlation-id")
+    interface_invoke.add_argument("--json", action="store_true")
+    interface_invoke_mutation = interface_commands.add_parser("invoke-mutation")
+    interface_invoke_mutation.add_argument("--operation", required=True)
+    interface_invoke_mutation.add_argument("--payload-json", required=True)
+    interface_invoke_mutation.add_argument("--correlation-id")
+    interface_invoke_mutation.add_argument("--json", action="store_true")
+
     custody_parser = subcommands.add_parser("custody", help="Custody commands")
     custody_commands = custody_parser.add_subparsers(dest="custody_command", required=True)
     custody_list = custody_commands.add_parser("list", help="List custody events")
@@ -496,6 +983,105 @@ def build_parser() -> argparse.ArgumentParser:
     custody_add.add_argument("--json", action="store_true")
 
     return parser
+
+
+def _gui_routes() -> list[str]:
+    return [
+        "CASE_OVERVIEW",
+        "EVIDENCE",
+        "FILE_SYSTEM",
+        "ARTIFACTS",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "SEARCH",
+        "TIMELINE",
+        "CANDIDATES",
+        "CHAIN_OF_CUSTODY",
+        "REPORT",
+        "SETTINGS",
+        "UNKNOWN",
+    ]
+
+
+def _analysis_scopes() -> list[str]:
+    return [
+        "case",
+        "evidence",
+        "filesystem",
+        "registry",
+        "eventlog",
+        "prefetch",
+        "browser",
+        "media",
+        "timeline",
+        "keyword_search",
+        "machine_candidate",
+        "chain_of_custody",
+        "report",
+        "selection",
+    ]
+
+
+def _context_purposes() -> list[str]:
+    return [
+        "AI_REQUEST",
+        "MCP_REQUEST",
+        "REPORT_DRAFT",
+        "REPORT_REVIEW",
+        "ANALYST_BOOKMARK",
+        "AUDIT",
+        "EXPORT",
+        "OTHER",
+    ]
+
+
+def _resource_types() -> list[str]:
+    return [
+        "EVIDENCE",
+        "FILE_SYSTEM_NODE",
+        "ARTIFACT",
+        "REGISTRY",
+        "EVENT_LOG",
+        "PREFETCH",
+        "BROWSER",
+        "MEDIA",
+        "TIMELINE_EVENT",
+        "SEARCH_RESULT",
+        "MACHINE_CANDIDATE",
+        "CUSTODY_EVENT",
+        "CONTEXT_SNAPSHOT",
+        "OTHER",
+    ]
+
+
+def _add_context_selection_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--file-node-id", action="append", default=[])
+    parser.add_argument("--artifact-id", action="append", default=[])
+    parser.add_argument("--timeline-event-id", action="append", default=[])
+    parser.add_argument("--search-result-id", action="append", default=[])
+    parser.add_argument("--media-artifact-id", action="append", default=[])
+    parser.add_argument("--browser-artifact-id", action="append", default=[])
+    parser.add_argument("--candidate-id", action="append", default=[])
+
+
+def _add_view_resource_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--case-id", required=True)
+    parser.add_argument("--resource-type", required=True, choices=_resource_types())
+    parser.add_argument("--resource-id", required=True)
+    parser.add_argument("--redaction-policy", default="DEFAULT")
+    parser.add_argument("--json", action="store_true")
+
+
+def _add_report_review_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--report-version-id", required=True)
+    parser.add_argument("--actor-id", required=True)
+    parser.add_argument("--reason", required=True)
+    parser.add_argument("--expected-review-revision", type=int)
+    parser.add_argument("--correlation-id")
+    parser.add_argument("--json", action="store_true")
 
 
 def _add_artifact_scope_args(parser: argparse.ArgumentParser, *, include_case: bool) -> None:

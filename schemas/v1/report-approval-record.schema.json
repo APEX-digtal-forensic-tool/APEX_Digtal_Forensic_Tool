@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-approval-record.schema.json",
+  "title": "APEX Report Approval Record",
+  "$ref": "#/$defs/reportApprovalRecord",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+    "nullableSha256": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
+    },
+    "reportApprovalRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_id",
+        "report_id",
+        "report_version_id",
+        "case_id",
+        "approver_id",
+        "decision",
+        "reason",
+        "content_fingerprint",
+        "custody_snapshot_id",
+        "approval_revision",
+        "previous_approval_hash",
+        "approval_hash",
+        "decided_at"
+      ],
+      "properties": {
+        "approval_id": { "$ref": "#/$defs/id" },
+        "report_id": { "$ref": "#/$defs/id" },
+        "report_version_id": { "$ref": "#/$defs/id" },
+        "case_id": { "$ref": "#/$defs/id" },
+        "approver_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "decision": { "enum": ["APPROVED", "REJECTED", "REVOKED"] },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "content_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "custody_snapshot_id": { "$ref": "#/$defs/nullableId" },
+        "approval_revision": { "type": "integer", "minimum": 1 },
+        "previous_approval_hash": { "$ref": "#/$defs/nullableSha256" },
+        "approval_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+        "decided_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    }
+  }
+}

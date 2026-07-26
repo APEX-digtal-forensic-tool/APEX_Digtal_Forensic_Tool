@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-review-event.schema.json",
+  "title": "APEX Report Review Event",
+  "$ref": "#/$defs/reportReviewEvent",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+    "nullableSha256": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
+    },
+    "reportReviewEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_event_id",
+        "report_id",
+        "report_version_id",
+        "case_id",
+        "action",
+        "actor_id",
+        "reason",
+        "section_id",
+        "comment",
+        "requested_changes",
+        "expected_review_revision",
+        "review_revision",
+        "previous_event_hash",
+        "event_hash",
+        "created_at"
+      ],
+      "properties": {
+        "review_event_id": { "$ref": "#/$defs/id" },
+        "report_id": { "$ref": "#/$defs/id" },
+        "report_version_id": { "$ref": "#/$defs/id" },
+        "case_id": { "$ref": "#/$defs/id" },
+        "action": {
+          "enum": [
+            "SUBMIT_FOR_REVIEW",
+            "COMMENT",
+            "REQUEST_CHANGES",
+            "ACCEPT_SECTION",
+            "REJECT_SECTION",
+            "MARK_REVIEW_COMPLETE",
+            "REOPEN_REVIEW"
+          ]
+        },
+        "actor_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "section_id": { "$ref": "#/$defs/nullableId" },
+        "comment": { "type": ["string", "null"], "maxLength": 4000 },
+        "requested_changes": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+        },
+        "expected_review_revision": { "type": ["integer", "null"], "minimum": 0 },
+        "review_revision": { "type": "integer", "minimum": 1 },
+        "previous_event_hash": { "$ref": "#/$defs/nullableSha256" },
+        "event_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    }
+  }
+}

@@ -379,3 +379,25 @@ projection, FTS search, GUI, MCP, OCR/STT, and LLM behavior remain outside Phase
 
 Phase 4 modules do not implement AI recommendation, file body extraction, GUI/web/MCP, OCR/STT,
 report rendering, live acquisition, or credential/secret extraction.
+
+## 12. Phase 6 Implemented Responsibilities
+
+`ContextService` owns live GUI context validation, optimistic revision checks, TTL expiry, snapshot creation, scope generation, source-revision refresh, scope paging, and case-bound resource resolution. It rejects cross-case resources, excessive selections, excessive filter depth, and secret/prompt/raw-blob metadata in adapter-bound context.
+
+`ViewProjectionService` owns Simple, Detailed, and Raw projections from snapshots or resources. `SafeRawRangeReader` owns bounded read-only byte and logical locator access, including evidence-root containment, max-length enforcement, EOF handling, hashing, preview, and audit records. `EngineInterfaceService` exposes version/capability/tool metadata and structured adapter-call responses without owning an MCP server or AI provider.
+
+## 13. Phase 7 Implemented Responsibilities
+
+`AiAssistanceService` owns snapshot-based assistance request creation, external result ingestion, citation validation, scope/resource/revision checks, warning propagation, review history, effective review projections, provider capability reporting, and reviewed keyword promotion. It depends on existing context and search services rather than duplicating resource resolution or keyword-set versioning.
+
+`AiAssistanceProviderPort` is provider-neutral and unavailable by default. Implementations may be supplied by a future adapter, but provider output is not trusted; keyword batches and scope summaries must pass the same validation path before persistence.
+
+`SQLiteRepository` stores AI assistance rows separately from observed facts and protects review/promotion history with append-only triggers. `EngineInterfaceService` and the `ai` CLI expose the contract without adding MCP transport, prompt templates, API-key handling, chain-of-thought capture, runtime LLM calls, or automatic search execution.
+
+## 14. Phase 8 Implemented Responsibilities
+
+`ReportService` owns report aggregate creation, immutable version creation, analyst draft ingest, external AI draft ingest, section ordering/fingerprinting, citation/context/evidence/search/timeline/AI reference validation, partial/stale/coverage propagation, limitations enforcement, review events, approval records, custody snapshots, render packages, export manifests, rendered artifact metadata validation, and export audit events.
+
+`ReportRendererPort` is a provider-neutral boundary. The default implementation reports `CAPABILITY_UNAVAILABLE`; only tests use fake renderers to verify orchestration. Runtime PDF/HTML rendering, HTML templates, CSS, shell execution, network renderer calls, GUI preview, LLM/prompt/MCP behavior, electronic signatures, authentication, and RBAC remain outside the core engine.
+
+`SQLiteRepository` remains the single persistence adapter. Report versions, review events, approval records, custody snapshots, rendered artifacts, and export audit rows are append-only. Source evidence, artifacts, search results, timeline events, context snapshots, AI results, and custody ledger events are referenced, not overwritten.

@@ -34,6 +34,13 @@
 | `machine-extracted-candidate.schema.json` | MachineExtractedCandidate, CandidateReviewEvent | Phase 5 OCR/STT Candidate와 Review 이력 |
 | `provider-capability.schema.json` | ProviderCapability | Optional OCR/STT / ffprobe / ffmpeg Capability 상태 |
 | `thumbnail.schema.json` | ThumbnailRecord | Hash 검증 가능한 Thumbnail Derivative Metadata |
+| `ai-assistance-request.schema.json` | AiAssistanceRequest | Snapshot 기반 AI Assistance 요청 |
+| `ai-keyword-recommendation-batch.schema.json` | AiKeywordRecommendationBatch | 외부 AI Keyword Recommendation Batch |
+| `ai-keyword-recommendation.schema.json` | AiKeywordRecommendation | 검증된 AI Keyword Candidate와 Review Projection |
+| `ai-scope-summary.schema.json` | AiScopeSummary | Scope Summary와 Citation/Warning |
+| `ai-verification-event.schema.json` | AiVerificationEvent | Human Verification Event Hash Chain |
+| `ai-keyword-promotion.schema.json` | AiKeywordPromotion | Reviewed Candidate의 Keyword Set 승격 기록 |
+| `ai-provider-capability.schema.json` | AiProviderCapability | AI Assistance Provider Capability 상태 |
 
 ## 3. 공통 규칙
 
@@ -314,3 +321,52 @@ from being fabricated while preserving raw/source references for future raw view
 recommendation contracts but its enum set also includes Phase 4 manual keyword status values
 `ACTIVE`/`ARCHIVED` and keyword type `OTHER`. All updated schemas remain Draft 2020-12 with explicit
 `additionalProperties` and no circular `$ref`.
+
+## 6. Phase 6 Schemas
+
+| 파일 | Root 정의 | 용도 |
+| --- | --- | --- |
+| `gui-session-context.schema.json` | GuiSessionContext | TTL과 Revision을 가진 Live GUI Context |
+| `analysis-context-snapshot.schema.json` | AnalysisContextSnapshot | Append-only 분석 Snapshot과 Fingerprint |
+| `analysis-scope-context.schema.json` | AnalysisScopeContext | Scope별 Resource Bundle과 Cursor |
+| `context-revision-state.schema.json` | RevisionState | Source Revision, Partial, Stale Reason |
+| `view-projection.schema.json` | ViewProjection | Simple/Detailed View Projection |
+| `raw-view.schema.json` | RawViewProjection | Raw Locator와 제한 정보 |
+| `raw-read-request.schema.json` | RawReadRequest | Bounded Raw Range 입력 |
+| `raw-read-response.schema.json` | RawReadResponse | Raw Chunk, EOF, Hash, Audit ID |
+| `engine-interface.schema.json` | EngineInterfaceVersion | Adapter용 Engine Version/Limit/Capability |
+| `engine-tool-descriptor.schema.json` | EngineToolDescriptor | Public Tool Descriptor와 Limit |
+
+Phase 6 schemas keep object extensibility explicit with `additionalProperties`, reject unbounded binary payload transfer, and carry warning/citation arrays so partial or stale context can be represented without inventing facts.
+
+## 7. Phase 7 AI Assistance Schemas
+
+| 파일 | Root 정의 | 용도 |
+| --- | --- | --- |
+| `ai-assistance-request.schema.json` | AiAssistanceRequest | Snapshot 기반 AI 요청, TTL, Fingerprint, Operation/Scope 제한 |
+| `ai-keyword-recommendation-batch.schema.json` | AiKeywordRecommendationBatch | 외부 Keyword Recommendation Batch와 Validation Warning |
+| `ai-keyword-recommendation.schema.json` | AiKeywordRecommendation | 검증된 AI Keyword Candidate, Citation, Review Projection |
+| `ai-scope-summary.schema.json` | AiScopeSummary | Scope Summary, Key Point, Citation, Partial/Stale Warning |
+| `ai-verification-event.schema.json` | AiVerificationEvent | Append-only Human Review Event와 Hash Chain |
+| `ai-keyword-promotion.schema.json` | AiKeywordPromotion | Reviewed Candidate에서 Keyword Set Draft Version으로의 승격 기록 |
+| `ai-provider-capability.schema.json` | AiProviderCapability | Provider-neutral Capability와 기본 `CAPABILITY_UNAVAILABLE` 상태 |
+
+Phase 7 schemas use Draft 2020-12, explicit `additionalProperties`, bounded arrays/strings, and existing citation/common definitions. AI recommendation and summary DTOs carry `result_kind`, `observed_fact_status=NOT_OBSERVED_FACT`, provenance warnings, and human review state so AI output cannot be serialized as an observed fact by accident.
+
+## 8. Phase 8 Report Schemas
+
+| 파일 | Root 정의 | 용도 |
+| --- | --- | --- |
+| `report-record.schema.json` | ReportRecord | Report aggregate header와 workflow state |
+| `report-version.schema.json` | ReportVersion | Immutable report version, previous link, fingerprint, provenance |
+| `report-section.schema.json` | ReportSection | Section content, source kind, citations, partial/stale/coverage |
+| `report-render-package.schema.json` | ReportRenderPackage | GUI/renderer용 JSON-friendly package |
+| `ai-report-draft-input.schema.json` | AiReportDraftInput | 외부 AI draft ingest 입력 |
+| `report-review-event.schema.json` | ReportReviewEvent | Append-only review event hash chain |
+| `report-approval-record.schema.json` | ReportApprovalRecord | Version/content-fingerprint-bound approval record |
+| `custody-snapshot.schema.json` | CustodySnapshot | Report-linked custody ledger verification snapshot |
+| `report-export-manifest.schema.json` | ReportExportManifest | Export request, renderer, package, approval, derived root contract |
+| `rendered-report-artifact.schema.json` | RenderedReportArtifact | External renderer output metadata/hash |
+| `report-renderer-capability.schema.json` | ReportRendererCapability | Provider-neutral renderer capability state |
+
+The Phase 8 schemas are Draft 2020-12 and keep report contracts granular because version, review, custody, export, and renderer capability DTOs are independently addressed by CLI and public interface operations. The legacy `report.schema.json` remains for earlier design compatibility; new runtime DTOs should use the granular Phase 8 schemas. These schemas avoid prompt, API key, chain-of-thought, raw provider body, and attachment-byte fields and use bounded strings/arrays plus explicit `additionalProperties`.

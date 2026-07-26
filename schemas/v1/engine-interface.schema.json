@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/engine-interface.schema.json",
+  "title": "APEX Engine Interface Version",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "interface_name",
+    "interface_version",
+    "engine_version",
+    "schema_version",
+    "capabilities",
+    "unavailable_capabilities",
+    "generated_at"
+  ],
+  "properties": {
+    "interface_name": {
+      "const": "apex.engine.public"
+    },
+    "interface_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "engine_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "unavailable_capabilities": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "warningArray": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/warning"
+      }
+    },
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    }
+  }
+}

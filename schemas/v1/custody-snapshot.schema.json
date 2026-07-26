@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/custody-snapshot.schema.json",
+  "title": "APEX Report Custody Snapshot",
+  "$ref": "#/$defs/custodySnapshot",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "nullableSha256": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
+    },
+    "nullableTimestamp": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+    },
+    "verificationError": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "evidence_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "custodySnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "custody_snapshot_id",
+        "case_id",
+        "report_id",
+        "report_version_id",
+        "evidence_ids",
+        "custody_event_ids",
+        "ledger_head_hash",
+        "verification_status",
+        "verification_errors",
+        "event_count",
+        "first_event_at",
+        "last_event_at",
+        "captured_by",
+        "captured_at",
+        "snapshot_fingerprint",
+        "snapshot_version"
+      ],
+      "properties": {
+        "custody_snapshot_id": { "$ref": "#/$defs/id" },
+        "case_id": { "$ref": "#/$defs/id" },
+        "report_id": { "$ref": "#/$defs/id" },
+        "report_version_id": { "$ref": "#/$defs/id" },
+        "evidence_ids": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "custody_event_ids": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "ledger_head_hash": { "$ref": "#/$defs/nullableSha256" },
+        "verification_status": { "enum": ["VERIFIED", "INVALID", "PARTIAL", "UNKNOWN"] },
+        "verification_errors": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/verificationError" }
+        },
+        "event_count": { "type": "integer", "minimum": 0 },
+        "first_event_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "last_event_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "captured_by": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "captured_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "snapshot_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "snapshot_version": { "$ref": "common.schema.json#/$defs/schemaVersion" }
+      }
+    }
+  }
+}

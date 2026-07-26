@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-renderer-capability.schema.json",
+  "title": "APEX Report Renderer Capability",
+  "$ref": "#/$defs/reportRendererCapability",
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "developer_message": { "type": ["string", "null"], "maxLength": 2000 }
+      }
+    },
+    "reportRendererCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "renderer_id",
+        "renderer_version",
+        "supported_formats",
+        "is_available",
+        "unavailable_reason",
+        "warnings",
+        "generated_at"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "renderer_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "renderer_version": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "supported_formats": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["PDF", "HTML"] }
+        },
+        "is_available": { "type": "boolean" },
+        "unavailable_reason": { "type": ["string", "null"], "maxLength": 256 },
+        "warnings": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "generated_at": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

@@ -308,3 +308,57 @@ analyzers, and report rendering.
 - Unsupported boundaries: raster thumbnail pixel rendering, actual OCR/STT execution, Email,
   Discord, Telegram, KakaoTalk, other messenger parsers, deleted/slack/unallocated recovery, live
   browser acquisition, GUI/web/MCP, AI/LLM flows, and report rendering remain outside Phase 5.
+
+### Phase 6 Implementation Trace
+
+| Area | Implemented contract | Verification |
+|---|---|---|
+| Context snapshot | Immutable `AnalysisContextSnapshot` builds resolved bundles without re-running analyzers. | `tests/unit/test_phase6_context_views.py` snapshot persistence and reopen checks |
+| View projection | Simple, Detailed, and Raw projections are generated from the same source context. | `tests/unit/test_phase6_context_views.py` view projection checks |
+| Raw locator | Raw projections and reads include locator, citation, offset, length, and bounds validation. | Raw read valid/EOF/negative/oversize tests |
+| Raw audit | Raw reads are read-only, max-length bounded, evidence-root checked, and audited. | Raw reader and CLI workflow tests |
+| Scope context | Scope contexts preserve independent scope fingerprints, revision states, partial state, and cursors. | Scope snapshot and paging tests |
+
+Phase 6 stops at the public engine/interface boundary. MCP transport, AI provider invocation, prompts, and human-verification AI behavior are intentionally deferred to later phases.
+
+### Phase 7 Implementation Trace
+
+- Services: `AiAssistanceService`, `AiAssistanceProviderPort`, `EngineInterfaceService` AI operations, and existing `SearchService` keyword-set versioning implement the engine-side AI assistance path.
+- Persistence: `ai_assistance_requests`, `ai_keyword_recommendation_batches`, `ai_keyword_recommendations`, `ai_scope_summaries`, `ai_verification_events`, `ai_keyword_promotions`, and `ai_provider_capabilities`.
+- Schemas: `ai-assistance-request`, `ai-keyword-recommendation-batch`, `ai-keyword-recommendation`, `ai-scope-summary`, `ai-verification-event`, `ai-keyword-promotion`, and `ai-provider-capability`.
+- CLI: `ai request-*`, `ai keyword-*`, `ai summary-*`, `ai review-history`, plus public interface `ai.*` tool descriptors and mutation invocation.
+- Verification: Phase 7 unit/integration tests cover deterministic request fingerprints, repository reopen, citation rejection, Unicode candidates, append-only review immutability, stale/partial warning propagation, accepted-only promotion, duplicate/idempotent promotion, default provider unavailability, and structured interface errors.
+- Boundary: runtime MCP/LLM/prompt/API-key/provider execution, automatic search execution, automatic keyword-set activation, and AI-to-observed-fact promotion are not implemented.
+
+| ID | 요구사항 | 구현 | 검증 |
+|---|---|---|---|
+| P7-AI-001 | Snapshot 기반 AI 요청을 생성하고 재현 가능해야 한다 | `AiAssistanceRequest` fingerprint/TTL/source revision | Request determinism and reopen tests |
+| P7-AI-002 | AI 결과는 Citation과 Scope 밖 데이터를 검증해야 한다 | Keyword/Summary ingest validators | Missing/cross-case/out-of-snapshot citation tests |
+| P7-AI-003 | AI 결과는 Observed Fact와 분리되어야 한다 | AI tables and `NOT_OBSERVED_FACT` status | Schema and DTO assertions |
+| P7-AI-004 | Human Verification은 불변 이력이어야 한다 | `ai_verification_events` hash chain and triggers | Append-only trigger and revision tests |
+| P7-AI-005 | 승인/수정된 Keyword만 승격되어야 한다 | Promotion preview/promote gate | Accepted-only and idempotency tests |
+| P7-AI-006 | 승격은 검색 실행을 자동 수행하지 않아야 한다 | Existing keyword-set draft version path only | CLI workflow and search execution absence checks |
+| P7-AI-007 | Runtime AI Provider 부재를 명확히 알려야 한다 | Default provider `CAPABILITY_UNAVAILABLE` | Capability and interface tests |
+| P7-AI-008 | Prompt, Secret, Raw Body, Chain-of-thought를 저장하지 않아야 한다 | Forbidden-key and payload validators | Ingest validation and boundary review |
+
+### Phase 8 Implementation Trace
+
+- Services: `ReportService`, `ReportRendererPort`, `EngineInterfaceService` report operations, and existing Context/AI/Custody/Evidence/Search/Timeline services implement the engine-side report contract.
+- Persistence: `reports`, `report_versions`, `report_version_sections`, `report_version_references`, `report_review_events`, `report_approval_records`, `custody_snapshots`, `custody_snapshot_events`, `report_render_packages`, `report_export_manifests`, `rendered_report_artifacts`, `report_export_audit_events`, and `report_renderer_capabilities`.
+- Schemas: `report-record`, `report-version`, `report-section`, `report-render-package`, `ai-report-draft-input`, `report-review-event`, `report-approval-record`, `custody-snapshot`, `report-export-manifest`, `rendered-report-artifact`, and `report-renderer-capability`.
+- CLI: `report create/list/show/archive`, version commands, AI draft ingest, review/approval/custody/package/export commands, plus public interface `report.*` descriptors and invocation.
+- Verification: Phase 8 unit/integration tests cover report/version persistence and reopen, deterministic replay, cross-case rejection, script/raw response rejection, AI draft provenance, review conflicts, approval hash chain/revoke, new-version approval separation, custody verification, default renderer unavailable, fake renderer success/failure/cancel, rendered artifact metadata, export audit append-only behavior, descriptors, interface invocation, CLI E2E, and schema validation.
+- Boundary: actual AI report draft generation, LLM/prompt/MCP runtime, GUI preview, runtime PDF/HTML rendering, renderer shell/network adapters, arbitrary local output paths, electronic signature, RBAC/authentication, and observed-fact promotion from report text are not implemented.
+
+| ID | 요구사항 | 구현 | 검증 |
+|---|---|---|---|
+| P8-RPT-001 | Report aggregate와 immutable version을 분리해야 한다 | `ReportRecord`, `ReportVersion`, SQLite report tables | create/list/reopen and trigger tests |
+| P8-RPT-002 | Analyst/AI draft provenance를 구분해야 한다 | `source_kind`, `ingest_ai_draft()` | analyst and AI draft source assertions |
+| P8-RPT-003 | Citation/Snapshot/Evidence Cross-case 참조를 차단해야 한다 | Report validation via Context/Evidence/AI services | cross-case rejection tests |
+| P8-RPT-004 | Review/Approval은 append-only hash chain이어야 한다 | review/approval event records and triggers | conflict, revoke, trigger tests |
+| P8-RPT-005 | Approval은 version/content fingerprint에 고정되어야 한다 | approval content fingerprint check | approval/new-version separation tests |
+| P8-RPT-006 | Custody snapshot 검증 실패 시 approval/export를 차단해야 한다 | custody snapshot verification gate | custody approval tests |
+| P8-RPT-007 | Export는 승인된 version만 허용해야 한다 | `_require_approved_version()` | unapproved export rejection tests |
+| P8-RPT-008 | Renderer는 provider-neutral이고 기본 unavailable이어야 한다 | `ReportRendererPort`, `UnavailableReportRenderer` | capability and manifest tests |
+| P8-RPT-009 | Output path traversal/root escape를 막아야 한다 | filename and `derived://` validators | traversal/root rejection tests |
+| P8-RPT-010 | Prompt/API key/raw response/chain-of-thought 저장을 막아야 한다 | forbidden payload validators | AI/report security tests |

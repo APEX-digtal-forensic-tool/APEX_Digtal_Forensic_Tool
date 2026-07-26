@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/analysis-scope-context.schema.json",
+  "title": "APEX Analysis Scope Context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scope_context_id",
+    "context_snapshot_id",
+    "scope_type",
+    "case_id",
+    "evidence_ids",
+    "resource_ids",
+    "source_revisions",
+    "analyzer_versions",
+    "filters",
+    "sort",
+    "time_range",
+    "result_count",
+    "included_count",
+    "excluded_count",
+    "is_partial",
+    "coverage",
+    "stale_reasons",
+    "warnings",
+    "citations",
+    "continuation_cursor",
+    "scope_fingerprint",
+    "created_at"
+  ],
+  "properties": {
+    "scope_context_id": {
+      "$ref": "#/$defs/id"
+    },
+    "context_snapshot_id": {
+      "$ref": "#/$defs/id"
+    },
+    "scope_type": {
+      "enum": [
+        "case",
+        "evidence",
+        "filesystem",
+        "registry",
+        "eventlog",
+        "prefetch",
+        "browser",
+        "media",
+        "timeline",
+        "keyword_search",
+        "machine_candidate",
+        "chain_of_custody",
+        "report",
+        "selection"
+      ]
+    },
+    "case_id": {
+      "$ref": "#/$defs/id"
+    },
+    "evidence_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "resource_ids": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "source_revisions": {
+      "type": "array",
+      "items": {
+        "$ref": "context-revision-state.schema.json"
+      }
+    },
+    "analyzer_versions": {
+      "$ref": "#/$defs/metadata"
+    },
+    "filters": {
+      "$ref": "#/$defs/metadata"
+    },
+    "sort": {
+      "$ref": "#/$defs/metadata"
+    },
+    "time_range": {
+      "$ref": "#/$defs/metadata"
+    },
+    "result_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "included_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "excluded_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "is_partial": {
+      "type": "boolean"
+    },
+    "coverage": {
+      "$ref": "#/$defs/metadata"
+    },
+    "stale_reasons": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "continuation_cursor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scope_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "warningArray": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/warning"
+      }
+    },
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    }
+  }
+}

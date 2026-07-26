@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-keyword-recommendation.schema.json",
+  "title": "APEX AI Keyword Recommendation",
+  "$ref": "#/$defs/aiKeywordRecommendation",
+  "$defs": {
+    "scope": {
+      "enum": [
+        "case",
+        "evidence",
+        "filesystem",
+        "registry",
+        "eventlog",
+        "prefetch",
+        "browser",
+        "media",
+        "timeline",
+        "keyword_search",
+        "machine_candidate",
+        "chain_of_custody",
+        "report",
+        "selection"
+      ]
+    },
+    "keywordType": {
+      "enum": [
+        "FILE_NAME",
+        "PROCESS_NAME",
+        "ACCOUNT",
+        "EMAIL",
+        "DOMAIN",
+        "URL",
+        "IP_ADDRESS",
+        "REGISTRY_PATH",
+        "COMMAND",
+        "PATH",
+        "DOCUMENT_TERM",
+        "HASH",
+        "REGEX",
+        "RELATED_TERM",
+        "TRANSLITERATION",
+        "TYPO_VARIANT",
+        "OTHER"
+      ]
+    },
+    "confidence": {
+      "enum": ["CONFIRMED", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+    },
+    "reviewStatus": {
+      "enum": ["UNREVIEWED", "ACCEPTED", "REJECTED", "CORRECTED"]
+    },
+    "stringArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "aiKeywordRecommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendation_id",
+        "recommendation_batch_id",
+        "case_id",
+        "context_snapshot_id",
+        "keyword_type",
+        "value",
+        "normalized_value",
+        "display_value",
+        "reason",
+        "confidence",
+        "recommended_scope",
+        "evidence_ids",
+        "source_resource_ids",
+        "citations",
+        "is_partial",
+        "stale_reasons",
+        "risk_flags",
+        "review_status",
+        "current_review_revision",
+        "content_fingerprint",
+        "created_at",
+        "result_kind",
+        "observed_fact_status",
+        "effective_value",
+        "effective_reason",
+        "corrected_reason"
+      ],
+      "properties": {
+        "recommendation_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "recommendation_batch_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "context_snapshot_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "keyword_type": { "$ref": "#/$defs/keywordType" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "normalized_value": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "display_value": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "recommended_scope": { "$ref": "#/$defs/scope" },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "source_resource_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/uuid" }
+        },
+        "citations": {
+          "type": "array",
+          "items": { "$ref": "citation.schema.json#/$defs/citation" }
+        },
+        "is_partial": { "type": "boolean" },
+        "stale_reasons": { "$ref": "#/$defs/stringArray" },
+        "risk_flags": { "$ref": "#/$defs/stringArray" },
+        "review_status": { "$ref": "#/$defs/reviewStatus" },
+        "current_review_revision": { "type": "integer", "minimum": 0 },
+        "content_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "result_kind": { "const": "AI_RECOMMENDATION" },
+        "observed_fact_status": { "const": "NOT_OBSERVED_FACT" },
+        "effective_value": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "effective_reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "corrected_reason": { "type": ["string", "null"], "maxLength": 4000 }
+      }
+    }
+  }
+}

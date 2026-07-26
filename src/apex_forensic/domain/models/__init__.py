@@ -1,5 +1,14 @@
 """Domain model exports."""
 
+from apex_forensic.domain.models.ai import (
+    AiAssistanceRequest,
+    AiKeywordPromotion,
+    AiKeywordRecommendation,
+    AiKeywordRecommendationBatch,
+    AiProviderCapability,
+    AiScopeSummaryRecord,
+    AiVerificationEvent,
+)
 from apex_forensic.domain.models.artifact import (
     ArtifactAnalysisResult,
     ArtifactCapability,
@@ -21,6 +30,16 @@ from apex_forensic.domain.models.browser_media import (
     ThumbnailRecord,
 )
 from apex_forensic.domain.models.case import Case
+from apex_forensic.domain.models.context import (
+    AnalysisContextSnapshot,
+    AnalysisScopeContext,
+    EngineInterfaceVersion,
+    EngineToolDescriptor,
+    GuiSessionContext,
+    RawViewProjection,
+    RevisionState,
+    ViewProjection,
+)
 from apex_forensic.domain.models.custody import CustodyEvent, HashVerification
 from apex_forensic.domain.models.evidence import Evidence, EvidenceFingerprint, HashRecord
 from apex_forensic.domain.models.filesystem import (
@@ -30,6 +49,19 @@ from apex_forensic.domain.models.filesystem import (
     IndexCoverage,
 )
 from apex_forensic.domain.models.job import Job, JobProgress
+from apex_forensic.domain.models.report import (
+    CustodySnapshotRecord,
+    RenderedReportArtifact,
+    ReportApprovalRecord,
+    ReportExportAuditEvent,
+    ReportExportManifest,
+    ReportRecord,
+    ReportRendererCapability,
+    ReportRenderPackage,
+    ReportReviewEvent,
+    ReportSection,
+    ReportVersion,
+)
 from apex_forensic.domain.models.search import (
     Keyword,
     KeywordSet,
@@ -51,6 +83,15 @@ from apex_forensic.domain.models.timeline import (
 )
 
 __all__ = [
+    "AiAssistanceRequest",
+    "AiKeywordPromotion",
+    "AiKeywordRecommendation",
+    "AiKeywordRecommendationBatch",
+    "AiProviderCapability",
+    "AiScopeSummaryRecord",
+    "AiVerificationEvent",
+    "AnalysisContextSnapshot",
+    "AnalysisScopeContext",
     "ArtifactAnalysisResult",
     "ArtifactCapability",
     "ArtifactCoverage",
@@ -65,10 +106,14 @@ __all__ = [
     "Case",
     "CursorPage",
     "CustodyEvent",
+    "CustodySnapshotRecord",
+    "EngineInterfaceVersion",
+    "EngineToolDescriptor",
     "Evidence",
     "EvidenceFingerprint",
     "FileSystemNode",
     "FileTreePage",
+    "GuiSessionContext",
     "HashRecord",
     "HashVerification",
     "IndexCoverage",
@@ -80,6 +125,18 @@ __all__ = [
     "MediaArtifact",
     "Phase5Checkpoint",
     "ProviderCapability",
+    "RawViewProjection",
+    "RenderedReportArtifact",
+    "ReportApprovalRecord",
+    "ReportExportAuditEvent",
+    "ReportExportManifest",
+    "ReportRecord",
+    "ReportRenderPackage",
+    "ReportRendererCapability",
+    "ReportReviewEvent",
+    "ReportSection",
+    "ReportVersion",
+    "RevisionState",
     "SearchCacheEntry",
     "SearchDocument",
     "SearchExecution",
@@ -94,4 +151,5 @@ __all__ = [
     "TimelineQuery",
     "TimestampNormalization",
     "TimezoneCandidate",
+    "ViewProjection",
 ]

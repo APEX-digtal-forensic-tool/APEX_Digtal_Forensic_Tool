@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-version.schema.json",
+  "title": "APEX Immutable Report Version",
+  "$ref": "#/$defs/reportVersion",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "propertyNames": {
+        "not": {
+          "pattern": "(?:[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Rr][Oo][Mm][Pp][Tt]|[Cc][Hh][Aa][Ii][Nn][-_]?[Oo][Ff][-_]?[Tt][Hh][Oo][Uu][Gg][Hh][Tt]|[Rr][Aa][Ww][-_]?[Rr][Ee][Ss][Pp][Oo][Nn][Ss][Ee]|[Rr][Aa][Ww][-_]?[Bb][Oo][Dd][Yy]|[Bb][Aa][Ss][Ee]64|[Aa][Tt][Tt][Aa][Cc][Hh][Mm][Ee][Nn][Tt][-_]?[Bb][Yy][Tt][Ee][Ss])"
+        }
+      }
+    },
+    "idArray": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "revisionArray": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "reportVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report_version_id",
+        "report_id",
+        "case_id",
+        "version_number",
+        "previous_version_id",
+        "source_kind",
+        "source_reference_id",
+        "created_by",
+        "title",
+        "executive_summary",
+        "sections",
+        "context_snapshot_ids",
+        "evidence_ids",
+        "search_execution_ids",
+        "timeline_revisions",
+        "ai_assistance_request_ids",
+        "ai_result_ids",
+        "citation_ids",
+        "partial_state",
+        "stale_state",
+        "coverage_summary",
+        "limitations",
+        "analyzer_versions",
+        "source_revisions",
+        "content_fingerprint",
+        "previous_content_fingerprint",
+        "review_state",
+        "approval_state",
+        "created_at",
+        "report_schema_version"
+      ],
+      "properties": {
+        "report_version_id": { "$ref": "#/$defs/id" },
+        "report_id": { "$ref": "#/$defs/id" },
+        "case_id": { "$ref": "#/$defs/id" },
+        "version_number": { "type": "integer", "minimum": 1 },
+        "previous_version_id": { "$ref": "#/$defs/nullableId" },
+        "source_kind": {
+          "enum": [
+            "ANALYST_DRAFT",
+            "AI_DRAFT",
+            "IMPORTED_DRAFT",
+            "SYSTEM_ASSEMBLED_DATA",
+            "OTHER"
+          ]
+        },
+        "source_reference_id": { "$ref": "#/$defs/nullableId" },
+        "created_by": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "executive_summary": { "type": "string", "minLength": 1, "maxLength": 40000 },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": { "$ref": "report-section.schema.json#/$defs/reportSection" }
+        },
+        "context_snapshot_ids": { "$ref": "#/$defs/idArray" },
+        "evidence_ids": { "$ref": "#/$defs/idArray" },
+        "search_execution_ids": { "$ref": "#/$defs/idArray" },
+        "timeline_revisions": { "$ref": "#/$defs/revisionArray" },
+        "ai_assistance_request_ids": { "$ref": "#/$defs/idArray" },
+        "ai_result_ids": { "$ref": "#/$defs/idArray" },
+        "citation_ids": { "$ref": "#/$defs/idArray" },
+        "partial_state": { "$ref": "#/$defs/metadata" },
+        "stale_state": { "$ref": "#/$defs/metadata" },
+        "coverage_summary": { "$ref": "#/$defs/metadata" },
+        "limitations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+        },
+        "analyzer_versions": { "$ref": "#/$defs/metadata" },
+        "source_revisions": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/metadata" }
+        },
+        "content_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "previous_content_fingerprint": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
+        },
+        "review_state": { "$ref": "#/$defs/metadata" },
+        "approval_state": { "$ref": "#/$defs/metadata" },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "report_schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" }
+      }
+    }
+  }
+}

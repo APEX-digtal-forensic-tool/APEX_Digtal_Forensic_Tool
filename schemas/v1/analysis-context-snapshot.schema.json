@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/analysis-context-snapshot.schema.json",
+  "title": "APEX Analysis Context Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "context_snapshot_id",
+    "case_id",
+    "session_context_id",
+    "session_context_revision",
+    "actor_id",
+    "purpose",
+    "scopes",
+    "included_resource_ids",
+    "excluded_resource_ids",
+    "filters",
+    "time_range",
+    "source_revisions",
+    "analyzer_versions",
+    "search_index_revision",
+    "timeline_revision",
+    "keyword_set_id",
+    "keyword_set_version",
+    "search_execution_id",
+    "partial_state",
+    "stale_state",
+    "warnings",
+    "citations",
+    "context_fingerprint",
+    "previous_snapshot_id",
+    "created_at"
+  ],
+  "properties": {
+    "context_snapshot_id": {
+      "$ref": "#/$defs/id"
+    },
+    "case_id": {
+      "$ref": "#/$defs/id"
+    },
+    "session_context_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "session_context_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "actor_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "purpose": {
+      "enum": [
+        "AI_REQUEST",
+        "MCP_REQUEST",
+        "REPORT_DRAFT",
+        "REPORT_REVIEW",
+        "ANALYST_BOOKMARK",
+        "AUDIT",
+        "EXPORT",
+        "OTHER"
+      ]
+    },
+    "scopes": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "included_resource_ids": {
+      "$ref": "#/$defs/metadata"
+    },
+    "excluded_resource_ids": {
+      "$ref": "#/$defs/metadata"
+    },
+    "filters": {
+      "$ref": "#/$defs/metadata"
+    },
+    "time_range": {
+      "$ref": "#/$defs/metadata"
+    },
+    "source_revisions": {
+      "type": "array",
+      "items": {
+        "$ref": "context-revision-state.schema.json"
+      }
+    },
+    "analyzer_versions": {
+      "$ref": "#/$defs/metadata"
+    },
+    "search_index_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "timeline_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "keyword_set_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "keyword_set_version": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "search_execution_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "partial_state": {
+      "$ref": "#/$defs/metadata"
+    },
+    "stale_state": {
+      "$ref": "#/$defs/metadata"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "context_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "previous_snapshot_id": {
+      "$ref": "#/$defs/nullableId"
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "timestampOrNull": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "warningArray": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/warning"
+      }
+    },
+    "citationArray": {
+      "type": "array",
+      "items": {
+        "$ref": "citation.schema.json#/$defs/citation"
+      }
+    }
+  }
+}
