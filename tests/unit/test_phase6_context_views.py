@@ -663,13 +663,36 @@ def test_interface_descriptors_aliases_and_validation_errors(tmp_path: Path) -> 
         tools_by_name = {tool.tool_name: tool for tool in services.interface.tools()}
         assert set(payloads).issubset(tools_by_name)
         for tool_name, payload in payloads.items():
-            result = services.interface.invoke_read(
+            invoke = (
+                services.interface.invoke_mutation
+                if tools_by_name[tool_name].mutates_state
+                else services.interface.invoke_read
+            )
+            result = invoke(
                 tool_name,
                 payload,
                 request_id=f"req-{tool_name}",
                 correlation_id="corr-tools",
             )
             assert result["status"] == "OK", result
+
+        read_mutation = services.interface.invoke_read(
+            "apex.context.snapshot",
+            {"session_context_id": context.session_context_id},
+            request_id="req-read-mutation",
+            correlation_id="corr-tools",
+        )
+        assert read_mutation["status"] == "ERROR"
+        assert read_mutation["errors"][0]["code"] == "CAPABILITY_UNAVAILABLE"
+
+        mutation_read = services.interface.invoke_mutation(
+            "apex.view.simple",
+            payloads["apex.view.simple"],
+            request_id="req-mutation-read",
+            correlation_id="corr-tools",
+        )
+        assert mutation_read["status"] == "ERROR"
+        assert mutation_read["errors"][0]["code"] == "CAPABILITY_UNAVAILABLE"
 
         advertised = services.interface.invoke_read(
             "apex.view.raw_read", payloads["apex.view.raw_read"]

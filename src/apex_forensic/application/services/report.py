@@ -71,6 +71,20 @@ _RAW_BLOB_KEYS = ("raw_blob", "blob", "binary", "bytes", "base64", "attachment_b
 _DANGEROUS_TEXT = re.compile(r"<\s*(script|iframe|object|embed|img|svg|html)\b", re.IGNORECASE)
 _BASE64_DATA = re.compile(r"data\s*:\s*[^;]+;\s*base64\s*,", re.IGNORECASE)
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_WINDOWS_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
+_WINDOWS_FORBIDDEN_NAME_CHARS = re.compile(r'[<>:"\\|?*\x00-\x1f]')
+_WINDOWS_RESERVED_BASENAMES = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    *(f"com{index}" for index in range(1, 10)),
+    *(f"lpt{index}" for index in range(1, 10)),
+}
+_COMPLETABLE_EXPORT_STATES = {
+    ReportExportStatus.PREPARED.value,
+    ReportExportStatus.RENDERING.value,
+}
 
 
 class ReportService:
@@ -1012,12 +1026,31 @@ class ReportService:
         approval = self._require_approved_version(version)
         format_value = _enum_value(ReportExportFormat, format, "format")
         filename = _safe_filename(filename, format_value)
+        created_by = _required_non_empty(created_by, "created_by")
         if overwrite_policy != "DENY":
             raise ReportError(
                 "REPORT_OUTPUT_INVALID",
                 "Overwrite is denied by default and other overwrite policies are not implemented.",
                 target="overwrite_policy",
             )
+        fingerprint_payload = {
+            "report_version_id": version.report_version_id,
+            "format": format_value,
+            "filename": filename,
+            "content_fingerprint": version.content_fingerprint,
+            "approval_id": approval.approval_id,
+            "custody_snapshot_id": approval.custody_snapshot_id,
+            "redaction_policy": redaction_policy,
+            "include_citations": include_citations,
+            "include_custody": include_custody,
+            "include_technical_appendix": include_technical_appendix,
+        }
+        manifest_fingerprint = canonical_sha256(fingerprint_payload)
+        existing = self._repository.get_report_export_manifest_by_fingerprint(
+            manifest_fingerprint
+        )
+        if existing is not None:
+            return cast(ReportExportManifest, existing)
         package = self.create_render_package(
             report_version_id=version.report_version_id,
             created_by=created_by,
@@ -1038,24 +1071,6 @@ class ReportService:
             else ReportExportStatus.CAPABILITY_UNAVAILABLE.value
         )
         warnings = [] if renderer_available else capability.warnings
-        fingerprint_payload = {
-            "report_version_id": version.report_version_id,
-            "format": format_value,
-            "filename": filename,
-            "content_fingerprint": version.content_fingerprint,
-            "approval_id": approval.approval_id,
-            "custody_snapshot_id": approval.custody_snapshot_id,
-            "redaction_policy": redaction_policy,
-            "include_citations": include_citations,
-            "include_custody": include_custody,
-            "include_technical_appendix": include_technical_appendix,
-        }
-        manifest_fingerprint = canonical_sha256(fingerprint_payload)
-        existing = self._repository.get_report_export_manifest_by_fingerprint(
-            manifest_fingerprint
-        )
-        if existing is not None:
-            return cast(ReportExportManifest, existing)
         manifest = ReportExportManifest(
             export_manifest_id=self._id_generator.new_id(),
             report_id=version.report_id,
@@ -1078,7 +1093,7 @@ class ReportService:
             custody_snapshot_id=approval.custody_snapshot_id,
             status=status,
             warnings=warnings,
-            created_by=_required_non_empty(created_by, "created_by"),
+            created_by=created_by,
             created_at=self._clock.now(),
             manifest_version=REPORT_SCHEMA_VERSION,
         )
@@ -1120,6 +1135,13 @@ class ReportService:
         renderer: ReportRendererPort | None = None,
     ) -> ReportExportManifest:
         manifest = self.get_export_manifest(export_manifest_id)
+        if manifest.status != ReportExportStatus.PREPARED.value:
+            raise ReportError(
+                "REPORT_RENDER_FAILED",
+                "Export manifest is not prepared for rendering.",
+                target="export_manifest_id",
+                details={"manifest_status": manifest.status},
+            )
         active_renderer = renderer or self._renderer
         capability = active_renderer.capabilities()
         if not capability.is_available or manifest.format not in capability.supported_formats:
@@ -1180,6 +1202,13 @@ class ReportService:
                 "REPORT_OUTPUT_INVALID",
                 "Renderer result status is invalid.",
                 target="status",
+            )
+        if manifest.status not in _COMPLETABLE_EXPORT_STATES:
+            raise ReportError(
+                "REPORT_OUTPUT_INVALID",
+                "Renderer completion is invalid for the current export manifest state.",
+                target="export_manifest_id",
+                details={"manifest_status": manifest.status},
             )
         output_reference = _required_non_empty(payload.get("output_reference"), "output_reference")
         self._validate_output_reference(output_reference, manifest.derived_output_root_id)
@@ -1831,6 +1860,8 @@ class ReportService:
                 "Renderer output reference escapes the derived root.",
                 target="output_reference",
             )
+        for part in pure.parts:
+            _validate_output_path_segment(part, target="output_reference")
 
     def _append_export_audit(
         self,
@@ -2206,7 +2237,13 @@ def _snapshot_contains(snapshot: Any, resource_type: str, resource_id: str) -> b
 
 
 def _safe_filename(filename: str, format_value: str) -> str:
-    filename = _required_non_empty(filename, "filename")
+    filename = _required_non_empty(filename, "filename").strip()
+    if _WINDOWS_DRIVE_PREFIX.match(filename) is not None:
+        raise ReportError(
+            "REPORT_OUTPUT_INVALID",
+            "Export filename cannot use a Windows drive prefix.",
+            target="filename",
+        )
     pure = PurePosixPath(filename.replace("\\", "/"))
     if (
         pure.is_absolute()
@@ -2224,7 +2261,24 @@ def _safe_filename(filename: str, format_value: str) -> str:
     extension = ".pdf" if format_value == ReportExportFormat.PDF.value else ".html"
     if not cleaned.casefold().endswith(extension):
         cleaned = f"{cleaned}{extension}"
+    _validate_output_path_segment(cleaned, target="filename")
     return cleaned
+
+
+def _validate_output_path_segment(segment: str, *, target: str) -> None:
+    if (
+        not segment
+        or segment in {".", ".."}
+        or segment.rstrip(" .") != segment
+        or _WINDOWS_DRIVE_PREFIX.match(segment) is not None
+        or _WINDOWS_FORBIDDEN_NAME_CHARS.search(segment) is not None
+        or segment.split(".", 1)[0].casefold() in _WINDOWS_RESERVED_BASENAMES
+    ):
+        raise ReportError(
+            "REPORT_OUTPUT_INVALID",
+            "Report output path segment is not portable or safe.",
+            target=target,
+        )
 
 
 def _mime_type(format_value: str) -> str:

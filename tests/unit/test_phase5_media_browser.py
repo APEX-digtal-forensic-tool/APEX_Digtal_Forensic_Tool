@@ -451,6 +451,41 @@ def test_phase5_media_browser_artifacts_query_schema_and_resilience(
         schema_validator.validate_artifact(artifact.to_schema_dict())
 
 
+def test_phase5_artifact_analysis_rejects_indexed_source_replaced_by_symlink(
+    services, tmp_path: Path
+) -> None:
+    media_dir = tmp_path / "media-symlink"
+    media_dir.mkdir()
+    photo = media_dir / "photo.jpg"
+    photo.write_bytes(_jpeg_with_exif())
+    case, evidence = _case_evidence_and_index(services, media_dir)
+    outside = tmp_path / "outside-photo.jpg"
+    outside.write_bytes(_jpeg_with_exif(width=11, height=13))
+    photo.unlink()
+    try:
+        photo.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not supported on this filesystem")
+
+    _job, coverage = services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["media.metadata"],
+        artifact_types=[ArtifactType.MEDIA_IMAGE],
+    )
+    page = services.artifacts.list_artifacts(
+        ArtifactQuery(
+            case_id=case.case_id,
+            evidence_id=evidence.evidence_id,
+            artifact_type=ArtifactType.MEDIA_IMAGE,
+        )
+    )
+
+    assert coverage.error_count >= 1
+    assert page.items == []
+
+
 def test_phase5_browser_wal_reanalysis_reuse_and_reopen(tmp_path: Path) -> None:
     db_path = tmp_path / "wal-revisions.db"
     evidence_dir = tmp_path / "wal-evidence"

@@ -43,13 +43,28 @@
         "output_reference": {
           "type": "string",
           "pattern": "^derived://[A-Za-z0-9_.-]+/[A-Za-z0-9_.@%+=,/-]+$",
-          "not": { "pattern": "(?:^|/)\\.\\.(?:/|$)" }
+          "allOf": [
+            { "not": { "pattern": "(?:^|/)\\.\\.(?:/|$)" } },
+            {
+              "not": {
+                "pattern": "(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|/|$)"
+              }
+            }
+          ]
         },
         "filename": {
           "type": "string",
           "minLength": 1,
           "maxLength": 180,
-          "not": { "pattern": "^(?:/|[A-Za-z]:|.*(?:^|/)\\.\\.(?:/|$)|.*[/\\\\])" }
+          "allOf": [
+            { "not": { "pattern": "^(?:/|[A-Za-z]:|.*(?:^|/)\\.\\.(?:/|$)|.*[/\\\\])" } },
+            { "not": { "pattern": "[<>:\"|?*\\u0000-\\u001F]" } },
+            {
+              "not": {
+                "pattern": "^(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\..*)?$"
+              }
+            }
+          ]
         },
         "mime_type": { "enum": ["application/pdf", "text/html"] },
         "size_bytes": { "type": "integer", "minimum": 1, "maximum": 1000000000000 },

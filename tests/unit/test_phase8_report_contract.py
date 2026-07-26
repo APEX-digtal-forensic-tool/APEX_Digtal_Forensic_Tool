@@ -486,6 +486,106 @@ def test_custody_export_renderer_and_audit_contract(
         )
 
 
+def test_export_rejects_windows_unsafe_names_and_invalid_completion_state(
+    services: Any, tmp_path: Path
+) -> None:
+    base = _base_fixture(services, tmp_path)
+    version = _create_version(services, base)
+    _review_and_approve(services, version)
+
+    for filename in ("C:report.pdf", "CON.pdf", "LPT1.html", "bad:name.pdf"):
+        with pytest.raises(ApexError) as unsafe_name:
+            services.reports.prepare_export(
+                report_version_id=version.report_version_id,
+                format="PDF",
+                filename=filename,
+                created_by="analyst-1",
+            )
+        assert unsafe_name.value.code == "REPORT_OUTPUT_INVALID"
+
+    unavailable = services.reports.prepare_export(
+        report_version_id=version.report_version_id,
+        format="PDF",
+        filename="unavailable.pdf",
+        created_by="analyst-1",
+    )
+    assert unavailable.status == "CAPABILITY_UNAVAILABLE"
+    with pytest.raises(ApexError) as invalid_state:
+        services.reports.record_export_result(
+            export_manifest_id=unavailable.export_manifest_id,
+            payload={
+                "status": "COMPLETED",
+                "output_reference": "derived://apex-derived-default/unavailable.pdf",
+                "filename": "unavailable.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 1,
+                "sha256": "0" * 64,
+            },
+        )
+    assert invalid_state.value.code == "REPORT_OUTPUT_INVALID"
+
+    prepared = services.reports.prepare_export(
+        report_version_id=version.report_version_id,
+        format="PDF",
+        filename="prepared.pdf",
+        created_by="analyst-1",
+        renderer=FakeReportRenderer(),
+    )
+    with pytest.raises(ApexError) as unsafe_reference:
+        services.reports.record_export_result(
+            export_manifest_id=prepared.export_manifest_id,
+            payload={
+                "status": "COMPLETED",
+                "output_reference": "derived://apex-derived-default/C:/prepared.pdf",
+                "filename": "prepared.pdf",
+                "mime_type": "application/pdf",
+                "size_bytes": 1,
+                "sha256": "0" * 64,
+            },
+        )
+    assert unsafe_reference.value.code == "REPORT_OUTPUT_INVALID"
+
+
+def test_export_prepare_idempotency_does_not_create_duplicate_packages(
+    services: Any, tmp_path: Path
+) -> None:
+    base = _base_fixture(services, tmp_path)
+    version = _create_version(services, base)
+    _review_and_approve(services, version)
+    fake = FakeReportRenderer()
+
+    before = services.repository.connection.execute(
+        "SELECT COUNT(*) FROM report_render_packages WHERE report_version_id = ?",
+        (version.report_version_id,),
+    ).fetchone()[0]
+    first = services.reports.prepare_export(
+        report_version_id=version.report_version_id,
+        format="PDF",
+        filename="idempotent.pdf",
+        created_by="analyst-1",
+        renderer=fake,
+    )
+    after_first = services.repository.connection.execute(
+        "SELECT COUNT(*) FROM report_render_packages WHERE report_version_id = ?",
+        (version.report_version_id,),
+    ).fetchone()[0]
+    second = services.reports.prepare_export(
+        report_version_id=version.report_version_id,
+        format="PDF",
+        filename="idempotent.pdf",
+        created_by="analyst-1",
+        renderer=fake,
+    )
+    after_second = services.repository.connection.execute(
+        "SELECT COUNT(*) FROM report_render_packages WHERE report_version_id = ?",
+        (version.report_version_id,),
+    ).fetchone()[0]
+
+    assert second.export_manifest_id == first.export_manifest_id
+    assert after_first == before + 1
+    assert after_second == after_first
+
+
 def test_public_interface_report_descriptors_and_errors(services: Any, tmp_path: Path) -> None:
     base = _base_fixture(services, tmp_path)
     version = _create_version(services, base)
@@ -501,6 +601,32 @@ def test_public_interface_report_descriptors_and_errors(services: Any, tmp_path:
         assert name in tools
     assert tools["report.approve"].requires_confirmation is True
     assert tools["report.export.prepare"].mutates_state is True
+
+    report_count_before = len(services.reports.list_reports(case_id=base["case"].case_id)["items"])
+    rejected_mutation = services.interface.invoke_read(
+        "report.create",
+        {
+            "case_id": base["case"].case_id,
+            "title": "Should Not Be Created",
+            "created_by": "analyst-1",
+        },
+    )
+    assert rejected_mutation["status"] == "ERROR"
+    assert rejected_mutation["errors"][0]["code"] == "CAPABILITY_UNAVAILABLE"
+    assert (
+        len(services.reports.list_reports(case_id=base["case"].case_id)["items"])
+        == report_count_before
+    )
+
+    mutation_response = services.interface.invoke_mutation(
+        "report.create",
+        {
+            "case_id": base["case"].case_id,
+            "title": "Created Via Mutation",
+            "created_by": "analyst-1",
+        },
+    )
+    assert mutation_response["status"] == "OK"
 
     response = services.interface.invoke_read(
         "report.version.get",

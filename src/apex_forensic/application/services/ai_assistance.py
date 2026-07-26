@@ -367,7 +367,7 @@ class AiAssistanceService:
                     resource_type=resource_type,
                     resource_id=state.resource_id,
                 )
-            except Exception:
+            except ApexError:
                 states.append(
                     {
                         "resource_type": resource_type,

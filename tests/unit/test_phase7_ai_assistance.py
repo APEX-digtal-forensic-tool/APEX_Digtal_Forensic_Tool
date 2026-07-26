@@ -163,6 +163,29 @@ def test_ai_request_fingerprint_ttl_and_repository_reopen(tmp_path: Path) -> Non
         reopened.close()
 
 
+def test_ai_revision_validation_propagates_unexpected_resolver_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    services, case, _evidence, _node, snapshot, _ = _snapshot_fixture(tmp_path)
+    try:
+        request = services.ai.create_request_from_context_snapshot(
+            case_id=case.case_id,
+            context_snapshot_id=snapshot.context_snapshot_id,
+            purpose="KEYWORD_RECOMMENDATION",
+            requested_operations=["RECOMMEND_KEYWORDS"],
+            requested_scopes=["filesystem"],
+        )
+
+        def fail_resolve_resource(*_args: object, **_kwargs: object) -> dict[str, object]:
+            raise RuntimeError("unexpected resolver failure")
+
+        monkeypatch.setattr(services.contexts, "resolve_resource", fail_resolve_resource)
+        with pytest.raises(RuntimeError, match="unexpected resolver failure"):
+            services.ai.validate_current_revisions(request.assistance_request_id)
+    finally:
+        services.close()
+
+
 def test_keyword_ingest_review_correction_and_immutability(tmp_path: Path) -> None:
     services, case, evidence, node, snapshot, _ = _snapshot_fixture(tmp_path)
     try:

@@ -908,6 +908,38 @@ _REPORT_DESCRIPTOR_SCHEMAS: dict[str, tuple[str, str, bool, bool, bool, bool, bo
     ),
 }
 
+_MUTATING_OPERATIONS = {
+    operation_name
+    for (
+        _tool_name,
+        operation_name,
+        _description_key,
+        _input_schema_ref,
+        _output_schema_ref,
+        _required_capabilities,
+        mutates_state,
+        _requires_confirmation,
+        _supports_pagination,
+        _supports_partial,
+        _supports_citation,
+        _max_result_items,
+    ) in _TOOL_DESCRIPTOR_SPECS
+    if mutates_state
+} | {
+    operation_name
+    for operation_name, (
+        _input_schema_ref,
+        _output_schema_ref,
+        mutates_state,
+        _requires_confirmation,
+        _supports_pagination,
+        _supports_partial,
+        _supports_citation,
+        _max_result_items,
+    ) in _REPORT_DESCRIPTOR_SCHEMAS.items()
+    if mutates_state
+}
+
 
 
 def _enum_value(value: Any) -> str:
@@ -3369,10 +3401,24 @@ class EngineInterfaceService:
         *,
         request_id: str | None = None,
         correlation_id: str | None = None,
+        _allow_mutation: bool = False,
     ) -> dict[str, Any]:
         try:
             request = self._request_payload(payload)
             canonical_operation = self._canonical_operation(operation)
+            mutates_state = canonical_operation in _MUTATING_OPERATIONS
+            if mutates_state and not _allow_mutation:
+                raise UnsupportedCapabilityError(
+                    "Operation mutates state; use invoke_mutation.",
+                    target="operation",
+                    required_capability=canonical_operation,
+                )
+            if _allow_mutation and not mutates_state:
+                raise UnsupportedCapabilityError(
+                    "Operation does not mutate state; use invoke_read.",
+                    target="operation",
+                    required_capability=canonical_operation,
+                )
             if canonical_operation == "context.get":
                 return self.success(
                     self._contexts.get(
@@ -3737,6 +3783,7 @@ class EngineInterfaceService:
             payload,
             request_id=request_id,
             correlation_id=correlation_id,
+            _allow_mutation=True,
         )
 
     def _invoke_report(
