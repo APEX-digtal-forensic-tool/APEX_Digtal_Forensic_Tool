@@ -340,3 +340,25 @@ Phase 6 stops at the public engine/interface boundary. MCP transport, AI provide
 | P7-AI-006 | 승격은 검색 실행을 자동 수행하지 않아야 한다 | Existing keyword-set draft version path only | CLI workflow and search execution absence checks |
 | P7-AI-007 | Runtime AI Provider 부재를 명확히 알려야 한다 | Default provider `CAPABILITY_UNAVAILABLE` | Capability and interface tests |
 | P7-AI-008 | Prompt, Secret, Raw Body, Chain-of-thought를 저장하지 않아야 한다 | Forbidden-key and payload validators | Ingest validation and boundary review |
+
+### Phase 8 Implementation Trace
+
+- Services: `ReportService`, `ReportRendererPort`, `EngineInterfaceService` report operations, and existing Context/AI/Custody/Evidence/Search/Timeline services implement the engine-side report contract.
+- Persistence: `reports`, `report_versions`, `report_version_sections`, `report_version_references`, `report_review_events`, `report_approval_records`, `custody_snapshots`, `custody_snapshot_events`, `report_render_packages`, `report_export_manifests`, `rendered_report_artifacts`, `report_export_audit_events`, and `report_renderer_capabilities`.
+- Schemas: `report-record`, `report-version`, `report-section`, `report-render-package`, `ai-report-draft-input`, `report-review-event`, `report-approval-record`, `custody-snapshot`, `report-export-manifest`, `rendered-report-artifact`, and `report-renderer-capability`.
+- CLI: `report create/list/show/archive`, version commands, AI draft ingest, review/approval/custody/package/export commands, plus public interface `report.*` descriptors and invocation.
+- Verification: Phase 8 unit/integration tests cover report/version persistence and reopen, deterministic replay, cross-case rejection, script/raw response rejection, AI draft provenance, review conflicts, approval hash chain/revoke, new-version approval separation, custody verification, default renderer unavailable, fake renderer success/failure/cancel, rendered artifact metadata, export audit append-only behavior, descriptors, interface invocation, CLI E2E, and schema validation.
+- Boundary: actual AI report draft generation, LLM/prompt/MCP runtime, GUI preview, runtime PDF/HTML rendering, renderer shell/network adapters, arbitrary local output paths, electronic signature, RBAC/authentication, and observed-fact promotion from report text are not implemented.
+
+| ID | 요구사항 | 구현 | 검증 |
+|---|---|---|---|
+| P8-RPT-001 | Report aggregate와 immutable version을 분리해야 한다 | `ReportRecord`, `ReportVersion`, SQLite report tables | create/list/reopen and trigger tests |
+| P8-RPT-002 | Analyst/AI draft provenance를 구분해야 한다 | `source_kind`, `ingest_ai_draft()` | analyst and AI draft source assertions |
+| P8-RPT-003 | Citation/Snapshot/Evidence Cross-case 참조를 차단해야 한다 | Report validation via Context/Evidence/AI services | cross-case rejection tests |
+| P8-RPT-004 | Review/Approval은 append-only hash chain이어야 한다 | review/approval event records and triggers | conflict, revoke, trigger tests |
+| P8-RPT-005 | Approval은 version/content fingerprint에 고정되어야 한다 | approval content fingerprint check | approval/new-version separation tests |
+| P8-RPT-006 | Custody snapshot 검증 실패 시 approval/export를 차단해야 한다 | custody snapshot verification gate | custody approval tests |
+| P8-RPT-007 | Export는 승인된 version만 허용해야 한다 | `_require_approved_version()` | unapproved export rejection tests |
+| P8-RPT-008 | Renderer는 provider-neutral이고 기본 unavailable이어야 한다 | `ReportRendererPort`, `UnavailableReportRenderer` | capability and manifest tests |
+| P8-RPT-009 | Output path traversal/root escape를 막아야 한다 | filename and `derived://` validators | traversal/root rejection tests |
+| P8-RPT-010 | Prompt/API key/raw response/chain-of-thought 저장을 막아야 한다 | forbidden payload validators | AI/report security tests |

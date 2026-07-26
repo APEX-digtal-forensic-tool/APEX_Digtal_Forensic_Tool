@@ -352,3 +352,21 @@ Phase 6 schemas keep object extensibility explicit with `additionalProperties`, 
 | `ai-provider-capability.schema.json` | AiProviderCapability | Provider-neutral Capability와 기본 `CAPABILITY_UNAVAILABLE` 상태 |
 
 Phase 7 schemas use Draft 2020-12, explicit `additionalProperties`, bounded arrays/strings, and existing citation/common definitions. AI recommendation and summary DTOs carry `result_kind`, `observed_fact_status=NOT_OBSERVED_FACT`, provenance warnings, and human review state so AI output cannot be serialized as an observed fact by accident.
+
+## 8. Phase 8 Report Schemas
+
+| 파일 | Root 정의 | 용도 |
+| --- | --- | --- |
+| `report-record.schema.json` | ReportRecord | Report aggregate header와 workflow state |
+| `report-version.schema.json` | ReportVersion | Immutable report version, previous link, fingerprint, provenance |
+| `report-section.schema.json` | ReportSection | Section content, source kind, citations, partial/stale/coverage |
+| `report-render-package.schema.json` | ReportRenderPackage | GUI/renderer용 JSON-friendly package |
+| `ai-report-draft-input.schema.json` | AiReportDraftInput | 외부 AI draft ingest 입력 |
+| `report-review-event.schema.json` | ReportReviewEvent | Append-only review event hash chain |
+| `report-approval-record.schema.json` | ReportApprovalRecord | Version/content-fingerprint-bound approval record |
+| `custody-snapshot.schema.json` | CustodySnapshot | Report-linked custody ledger verification snapshot |
+| `report-export-manifest.schema.json` | ReportExportManifest | Export request, renderer, package, approval, derived root contract |
+| `rendered-report-artifact.schema.json` | RenderedReportArtifact | External renderer output metadata/hash |
+| `report-renderer-capability.schema.json` | ReportRendererCapability | Provider-neutral renderer capability state |
+
+The Phase 8 schemas are Draft 2020-12 and keep report contracts granular because version, review, custody, export, and renderer capability DTOs are independently addressed by CLI and public interface operations. The legacy `report.schema.json` remains for earlier design compatibility; new runtime DTOs should use the granular Phase 8 schemas. These schemas avoid prompt, API key, chain-of-thought, raw provider body, and attachment-byte fields and use bounded strings/arrays plus explicit `additionalProperties`.

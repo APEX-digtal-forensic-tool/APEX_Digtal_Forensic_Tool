@@ -1438,3 +1438,15 @@ Phase 7 implements the engine-side AI Assistance contract only. The engine can c
 AI results are stored separately from observed facts and are marked as `NOT_OBSERVED_FACT`. Human verification is append-only and hash chained; corrections create review events and effective projections without overwriting the original AI result. A keyword recommendation can be promoted only after an accepted or corrected review state, and promotion creates a new draft keyword-set version without running search or activating the set.
 
 The default AI provider boundary reports `CAPABILITY_UNAVAILABLE`. Core still contains no MCP server, MCP SDK, LLM SDK, prompt template, API key handling, chain-of-thought storage, runtime provider call, or network AI workflow.
+
+## Phase 8 Report Contract Runtime Notes
+
+Phase 8 implements the engine-side Report contract. `ReportService` stores a mutable `ReportRecord` aggregate header and immutable `ReportVersion` rows with deterministic content fingerprints, previous-version links, stable section ordering, source kind, citations, context snapshot IDs, evidence IDs, search/timeline/AI references, partial/stale/coverage metadata, limitations, and analyzer/source revision metadata.
+
+Draft text is always externally supplied. Analyst drafts use `ANALYST_DRAFT`; externally generated AI drafts use `AI_DRAFT` and are ingested only after case, assistance request, context snapshot, AI result, citation, size, script/base64, and forbidden prompt/secret/raw-body checks. Report text is not promoted into observed facts and does not modify Evidence, Artifact, Search, Timeline, Context, AI, or Custody source records.
+
+Review and approval are append-only. Review events and approval records carry sequential revisions and hash-chain fields; approval is bound to one report version and content fingerprint. New versions do not inherit approval and move the report back to `REVIEW_REQUIRED`. Revoke appends a `REVOKED` approval record rather than mutating the original approval.
+
+Report custody snapshots reference existing custody event IDs, ledger head hashes, and verification status without copying or editing the custody ledger. Invalid or missing custody verification blocks approval by default.
+
+Export is contract-only. The engine creates render packages, export manifests, renderer capability snapshots, rendered artifact metadata, and export audit events. The default renderer port returns `CAPABILITY_UNAVAILABLE`. Test fake renderers exercise orchestration only; the core still has no PDF library, HTML renderer/template, browser renderer, shell adapter, network renderer, GUI preview, LLM, prompt, MCP SDK, or runtime AI provider.

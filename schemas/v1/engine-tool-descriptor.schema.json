@@ -21,7 +21,7 @@
   "properties": {
     "tool_name": {
       "type": "string",
-      "pattern": "^(?:apex|ai)\\.[a-z0-9_.-]+$"
+      "pattern": "^(?:apex|ai|report)\\.[a-z0-9_.-]+$"
     },
     "tool_version": {
       "$ref": "common.schema.json#/$defs/schemaVersion"

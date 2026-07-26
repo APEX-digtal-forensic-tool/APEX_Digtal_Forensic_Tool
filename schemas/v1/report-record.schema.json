@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-record.schema.json",
+  "title": "APEX Report Record",
+  "$ref": "#/$defs/reportRecord",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+    "nullableTimestamp": {
+      "oneOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+    },
+    "reportRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report_id",
+        "case_id",
+        "title",
+        "description",
+        "report_type",
+        "locale",
+        "timezone",
+        "status",
+        "active_version_id",
+        "latest_version_number",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "archived_at",
+        "report_fingerprint",
+        "report_schema_version"
+      ],
+      "properties": {
+        "report_id": { "$ref": "#/$defs/id" },
+        "case_id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "description": { "type": ["string", "null"], "maxLength": 4000 },
+        "report_type": {
+          "enum": [
+            "INVESTIGATION",
+            "TRIAGE",
+            "INCIDENT_RESPONSE",
+            "EVIDENCE_SUMMARY",
+            "CHAIN_OF_CUSTODY",
+            "TECHNICAL_APPENDIX",
+            "OTHER"
+          ]
+        },
+        "locale": { "$ref": "common.schema.json#/$defs/locale" },
+        "timezone": { "$ref": "common.schema.json#/$defs/timezone" },
+        "status": {
+          "enum": [
+            "DRAFT",
+            "REVIEW_REQUIRED",
+            "APPROVED",
+            "REJECTED",
+            "EXPORT_PREPARING",
+            "EXPORT_READY",
+            "EXPORTED",
+            "EXPORT_FAILED",
+            "ARCHIVED"
+          ]
+        },
+        "active_version_id": { "$ref": "#/$defs/nullableId" },
+        "latest_version_number": { "type": "integer", "minimum": 0 },
+        "created_by": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "updated_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "archived_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "report_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "report_schema_version": { "$ref": "common.schema.json#/$defs/schemaVersion" }
+      }
+    }
+  }
+}

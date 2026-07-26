@@ -91,6 +91,8 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _context(args, services)
     if args.command == "view":
         return _view(args, services)
+    if args.command == "report":
+        return _report(args, services)
     if args.command == "interface":
         return _interface(args, services)
     raise ValidationError("Unknown command.", target="command")
@@ -893,6 +895,199 @@ def _view(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown view command.", target="view_command")
 
 
+def _report(args: Namespace, services: Any) -> Any:
+    if args.report_command == "create":
+        return services.reports.create_report(
+            case_id=args.case_id,
+            title=args.title,
+            created_by=args.created_by,
+            description=args.description,
+            report_type=args.report_type,
+            locale=args.locale,
+            timezone=args.timezone,
+        ).to_schema_dict()
+    if args.report_command == "list":
+        return services.reports.list_reports(
+            case_id=args.case_id,
+            cursor=args.cursor,
+            limit=args.limit,
+        )
+    if args.report_command == "show":
+        return services.reports.get_report(args.report_id).to_schema_dict()
+    if args.report_command == "version-create":
+        payload = _json_input(args)
+        return services.reports.create_version(
+            report_id=args.report_id,
+            source_kind=args.source_kind,
+            created_by=args.created_by,
+            title=_required_json_field(payload, "title"),
+            executive_summary=_required_json_field(payload, "executive_summary"),
+            sections=_required_json_list(payload, "sections"),
+            source_reference_id=payload.get("source_reference_id"),
+            context_snapshot_ids=payload.get("context_snapshot_ids"),
+            evidence_ids=payload.get("evidence_ids"),
+            search_execution_ids=payload.get("search_execution_ids"),
+            timeline_revisions=payload.get("timeline_revisions"),
+            ai_assistance_request_ids=payload.get("ai_assistance_request_ids"),
+            ai_result_ids=payload.get("ai_result_ids"),
+            citations=payload.get("citations"),
+            limitations=payload.get("limitations"),
+            analyzer_versions=payload.get("analyzer_versions"),
+        ).to_schema_dict()
+    if args.report_command == "version-list":
+        return [item.to_schema_dict() for item in services.reports.list_versions(args.report_id)]
+    if args.report_command == "version-show":
+        return services.reports.get_version(args.report_version_id).to_schema_dict()
+    if args.report_command == "version-compare":
+        return services.reports.compare_versions(
+            args.left_report_version_id,
+            args.right_report_version_id,
+        )
+    if args.report_command == "ai-draft-ingest":
+        return services.reports.ingest_ai_draft(
+            payload=_json_input(args),
+            report_id=args.report_id,
+            created_by=args.created_by,
+        ).to_schema_dict()
+    if args.report_command == "archive":
+        return services.reports.archive_report(
+            report_id=args.report_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+        ).to_schema_dict()
+    if args.report_command == "review-submit":
+        return services.reports.submit_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-comment":
+        return services.reports.comment_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            comment=args.comment,
+            section_id=args.section_id,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-request-changes":
+        return services.reports.request_changes(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            requested_changes=args.requested_change,
+            section_id=args.section_id,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-accept-section":
+        return services.reports.accept_section(
+            report_version_id=args.report_version_id,
+            section_id=args.section_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            comment=args.comment,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-reject-section":
+        return services.reports.reject_section(
+            report_version_id=args.report_version_id,
+            section_id=args.section_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            requested_changes=args.requested_change,
+            comment=args.comment,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-complete":
+        return services.reports.complete_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-reopen":
+        return services.reports.reopen_review(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_review_revision=args.expected_review_revision,
+        ).to_schema_dict()
+    if args.report_command == "review-history":
+        return [
+            item.to_schema_dict()
+            for item in services.reports.review_history(args.report_version_id)
+        ]
+    if args.report_command == "approve":
+        return services.reports.approve(
+            report_version_id=args.report_version_id,
+            approver_id=args.approver_id,
+            reason=args.reason,
+            custody_snapshot_id=args.custody_snapshot_id,
+            expected_review_revision=args.expected_review_revision,
+            expected_approval_revision=args.expected_approval_revision,
+        ).to_schema_dict()
+    if args.report_command == "reject":
+        return services.reports.reject(
+            report_version_id=args.report_version_id,
+            approver_id=args.approver_id,
+            reason=args.reason,
+            expected_approval_revision=args.expected_approval_revision,
+        ).to_schema_dict()
+    if args.report_command == "revoke-approval":
+        return services.reports.revoke_approval(
+            report_version_id=args.report_version_id,
+            actor_id=args.actor_id,
+            reason=args.reason,
+            expected_approval_revision=args.expected_approval_revision,
+        ).to_schema_dict()
+    if args.report_command == "approval-show":
+        approval = services.reports.get_approval(args.report_version_id)
+        return None if approval is None else approval.to_schema_dict()
+    if args.report_command == "custody-snapshot-create":
+        return services.reports.create_custody_snapshot(
+            report_version_id=args.report_version_id,
+            captured_by=args.captured_by,
+            evidence_ids=args.evidence_id or None,
+        ).to_schema_dict()
+    if args.report_command == "custody-snapshot-show":
+        return services.reports.get_custody_snapshot(args.custody_snapshot_id).to_schema_dict()
+    if args.report_command == "package-create":
+        return services.reports.create_render_package(
+            report_version_id=args.report_version_id,
+            created_by=args.created_by,
+            for_export=args.for_export,
+            custody_snapshot_id=args.custody_snapshot_id,
+            stale_confirmed=args.stale_confirmed,
+        ).to_schema_dict()
+    if args.report_command == "package-show":
+        return services.reports.get_render_package(args.package_id).to_schema_dict()
+    if args.report_command == "export-prepare":
+        return services.reports.prepare_export(
+            report_version_id=args.report_version_id,
+            format=args.format,
+            filename=args.filename,
+            created_by=args.created_by,
+            redaction_policy=args.redaction_policy,
+            overwrite_policy=args.overwrite_policy,
+            include_citations=not args.no_citations,
+            include_custody=not args.no_custody,
+            include_technical_appendix=not args.no_technical_appendix,
+            stale_confirmed=args.stale_confirmed,
+        ).to_schema_dict()
+    if args.report_command == "export-status":
+        return services.reports.export_status(args.export_manifest_id)
+    if args.report_command == "export-record-result":
+        result = services.reports.record_export_result(
+            export_manifest_id=args.export_manifest_id,
+            payload=_json_input(args),
+        )
+        return result.to_schema_dict()
+    if args.report_command == "export-capabilities":
+        return services.reports.renderer_capabilities().to_schema_dict()
+    raise ValidationError("Unknown report command.", target="report_command")
+
+
 def _interface(args: Namespace, services: Any) -> Any:
     if args.interface_command == "version":
         return services.interface.version().to_schema_dict()
@@ -961,6 +1156,20 @@ def _json_input(args: Namespace) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValidationError("JSON input must be an object.", target="input_json")
     return parsed
+
+
+def _required_json_field(payload: dict[str, Any], field: str) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or value == "":
+        raise ValidationError("JSON input field must be a non-empty string.", target=field)
+    return value
+
+
+def _required_json_list(payload: dict[str, Any], field: str) -> list[Any]:
+    value = payload.get(field)
+    if not isinstance(value, list):
+        raise ValidationError("JSON input field must be a list.", target=field)
+    return value
 
 
 def _context_updates(args: Namespace) -> dict[str, Any]:

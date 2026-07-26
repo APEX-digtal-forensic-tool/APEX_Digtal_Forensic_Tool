@@ -681,3 +681,21 @@ AnalysisContextSnapshot
 The engine owns request fingerprints, TTL expiry, citation/resource validation, review history, and keyword promotion into existing keyword-set versions. The provider port is deliberately inert by default and returns `CAPABILITY_UNAVAILABLE`; any external provider output must re-enter through the same ingestion validators. AI rows never update artifacts, timeline events, filesystem nodes, or observed fact tables.
 
 Promotion is a controlled bridge from reviewed AI recommendation to Search. It requires accepted or corrected review state, preserves AI provenance, checks duplicates, respects regex confirmation, creates a draft keyword-set version, and does not execute search or activate the set. MCP transport, prompt orchestration, provider credentials, token accounting, and agent loops remain outside the core package.
+
+## 33. Phase 8 Report Runtime Architecture
+
+Phase 8 adds `ReportService` as an application-layer contract service above Context, AI Assistance, Custody, Evidence, Search, and Timeline repositories:
+
+```text
+Analyst/AI draft JSON
+    -> ReportService validation
+    -> reports / immutable report_versions / report_version_sections
+    -> report_review_events / report_approval_records
+    -> custody_snapshots
+    -> report_render_packages / report_export_manifests
+    -> rendered_report_artifacts / report_export_audit_events
+```
+
+The report aggregate header is mutable only for workflow state and active-version pointers. Report versions, sections, review events, approval records, custody snapshots, rendered artifact metadata, and export audit events are append-only. Approval is locked to one `content_fingerprint`; any new version requires review and approval again.
+
+The renderer boundary is provider-neutral. `ReportRendererPort` exposes capabilities, package validation, render, cancel, and output verification hooks, while `UnavailableReportRenderer` is the production default. Phase 8 deliberately excludes runtime PDF/HTML rendering, HTML templates, CSS, ReportLab/WeasyPrint/Chromium/Pandoc adapters, shell execution, arbitrary local output paths, network renderer calls, MCP tool registration, LLM calls, prompt persistence, and GUI preview.

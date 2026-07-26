@@ -185,6 +185,83 @@ _OPERATION_ALIASES: dict[str, str] = {
     "ai.scope_summary.review": "ai.scope-summary.review",
     "ai.keyword-recommendation.promote": "ai.keyword-recommendation.promote",
     "ai.keyword_recommendation.promote": "ai.keyword-recommendation.promote",
+    "report.get": "report.get",
+    "apex.report.get": "report.get",
+    "report.list": "report.list",
+    "apex.report.list": "report.list",
+    "report.version.get": "report.version.get",
+    "report.version_get": "report.version.get",
+    "apex.report.version.get": "report.version.get",
+    "report.version.list": "report.version.list",
+    "report.version_list": "report.version.list",
+    "apex.report.version.list": "report.version.list",
+    "report.version.compare": "report.version.compare",
+    "report.version_compare": "report.version.compare",
+    "apex.report.version.compare": "report.version.compare",
+    "report.review.history": "report.review.history",
+    "report.review_history": "report.review.history",
+    "apex.report.review.history": "report.review.history",
+    "report.approval.get": "report.approval.get",
+    "report.approval_get": "report.approval.get",
+    "apex.report.approval.get": "report.approval.get",
+    "report.custody-snapshot.get": "report.custody-snapshot.get",
+    "report.custody_snapshot.get": "report.custody-snapshot.get",
+    "apex.report.custody-snapshot.get": "report.custody-snapshot.get",
+    "report.render-package.get": "report.render-package.get",
+    "report.render_package.get": "report.render-package.get",
+    "apex.report.render-package.get": "report.render-package.get",
+    "report.export-manifest.get": "report.export-manifest.get",
+    "report.export_manifest.get": "report.export-manifest.get",
+    "apex.report.export-manifest.get": "report.export-manifest.get",
+    "report.export-status": "report.export-status",
+    "report.export_status": "report.export-status",
+    "apex.report.export-status": "report.export-status",
+    "report.capabilities": "report.capabilities",
+    "apex.report.capabilities": "report.capabilities",
+    "report.create": "report.create",
+    "apex.report.create": "report.create",
+    "report.version.create": "report.version.create",
+    "report.version_create": "report.version.create",
+    "apex.report.version.create": "report.version.create",
+    "report.ai-draft.ingest": "report.ai-draft.ingest",
+    "report.ai_draft.ingest": "report.ai-draft.ingest",
+    "apex.report.ai-draft.ingest": "report.ai-draft.ingest",
+    "report.review.submit": "report.review.submit",
+    "apex.report.review.submit": "report.review.submit",
+    "report.review.comment": "report.review.comment",
+    "apex.report.review.comment": "report.review.comment",
+    "report.review.request-changes": "report.review.request-changes",
+    "report.review.request_changes": "report.review.request-changes",
+    "apex.report.review.request-changes": "report.review.request-changes",
+    "report.review.accept-section": "report.review.accept-section",
+    "report.review.accept_section": "report.review.accept-section",
+    "apex.report.review.accept-section": "report.review.accept-section",
+    "report.review.reject-section": "report.review.reject-section",
+    "report.review.reject_section": "report.review.reject-section",
+    "apex.report.review.reject-section": "report.review.reject-section",
+    "report.review.complete": "report.review.complete",
+    "apex.report.review.complete": "report.review.complete",
+    "report.review.reopen": "report.review.reopen",
+    "apex.report.review.reopen": "report.review.reopen",
+    "report.approve": "report.approve",
+    "apex.report.approve": "report.approve",
+    "report.reject": "report.reject",
+    "apex.report.reject": "report.reject",
+    "report.approval.revoke": "report.approval.revoke",
+    "apex.report.approval.revoke": "report.approval.revoke",
+    "report.custody-snapshot.create": "report.custody-snapshot.create",
+    "report.custody_snapshot.create": "report.custody-snapshot.create",
+    "apex.report.custody-snapshot.create": "report.custody-snapshot.create",
+    "report.render-package.create": "report.render-package.create",
+    "report.render_package.create": "report.render-package.create",
+    "apex.report.render-package.create": "report.render-package.create",
+    "report.export.prepare": "report.export.prepare",
+    "apex.report.export.prepare": "report.export.prepare",
+    "report.export.record-result": "report.export.record-result",
+    "report.export.record_result": "report.export.record-result",
+    "apex.report.export.record-result": "report.export.record-result",
+    "report.archive": "report.archive",
+    "apex.report.archive": "report.archive",
 }
 _TOOL_DESCRIPTOR_SPECS: tuple[
     tuple[str, str, str, str, str, list[str], bool, bool, bool, bool, bool, int], ...
@@ -526,6 +603,310 @@ _TOOL_DESCRIPTOR_SPECS: tuple[
         1,
     ),
 )
+
+
+_REPORT_DESCRIPTOR_SCHEMAS: dict[str, tuple[str, str, bool, bool, bool, bool, bool, int]] = {
+    "report.get": (
+        "report-record.schema.json",
+        "report-record.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.list": (
+        "report-record.schema.json",
+        "api-response.schema.json",
+        False,
+        False,
+        True,
+        True,
+        True,
+        1000,
+    ),
+    "report.version.get": (
+        "report-version.schema.json",
+        "report-version.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.version.list": (
+        "report-version.schema.json",
+        "api-response.schema.json",
+        False,
+        False,
+        True,
+        True,
+        True,
+        1000,
+    ),
+    "report.version.compare": (
+        "report-version.schema.json",
+        "api-response.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.history": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1000,
+    ),
+    "report.approval.get": (
+        "report-approval-record.schema.json",
+        "report-approval-record.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.custody-snapshot.get": (
+        "custody-snapshot.schema.json",
+        "custody-snapshot.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.render-package.get": (
+        "report-render-package.schema.json",
+        "report-render-package.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.export-manifest.get": (
+        "report-export-manifest.schema.json",
+        "report-export-manifest.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.export-status": (
+        "report-export-manifest.schema.json",
+        "api-response.schema.json",
+        False,
+        False,
+        False,
+        True,
+        True,
+        100,
+    ),
+    "report.capabilities": (
+        "report-renderer-capability.schema.json",
+        "report-renderer-capability.schema.json",
+        False,
+        False,
+        False,
+        True,
+        False,
+        1,
+    ),
+    "report.create": (
+        "report-record.schema.json",
+        "report-record.schema.json",
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.version.create": (
+        "report-version.schema.json",
+        "report-version.schema.json",
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.ai-draft.ingest": (
+        "ai-report-draft-input.schema.json",
+        "report-version.schema.json",
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.submit": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.comment": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.request-changes": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.accept-section": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.reject-section": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.complete": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.review.reopen": (
+        "report-review-event.schema.json",
+        "report-review-event.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.approve": (
+        "report-approval-record.schema.json",
+        "report-approval-record.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.reject": (
+        "report-approval-record.schema.json",
+        "report-approval-record.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.approval.revoke": (
+        "report-approval-record.schema.json",
+        "report-approval-record.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.custody-snapshot.create": (
+        "custody-snapshot.schema.json",
+        "custody-snapshot.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.render-package.create": (
+        "report-render-package.schema.json",
+        "report-render-package.schema.json",
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.export.prepare": (
+        "report-export-manifest.schema.json",
+        "report-export-manifest.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.export.record-result": (
+        "rendered-report-artifact.schema.json",
+        "rendered-report-artifact.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+    "report.archive": (
+        "report-record.schema.json",
+        "report-record.schema.json",
+        True,
+        True,
+        False,
+        True,
+        True,
+        1,
+    ),
+}
 
 
 
@@ -2871,6 +3252,7 @@ class EngineInterfaceService:
         contexts: ContextService,
         views: ViewProjectionService,
         ai: Any | None = None,
+        reports: Any | None = None,
         clock: Clock,
         id_generator: IdGenerator,
     ) -> None:
@@ -2878,6 +3260,7 @@ class EngineInterfaceService:
         self._contexts = contexts
         self._views = views
         self._ai = ai
+        self._reports = reports
         self._clock = clock
         self._id_generator = id_generator
         self._register_default_tool_descriptors()
@@ -2902,6 +3285,10 @@ class EngineInterfaceService:
                 "AI_RESULT_VALIDATION",
                 "AI_HUMAN_VERIFICATION",
                 "AI_KEYWORD_PROMOTION",
+                "REPORT_ENGINE_CONTRACT",
+                "REPORT_REVIEW_APPROVAL",
+                "REPORT_CUSTODY_SNAPSHOT",
+                "REPORT_EXPORT_MANIFEST",
             ],
             unavailable_capabilities=[
                 "REST_SERVER",
@@ -2909,6 +3296,11 @@ class EngineInterfaceService:
                 "LLM_PROVIDER",
                 "RUNTIME_AI_PROVIDER",
                 "PROMPT_TEMPLATE",
+                "RUNTIME_REPORT_RENDERER",
+                "PDF_RENDERING",
+                "HTML_RENDERING",
+                "AI_REPORT_DRAFT_GENERATION",
+                "GUI_REPORT_PREVIEW",
                 "DISK_IMAGE_RAW_OFFSET",
             ],
             generated_at=self._clock.now(),
@@ -3319,6 +3711,13 @@ class EngineInterfaceService:
                         request_id=request_id,
                         correlation_id=correlation_id,
                     )
+            if canonical_operation.startswith("report."):
+                return self._invoke_report(
+                    canonical_operation,
+                    request,
+                    request_id=request_id,
+                    correlation_id=correlation_id,
+                )
             raise UnsupportedCapabilityError(
                 "Unknown public read operation.", target="operation", required_capability=operation
             )
@@ -3336,6 +3735,242 @@ class EngineInterfaceService:
         return self.invoke_read(
             operation,
             payload,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+
+    def _invoke_report(
+        self,
+        operation: str,
+        request: Mapping[str, Any],
+        *,
+        request_id: str | None,
+        correlation_id: str | None,
+    ) -> dict[str, Any]:
+        reports = self._require_report_service()
+        if operation == "report.capabilities":
+            data = reports.capabilities()
+        elif operation == "report.create":
+            data = reports.create_report(
+                case_id=self._required_string(request, "case_id"),
+                title=self._required_string(request, "title"),
+                created_by=self._required_string(request, "created_by"),
+                description=self._optional_string(request, "description"),
+                report_type=self._optional_string(request, "report_type") or "INVESTIGATION",
+                locale=self._optional_string(request, "locale"),
+                timezone=self._optional_string(request, "timezone"),
+            )
+        elif operation == "report.get":
+            data = reports.get_report(self._required_string(request, "report_id"))
+        elif operation == "report.list":
+            data = reports.list_reports(
+                case_id=self._required_string(request, "case_id"),
+                cursor=self._optional_string(request, "cursor"),
+                limit=self._optional_integer(request, "limit", 100, minimum=1, maximum=1000),
+            )
+        elif operation == "report.archive":
+            data = reports.archive_report(
+                report_id=self._required_string(request, "report_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+            )
+        elif operation == "report.version.create":
+            data = reports.create_version(
+                report_id=self._required_string(request, "report_id"),
+                source_kind=self._optional_string(request, "source_kind") or "ANALYST_DRAFT",
+                created_by=self._required_string(request, "created_by"),
+                title=self._required_string(request, "title"),
+                executive_summary=self._required_string(request, "executive_summary"),
+                sections=self._required_object_list(request, "sections"),
+                source_reference_id=self._optional_string(request, "source_reference_id"),
+                context_snapshot_ids=self._optional_string_list(request, "context_snapshot_ids"),
+                evidence_ids=self._optional_string_list(request, "evidence_ids"),
+                search_execution_ids=self._optional_string_list(request, "search_execution_ids"),
+                timeline_revisions=self._optional_integer_list(request, "timeline_revisions"),
+                ai_assistance_request_ids=self._optional_string_list(
+                    request, "ai_assistance_request_ids"
+                ),
+                ai_result_ids=self._optional_string_list(request, "ai_result_ids"),
+                citations=self._optional_object_list(request, "citations"),
+                limitations=self._optional_string_list(request, "limitations"),
+                analyzer_versions=self._optional_object_payload(request, "analyzer_versions"),
+            )
+        elif operation == "report.ai-draft.ingest":
+            data = reports.ingest_ai_draft(
+                payload=self._object_payload(request),
+                report_id=self._optional_string(request, "report_id"),
+                created_by=self._optional_string(request, "created_by") or "external-ai-layer",
+            )
+        elif operation == "report.version.get":
+            data = reports.get_version(self._required_string(request, "report_version_id"))
+        elif operation == "report.version.list":
+            data = reports.list_versions(self._required_string(request, "report_id"))
+        elif operation == "report.version.compare":
+            data = reports.compare_versions(
+                self._required_string(request, "left_report_version_id"),
+                self._required_string(request, "right_report_version_id"),
+            )
+        elif operation == "report.review.submit":
+            data = reports.submit_review(
+                report_version_id=self._required_string(request, "report_version_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+            )
+        elif operation == "report.review.comment":
+            data = reports.comment_review(
+                report_version_id=self._required_string(request, "report_version_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                comment=self._required_string(request, "comment"),
+                section_id=self._optional_string(request, "section_id"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+            )
+        elif operation == "report.review.request-changes":
+            data = reports.request_changes(
+                report_version_id=self._required_string(request, "report_version_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                requested_changes=self._optional_string_list(request, "requested_changes") or [],
+                section_id=self._optional_string(request, "section_id"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+            )
+        elif operation == "report.review.accept-section":
+            data = reports.accept_section(
+                report_version_id=self._required_string(request, "report_version_id"),
+                section_id=self._required_string(request, "section_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                comment=self._optional_string(request, "comment"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+            )
+        elif operation == "report.review.reject-section":
+            data = reports.reject_section(
+                report_version_id=self._required_string(request, "report_version_id"),
+                section_id=self._required_string(request, "section_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                requested_changes=self._optional_string_list(request, "requested_changes"),
+                comment=self._optional_string(request, "comment"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+            )
+        elif operation == "report.review.complete":
+            data = reports.complete_review(
+                report_version_id=self._required_string(request, "report_version_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+            )
+        elif operation == "report.review.reopen":
+            data = reports.reopen_review(
+                report_version_id=self._required_string(request, "report_version_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+            )
+        elif operation == "report.review.history":
+            data = reports.review_history(self._required_string(request, "report_version_id"))
+        elif operation == "report.approve":
+            data = reports.approve(
+                report_version_id=self._required_string(request, "report_version_id"),
+                approver_id=self._required_string(request, "approver_id"),
+                reason=self._required_string(request, "reason"),
+                custody_snapshot_id=self._optional_string(request, "custody_snapshot_id"),
+                expected_review_revision=self._optional_integer_or_none(
+                    request, "expected_review_revision", minimum=0
+                ),
+                expected_approval_revision=self._optional_integer_or_none(
+                    request, "expected_approval_revision", minimum=0
+                ),
+            )
+        elif operation == "report.reject":
+            data = reports.reject(
+                report_version_id=self._required_string(request, "report_version_id"),
+                approver_id=self._required_string(request, "approver_id"),
+                reason=self._required_string(request, "reason"),
+                expected_approval_revision=self._optional_integer_or_none(
+                    request, "expected_approval_revision", minimum=0
+                ),
+            )
+        elif operation == "report.approval.revoke":
+            data = reports.revoke_approval(
+                report_version_id=self._required_string(request, "report_version_id"),
+                actor_id=self._required_string(request, "actor_id"),
+                reason=self._required_string(request, "reason"),
+                expected_approval_revision=self._optional_integer_or_none(
+                    request, "expected_approval_revision", minimum=0
+                ),
+            )
+        elif operation == "report.approval.get":
+            data = reports.get_approval(self._required_string(request, "report_version_id"))
+        elif operation == "report.custody-snapshot.create":
+            data = reports.create_custody_snapshot(
+                report_version_id=self._required_string(request, "report_version_id"),
+                captured_by=self._required_string(request, "captured_by"),
+                evidence_ids=self._optional_string_list(request, "evidence_ids"),
+            )
+        elif operation == "report.custody-snapshot.get":
+            data = reports.get_custody_snapshot(
+                self._required_string(request, "custody_snapshot_id")
+            )
+        elif operation == "report.render-package.create":
+            data = reports.create_render_package(
+                report_version_id=self._required_string(request, "report_version_id"),
+                created_by=self._required_string(request, "created_by"),
+                for_export=bool(request.get("for_export", False)),
+                custody_snapshot_id=self._optional_string(request, "custody_snapshot_id"),
+                stale_confirmed=bool(request.get("stale_confirmed", False)),
+            )
+        elif operation == "report.render-package.get":
+            data = reports.get_render_package(self._required_string(request, "package_id"))
+        elif operation == "report.export.prepare":
+            data = reports.prepare_export(
+                report_version_id=self._required_string(request, "report_version_id"),
+                format=self._required_string(request, "format"),
+                filename=self._required_string(request, "filename"),
+                created_by=self._required_string(request, "created_by"),
+                redaction_policy=self._optional_string(request, "redaction_policy") or "STANDARD",
+                overwrite_policy=self._optional_string(request, "overwrite_policy") or "DENY",
+                include_citations=bool(request.get("include_citations", True)),
+                include_custody=bool(request.get("include_custody", True)),
+                include_technical_appendix=bool(
+                    request.get("include_technical_appendix", True)
+                ),
+                stale_confirmed=bool(request.get("stale_confirmed", False)),
+            )
+        elif operation == "report.export-manifest.get":
+            data = reports.get_export_manifest(
+                self._required_string(request, "export_manifest_id")
+            )
+        elif operation == "report.export-status":
+            data = reports.export_status(self._required_string(request, "export_manifest_id"))
+        elif operation == "report.export.record-result":
+            data = reports.record_export_result(
+                export_manifest_id=self._required_string(request, "export_manifest_id"),
+                payload=self._object_payload(request),
+            )
+        else:
+            raise UnsupportedCapabilityError(
+                "Unknown report operation.",
+                target="operation",
+                required_capability=operation,
+            )
+        return self.success(
+            self._schema_data(data),
             request_id=request_id,
             correlation_id=correlation_id,
         )
@@ -3373,6 +4008,16 @@ class EngineInterfaceService:
                 target=field,
             )
         return dict(nested)
+
+    @staticmethod
+    def _schema_data(value: Any) -> Any:
+        if hasattr(value, "to_schema_dict"):
+            return value.to_schema_dict()
+        if isinstance(value, list):
+            return [EngineInterfaceService._schema_data(item) for item in value]
+        if isinstance(value, dict):
+            return {key: EngineInterfaceService._schema_data(item) for key, item in value.items()}
+        return value
 
     @staticmethod
     def _canonical_operation(operation: str) -> str:
@@ -3554,6 +4199,55 @@ class EngineInterfaceService:
             )
         return list(dict.fromkeys(value))
 
+    @staticmethod
+    def _optional_integer_list(payload: Mapping[str, Any], field: str) -> list[int] | None:
+        value = payload.get(field)
+        if value is None:
+            return None
+        if not isinstance(value, list) or any(isinstance(item, bool) for item in value):
+            raise ValidationError(
+                "Invocation payload field must be a list of integers.",
+                target=field,
+                details={"value": value},
+            )
+        parsed: list[int] = []
+        for item in value:
+            try:
+                parsed.append(int(item))
+            except (TypeError, ValueError) as error:
+                raise ValidationError(
+                    "Invocation payload field must be a list of integers.",
+                    target=field,
+                    details={"value": value},
+                ) from error
+        return list(dict.fromkeys(parsed))
+
+    @staticmethod
+    def _required_object_list(payload: Mapping[str, Any], field: str) -> list[Mapping[str, Any]]:
+        value = payload.get(field)
+        if not isinstance(value, list) or any(not isinstance(item, Mapping) for item in value):
+            raise ValidationError(
+                "Invocation payload field must be a list of objects.",
+                target=field,
+                details={"value": value},
+            )
+        return [dict(item) for item in value]
+
+    @staticmethod
+    def _optional_object_list(
+        payload: Mapping[str, Any], field: str
+    ) -> list[Mapping[str, Any]] | None:
+        value = payload.get(field)
+        if value is None:
+            return None
+        if not isinstance(value, list) or any(not isinstance(item, Mapping) for item in value):
+            raise ValidationError(
+                "Invocation payload field must be a list of objects.",
+                target=field,
+                details={"value": value},
+            )
+        return [dict(item) for item in value]
+
     def _require_ai_service(self) -> Any:
         if self._ai is None:
             raise UnsupportedCapabilityError(
@@ -3562,6 +4256,15 @@ class EngineInterfaceService:
                 required_capability="AI_ASSISTANCE_ENGINE_CONTRACT",
             )
         return self._ai
+
+    def _require_report_service(self) -> Any:
+        if self._reports is None:
+            raise UnsupportedCapabilityError(
+                "Report service is not available.",
+                target="operation",
+                required_capability="REPORT_ENGINE_CONTRACT",
+            )
+        return self._reports
 
     def _register_default_tool_descriptors(self) -> None:
         for spec in _TOOL_DESCRIPTOR_SPECS:
@@ -3594,3 +4297,30 @@ class EngineInterfaceService:
                 max_result_items,
             )
             self._repository.save_engine_tool_descriptor(descriptor)
+        for tool_name, values in _REPORT_DESCRIPTOR_SCHEMAS.items():
+            (
+                input_schema_ref,
+                output_schema_ref,
+                mutates_state,
+                requires_confirmation,
+                supports_pagination,
+                supports_partial,
+                supports_citation,
+                max_result_items,
+            ) = values
+            self._repository.save_engine_tool_descriptor(
+                EngineToolDescriptor(
+                    tool_name,
+                    INTERFACE_VERSION,
+                    f"tool.{tool_name.replace('-', '_')}",
+                    input_schema_ref,
+                    output_schema_ref,
+                    ["REPORT_ENGINE_CONTRACT"],
+                    mutates_state,
+                    requires_confirmation,
+                    supports_pagination,
+                    supports_partial,
+                    supports_citation,
+                    max_result_items,
+                )
+            )

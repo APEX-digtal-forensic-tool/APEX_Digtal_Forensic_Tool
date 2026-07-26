@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 Forensic Core Engine은 **Phase 7 AI Assistance Engine Contract 구현과 Windows·Linux 회귀 검증 완료** 상태입니다.
-> Phase 1~6의 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata, Machine-extracted Candidate, GUI Context, Analysis Context Snapshot, View Projection, Raw Read 및 Public Engine Interface 기반 위에 AI Assistance Request, 외부 AI 결과 검증·저장, Human Verification, Keyword Promotion 계약이 구현되었습니다.
+> 현재 Forensic Core Engine은 **Phase 8 Report Review / Approval / Export Contract 구현** 상태입니다.
+> Phase 1~7의 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata, Machine-extracted Candidate, GUI Context, Analysis Context Snapshot, View Projection, Raw Read, Public Engine Interface 및 AI Assistance Engine Contract 기반 위에 Report Aggregate, Immutable Version, Section/Citation 검증, Human Review/Approval, Custody Snapshot, Render Package, Export Manifest, Renderer Port 계약이 구현되었습니다.
 >
-> GUI Session Context는 Revision·TTL 기반으로 관리하고 Analysis Context Snapshot은 Case·Resource Revision·Filter·Time Range·Search·Keyword·Timeline 출처를 보존하는 Append-only 구조로 저장합니다. AI Assistance는 Snapshot 기반 요청과 검증된 외부 Keyword Recommendation·Scope Summary만 저장하며, 결과는 Observed Fact와 분리됩니다. 실제 GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, AI Provider 실행, PDF·HTML Report Renderer, Disk Image 내부 File System Parsing 및 삭제 파일 복구는 이후 단계 또는 별도 담당 범위입니다.
+> GUI Session Context는 Revision·TTL 기반으로 관리하고 Analysis Context Snapshot은 Case·Resource Revision·Filter·Time Range·Search·Keyword·Timeline 출처를 보존하는 Append-only 구조로 저장합니다. AI Assistance와 Report는 외부 Draft/Result를 검증·저장하는 Engine-side 계약이며, 결과는 Observed Fact와 분리됩니다. 실제 GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, AI Provider 실행, PDF·HTML Rendering, Disk Image 내부 File System Parsing 및 삭제 파일 복구는 이후 단계 또는 별도 담당 범위입니다.
 
 ---
 
@@ -1472,6 +1472,12 @@ APEX/
 - [x] Accepted/Corrected Keyword Promotion과 Search 자동 실행 차단
 - [x] `ai` CLI 및 Public Engine Interface AI Tool Descriptor
 - [x] Phase 7 JSON Schema 및 Unit·Integration Test
+- [x] Phase 8 Report Aggregate와 Immutable Version
+- [x] Analyst/AI Draft Ingest, Section/Citation/Snapshot/Evidence 검증
+- [x] Append-only Report Review/Approval Hash Chain
+- [x] Chain of Custody Snapshot과 Ledger Verification Metadata
+- [x] Render Package, Export Manifest, Renderer Port 기본 `CAPABILITY_UNAVAILABLE`
+- [x] `report` CLI, Public Engine Interface Report Tool Descriptor, JSON Schema 및 Test
 
 ### 구현 예정
 
@@ -1486,7 +1492,7 @@ APEX/
 - [ ] Raster Thumbnail Rendering 및 제한된 Video Frame Sampling
 - [ ] 실제 OCR / STT Provider 및 Candidate Extraction
 - [ ] 외부 AI Adapter 품질 평가와 실제 Provider 통합 검증
-- [ ] Report Review / Approval / PDF·HTML Export
+- [ ] 실제 PDF·HTML Renderer Adapter와 GUI Report Preview
 - [ ] 한국어 Search 및 Localization
 - [ ] 성능 Benchmark 및 외부 전문가 검토
 - [ ] Windows Desktop Packaging
@@ -1622,13 +1628,18 @@ APEX/
 - [x] 승인/수정된 Keyword Candidate의 Keyword Set Promotion
 - [x] Runtime LLM/MCP/Prompt/Provider 실행 코드 제외
 
-### Phase 8 — Report 및 Chain of Custody
+### Phase 8 — Report 및 Chain of Custody — 완료
 
-- AI Draft
-- Human Review
-- Approval
-- Chain of Custody Section
-- PDF / HTML Export
+- [x] Analyst Draft와 외부 AI Draft Ingest
+- [x] ReportRecord / Immutable ReportVersion / ReportSection
+- [x] Source Kind, Citation, Context Snapshot, Evidence, Search, Timeline, AI Result Provenance
+- [x] Partial / Stale / Coverage / Limitations 보존
+- [x] Human Review, Section Review, Approval, Reject, Revoke Event Hash Chain
+- [x] 승인 후 새 Version 생성과 재승인 요구
+- [x] Chain of Custody Snapshot / Verification Metadata
+- [x] Export Render Package / Manifest / Audit / Rendered Artifact Metadata 계약
+- [x] Provider-neutral Renderer Port와 기본 `CAPABILITY_UNAVAILABLE`
+- [x] 실제 AI Draft 생성, LLM/Prompt/MCP, GUI Preview, PDF/HTML Rendering 제외
 
 ### Phase 9 — Benchmark 및 배포
 

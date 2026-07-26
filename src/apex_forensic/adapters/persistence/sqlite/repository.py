@@ -67,6 +67,7 @@ from apex_forensic.domain.models import (
     CandidateReviewEvent,
     Case,
     CustodyEvent,
+    CustodySnapshotRecord,
     EngineInterfaceVersion,
     EngineToolDescriptor,
     Evidence,
@@ -83,6 +84,15 @@ from apex_forensic.domain.models import (
     MachineExtractedCandidate,
     MediaArtifact,
     ProviderCapability,
+    RenderedReportArtifact,
+    ReportApprovalRecord,
+    ReportExportAuditEvent,
+    ReportExportManifest,
+    ReportRecord,
+    ReportRendererCapability,
+    ReportRenderPackage,
+    ReportReviewEvent,
+    ReportVersion,
     RevisionState,
     SearchCacheEntry,
     SearchDocument,
@@ -1873,6 +1883,205 @@ class SQLiteRepository:
                     PRIMARY KEY(provider_id, provider_version)
                 );
 
+                CREATE TABLE IF NOT EXISTS reports (
+                    report_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    title TEXT NOT NULL,
+                    report_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    active_version_id TEXT,
+                    latest_version_number INTEGER NOT NULL,
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    archived_at TEXT,
+                    report_fingerprint TEXT NOT NULL,
+                    report_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_reports_case
+                    ON reports(case_id, report_id);
+                CREATE INDEX IF NOT EXISTS idx_reports_status
+                    ON reports(case_id, status, updated_at DESC);
+
+                CREATE TABLE IF NOT EXISTS report_versions (
+                    report_version_id TEXT PRIMARY KEY,
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    version_number INTEGER NOT NULL,
+                    previous_version_id TEXT,
+                    source_kind TEXT NOT NULL,
+                    source_reference_id TEXT,
+                    content_fingerprint TEXT NOT NULL,
+                    previous_content_fingerprint TEXT,
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    version_json TEXT NOT NULL,
+                    UNIQUE(report_id, version_number),
+                    UNIQUE(report_id, content_fingerprint)
+                );
+                CREATE INDEX IF NOT EXISTS idx_report_versions_report
+                    ON report_versions(report_id, version_number);
+                CREATE INDEX IF NOT EXISTS idx_report_versions_content
+                    ON report_versions(case_id, content_fingerprint);
+
+                CREATE TABLE IF NOT EXISTS report_version_sections (
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    section_id TEXT NOT NULL,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    section_type TEXT NOT NULL,
+                    section_order INTEGER NOT NULL,
+                    section_fingerprint TEXT NOT NULL,
+                    section_json TEXT NOT NULL,
+                    PRIMARY KEY(report_version_id, section_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_report_sections_order
+                    ON report_version_sections(report_version_id, section_order, section_id);
+
+                CREATE TABLE IF NOT EXISTS report_version_references (
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    reference_type TEXT NOT NULL,
+                    reference_id TEXT NOT NULL,
+                    reference_json TEXT NOT NULL,
+                    PRIMARY KEY(report_version_id, reference_type, reference_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_report_references_case
+                    ON report_version_references(case_id, reference_type, reference_id);
+
+                CREATE TABLE IF NOT EXISTS report_review_events (
+                    review_event_id TEXT PRIMARY KEY,
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    action TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    review_revision INTEGER NOT NULL,
+                    previous_event_hash TEXT,
+                    event_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    event_json TEXT NOT NULL,
+                    UNIQUE(report_version_id, review_revision),
+                    UNIQUE(report_version_id, event_hash)
+                );
+                CREATE INDEX IF NOT EXISTS idx_report_review_events_version
+                    ON report_review_events(report_version_id, review_revision);
+
+                CREATE TABLE IF NOT EXISTS report_approval_records (
+                    approval_id TEXT PRIMARY KEY,
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    decision TEXT NOT NULL,
+                    content_fingerprint TEXT NOT NULL,
+                    custody_snapshot_id TEXT,
+                    approval_revision INTEGER NOT NULL,
+                    previous_approval_hash TEXT,
+                    approval_hash TEXT NOT NULL,
+                    decided_at TEXT NOT NULL,
+                    approval_json TEXT NOT NULL,
+                    UNIQUE(report_id, approval_revision),
+                    UNIQUE(report_id, approval_hash)
+                );
+                CREATE INDEX IF NOT EXISTS idx_report_approvals_version
+                    ON report_approval_records(report_version_id, approval_revision);
+
+                CREATE TABLE IF NOT EXISTS custody_snapshots (
+                    custody_snapshot_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    verification_status TEXT NOT NULL,
+                    ledger_head_hash TEXT,
+                    snapshot_fingerprint TEXT NOT NULL UNIQUE,
+                    captured_at TEXT NOT NULL,
+                    snapshot_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS custody_snapshot_events (
+                    custody_snapshot_id TEXT NOT NULL
+                        REFERENCES custody_snapshots(custody_snapshot_id),
+                    custody_event_id TEXT NOT NULL REFERENCES custody_events(event_id),
+                    event_order INTEGER NOT NULL,
+                    PRIMARY KEY(custody_snapshot_id, custody_event_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS report_render_packages (
+                    package_id TEXT PRIMARY KEY,
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    custody_snapshot_id TEXT,
+                    package_fingerprint TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    package_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_report_packages_version
+                    ON report_render_packages(report_version_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS report_export_manifests (
+                    export_manifest_id TEXT PRIMARY KEY,
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    format TEXT NOT NULL,
+                    render_package_id TEXT NOT NULL REFERENCES report_render_packages(package_id),
+                    approval_id TEXT NOT NULL REFERENCES report_approval_records(approval_id),
+                    custody_snapshot_id TEXT,
+                    status TEXT NOT NULL,
+                    requested_filename TEXT NOT NULL,
+                    content_fingerprint TEXT NOT NULL,
+                    manifest_fingerprint TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    manifest_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_report_exports_version
+                    ON report_export_manifests(report_version_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS rendered_report_artifacts (
+                    rendered_artifact_id TEXT PRIMARY KEY,
+                    export_manifest_id TEXT NOT NULL
+                        REFERENCES report_export_manifests(export_manifest_id),
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    format TEXT NOT NULL,
+                    output_reference TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    artifact_fingerprint TEXT NOT NULL UNIQUE,
+                    rendered_at TEXT NOT NULL,
+                    artifact_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS report_export_audit_events (
+                    audit_event_id TEXT PRIMARY KEY,
+                    export_manifest_id TEXT NOT NULL
+                        REFERENCES report_export_manifests(export_manifest_id),
+                    report_id TEXT NOT NULL REFERENCES reports(report_id),
+                    report_version_id TEXT NOT NULL REFERENCES report_versions(report_version_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    action TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    previous_event_hash TEXT,
+                    event_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    event_json TEXT NOT NULL,
+                    UNIQUE(export_manifest_id, event_hash)
+                );
+
+                CREATE TABLE IF NOT EXISTS report_renderer_capabilities (
+                    renderer_id TEXT NOT NULL,
+                    renderer_version TEXT NOT NULL,
+                    supported_formats_json TEXT NOT NULL,
+                    is_available INTEGER NOT NULL,
+                    unavailable_reason TEXT,
+                    warnings_json TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    capability_version TEXT NOT NULL,
+                    capability_json TEXT NOT NULL,
+                    PRIMARY KEY(renderer_id, renderer_version)
+                );
+
                 CREATE TABLE IF NOT EXISTS view_projections (
                     projection_id TEXT PRIMARY KEY,
                     case_id TEXT NOT NULL REFERENCES cases(case_id),
@@ -2039,6 +2248,78 @@ class SQLiteRepository:
                 BEGIN
                     SELECT RAISE(ABORT, 'ai_keyword_promotions are append-only');
                 END;
+
+                CREATE TRIGGER IF NOT EXISTS report_versions_no_update
+                BEFORE UPDATE ON report_versions
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_versions are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS report_versions_no_delete
+                BEFORE DELETE ON report_versions
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_versions are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS report_review_events_no_update
+                BEFORE UPDATE ON report_review_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_review_events are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS report_review_events_no_delete
+                BEFORE DELETE ON report_review_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_review_events are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS report_approval_records_no_update
+                BEFORE UPDATE ON report_approval_records
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_approval_records are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS report_approval_records_no_delete
+                BEFORE DELETE ON report_approval_records
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_approval_records are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS custody_snapshots_no_update
+                BEFORE UPDATE ON custody_snapshots
+                BEGIN
+                    SELECT RAISE(ABORT, 'custody_snapshots are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS custody_snapshots_no_delete
+                BEFORE DELETE ON custody_snapshots
+                BEGIN
+                    SELECT RAISE(ABORT, 'custody_snapshots are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS rendered_report_artifacts_no_update
+                BEFORE UPDATE ON rendered_report_artifacts
+                BEGIN
+                    SELECT RAISE(ABORT, 'rendered_report_artifacts are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS rendered_report_artifacts_no_delete
+                BEFORE DELETE ON rendered_report_artifacts
+                BEGIN
+                    SELECT RAISE(ABORT, 'rendered_report_artifacts are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS report_export_audit_events_no_update
+                BEFORE UPDATE ON report_export_audit_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_export_audit_events are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS report_export_audit_events_no_delete
+                BEFORE DELETE ON report_export_audit_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'report_export_audit_events are append-only');
+                END;
                 """
             )
             self._ensure_column("jobs", "job_revision", "INTEGER NOT NULL DEFAULT 1")
@@ -2109,6 +2390,13 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("phase7-ai-assistance-engine-contract", to_json_timestamp(utc_now())),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("phase8-report-review-export-contract", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -6481,6 +6769,668 @@ class SQLiteRepository:
                     self._json(capability.warnings),
                     to_json_timestamp(generated_at),
                     capability.capability_version,
+                ),
+            )
+
+    def save_report(self, report: ReportRecord) -> None:
+        """Persist a report aggregate header."""
+
+        data = report.to_schema_dict()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO reports (
+                    report_id, case_id, title, report_type, status, active_version_id,
+                    latest_version_number, created_by, created_at, updated_at, archived_at,
+                    report_fingerprint, report_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report.report_id,
+                    report.case_id,
+                    report.title,
+                    report.report_type,
+                    report.status,
+                    report.active_version_id,
+                    report.latest_version_number,
+                    report.created_by,
+                    to_json_timestamp(report.created_at),
+                    to_json_timestamp(report.updated_at),
+                    None if report.archived_at is None else to_json_timestamp(report.archived_at),
+                    report.report_fingerprint,
+                    self._json(data),
+                ),
+            )
+
+    def _update_report_row(self, report: ReportRecord) -> None:
+        self.connection.execute(
+            """
+            UPDATE reports
+            SET title = ?,
+                report_type = ?,
+                status = ?,
+                active_version_id = ?,
+                latest_version_number = ?,
+                updated_at = ?,
+                archived_at = ?,
+                report_json = ?
+            WHERE report_id = ?
+            """,
+            (
+                report.title,
+                report.report_type,
+                report.status,
+                report.active_version_id,
+                report.latest_version_number,
+                to_json_timestamp(report.updated_at),
+                None if report.archived_at is None else to_json_timestamp(report.archived_at),
+                self._json(report.to_schema_dict()),
+                report.report_id,
+            ),
+        )
+
+    def update_report(self, report: ReportRecord) -> None:
+        """Update mutable report aggregate header state."""
+
+        with self.connection:
+            self._update_report_row(report)
+
+    def get_report(self, report_id: str) -> ReportRecord | None:
+        """Return one report aggregate."""
+
+        row = self.connection.execute(
+            "SELECT report_json FROM reports WHERE report_id = ?",
+            (report_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return ReportRecord.from_schema_dict(json.loads(str(row["report_json"])))
+
+    def list_reports(
+        self, *, case_id: str, after_report_id: str | None = None, limit: int
+    ) -> list[ReportRecord]:
+        """List reports for a case using stable report_id pagination."""
+
+        clauses = ["case_id = ?"]
+        params: list[Any] = [case_id]
+        if after_report_id is not None:
+            clauses.append("report_id > ?")
+            params.append(after_report_id)
+        params.append(limit)
+        rows = self.connection.execute(
+            f"""
+            SELECT report_json FROM reports
+            WHERE {" AND ".join(clauses)}
+            ORDER BY report_id
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+        return [ReportRecord.from_schema_dict(json.loads(str(row["report_json"]))) for row in rows]
+
+    def save_report_version(self, version: ReportVersion, report: ReportRecord) -> None:
+        """Persist an immutable report version and move the report header pointer."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO report_versions (
+                    report_version_id, report_id, case_id, version_number,
+                    previous_version_id, source_kind, source_reference_id,
+                    content_fingerprint, previous_content_fingerprint, created_by,
+                    created_at, version_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    version.report_version_id,
+                    version.report_id,
+                    version.case_id,
+                    version.version_number,
+                    version.previous_version_id,
+                    version.source_kind,
+                    version.source_reference_id,
+                    version.content_fingerprint,
+                    version.previous_content_fingerprint,
+                    version.created_by,
+                    to_json_timestamp(version.created_at),
+                    self._json(version.to_schema_dict()),
+                ),
+            )
+            for section in version.sections:
+                self.connection.execute(
+                    """
+                    INSERT INTO report_version_sections (
+                        report_version_id, section_id, case_id, report_id, section_type,
+                        section_order, section_fingerprint, section_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        version.report_version_id,
+                        section.section_id,
+                        version.case_id,
+                        version.report_id,
+                        section.section_type,
+                        section.order,
+                        section.section_fingerprint,
+                        self._json(section.to_schema_dict()),
+                    ),
+                )
+            for reference_type, values in {
+                "CONTEXT_SNAPSHOT": version.context_snapshot_ids,
+                "EVIDENCE": version.evidence_ids,
+                "SEARCH_EXECUTION": version.search_execution_ids,
+                "AI_ASSISTANCE_REQUEST": version.ai_assistance_request_ids,
+                "AI_RESULT": version.ai_result_ids,
+                "CITATION": version.citation_ids,
+            }.items():
+                for reference_id in values:
+                    self.connection.execute(
+                        """
+                        INSERT INTO report_version_references (
+                            report_version_id, case_id, reference_type, reference_id,
+                            reference_json
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            version.report_version_id,
+                            version.case_id,
+                            reference_type,
+                            reference_id,
+                            self._json({"reference_id": reference_id}),
+                        ),
+                    )
+            for timeline_revision in version.timeline_revisions:
+                self.connection.execute(
+                    """
+                    INSERT INTO report_version_references (
+                        report_version_id, case_id, reference_type, reference_id,
+                        reference_json
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        version.report_version_id,
+                        version.case_id,
+                        "TIMELINE_REVISION",
+                        str(timeline_revision),
+                        self._json({"timeline_revision": timeline_revision}),
+                    ),
+                )
+            self._update_report_row(report)
+
+    def get_report_version(self, report_version_id: str) -> ReportVersion | None:
+        """Return one immutable report version."""
+
+        row = self.connection.execute(
+            "SELECT version_json FROM report_versions WHERE report_version_id = ?",
+            (report_version_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return ReportVersion.from_schema_dict(json.loads(str(row["version_json"])))
+
+    def get_report_version_by_content_fingerprint(
+        self, report_id: str, content_fingerprint: str
+    ) -> ReportVersion | None:
+        """Return an existing version for idempotent draft ingest."""
+
+        row = self.connection.execute(
+            """
+            SELECT version_json FROM report_versions
+            WHERE report_id = ? AND content_fingerprint = ?
+            """,
+            (report_id, content_fingerprint),
+        ).fetchone()
+        if row is None:
+            return None
+        return ReportVersion.from_schema_dict(json.loads(str(row["version_json"])))
+
+    def list_report_versions(self, *, report_id: str) -> list[ReportVersion]:
+        """List immutable versions for a report."""
+
+        rows = self.connection.execute(
+            """
+            SELECT version_json FROM report_versions
+            WHERE report_id = ?
+            ORDER BY version_number, report_version_id
+            """,
+            (report_id,),
+        ).fetchall()
+        return [
+            ReportVersion.from_schema_dict(json.loads(str(row["version_json"]))) for row in rows
+        ]
+
+    def append_report_review_event(
+        self, event: ReportReviewEvent, report: ReportRecord
+    ) -> None:
+        """Append one report review event and update aggregate state."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO report_review_events (
+                    review_event_id, report_id, report_version_id, case_id, action,
+                    actor_id, review_revision, previous_event_hash, event_hash,
+                    created_at, event_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.review_event_id,
+                    event.report_id,
+                    event.report_version_id,
+                    event.case_id,
+                    event.action,
+                    event.actor_id,
+                    event.review_revision,
+                    event.previous_event_hash,
+                    event.event_hash,
+                    to_json_timestamp(event.created_at),
+                    self._json(event.to_schema_dict()),
+                ),
+            )
+            self._update_report_row(report)
+
+    def list_report_review_events(
+        self, *, report_version_id: str
+    ) -> list[ReportReviewEvent]:
+        """Return review events for one report version."""
+
+        rows = self.connection.execute(
+            """
+            SELECT event_json FROM report_review_events
+            WHERE report_version_id = ?
+            ORDER BY review_revision, review_event_id
+            """,
+            (report_version_id,),
+        ).fetchall()
+        return [
+            ReportReviewEvent.from_schema_dict(json.loads(str(row["event_json"])))
+            for row in rows
+        ]
+
+    def append_report_approval_record(
+        self, approval: ReportApprovalRecord, report: ReportRecord
+    ) -> None:
+        """Append one report approval decision and update aggregate state."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO report_approval_records (
+                    approval_id, report_id, report_version_id, case_id, decision,
+                    content_fingerprint, custody_snapshot_id, approval_revision,
+                    previous_approval_hash, approval_hash, decided_at, approval_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    approval.approval_id,
+                    approval.report_id,
+                    approval.report_version_id,
+                    approval.case_id,
+                    approval.decision,
+                    approval.content_fingerprint,
+                    approval.custody_snapshot_id,
+                    approval.approval_revision,
+                    approval.previous_approval_hash,
+                    approval.approval_hash,
+                    to_json_timestamp(approval.decided_at),
+                    self._json(approval.to_schema_dict()),
+                ),
+            )
+            self._update_report_row(report)
+
+    def list_report_approval_records(
+        self, *, report_id: str | None = None, report_version_id: str | None = None
+    ) -> list[ReportApprovalRecord]:
+        """List approval decisions by report or version."""
+
+        clauses: list[str] = []
+        params: list[Any] = []
+        if report_id is not None:
+            clauses.append("report_id = ?")
+            params.append(report_id)
+        if report_version_id is not None:
+            clauses.append("report_version_id = ?")
+            params.append(report_version_id)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.connection.execute(
+            f"""
+            SELECT approval_json FROM report_approval_records
+            {where}
+            ORDER BY approval_revision, approval_id
+            """,
+            tuple(params),
+        ).fetchall()
+        return [
+            ReportApprovalRecord.from_schema_dict(json.loads(str(row["approval_json"])))
+            for row in rows
+        ]
+
+    def save_custody_snapshot(self, snapshot: CustodySnapshotRecord) -> None:
+        """Persist one immutable report custody snapshot."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO custody_snapshots (
+                    custody_snapshot_id, case_id, report_id, report_version_id,
+                    verification_status, ledger_head_hash, snapshot_fingerprint,
+                    captured_at, snapshot_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    snapshot.custody_snapshot_id,
+                    snapshot.case_id,
+                    snapshot.report_id,
+                    snapshot.report_version_id,
+                    snapshot.verification_status,
+                    snapshot.ledger_head_hash,
+                    snapshot.snapshot_fingerprint,
+                    to_json_timestamp(snapshot.captured_at),
+                    self._json(snapshot.to_schema_dict()),
+                ),
+            )
+            for index, event_id in enumerate(snapshot.custody_event_ids, start=1):
+                self.connection.execute(
+                    """
+                    INSERT INTO custody_snapshot_events (
+                        custody_snapshot_id, custody_event_id, event_order
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (snapshot.custody_snapshot_id, event_id, index),
+                )
+
+    def get_custody_snapshot(
+        self, custody_snapshot_id: str
+    ) -> CustodySnapshotRecord | None:
+        """Return one report custody snapshot."""
+
+        row = self.connection.execute(
+            "SELECT snapshot_json FROM custody_snapshots WHERE custody_snapshot_id = ?",
+            (custody_snapshot_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return CustodySnapshotRecord.from_schema_dict(json.loads(str(row["snapshot_json"])))
+
+    def get_custody_snapshot_by_fingerprint(
+        self, snapshot_fingerprint: str
+    ) -> CustodySnapshotRecord | None:
+        """Return an existing custody snapshot for the same ledger state."""
+
+        row = self.connection.execute(
+            "SELECT snapshot_json FROM custody_snapshots WHERE snapshot_fingerprint = ?",
+            (snapshot_fingerprint,),
+        ).fetchone()
+        if row is None:
+            return None
+        return CustodySnapshotRecord.from_schema_dict(json.loads(str(row["snapshot_json"])))
+
+    def save_report_render_package(self, package: ReportRenderPackage) -> None:
+        """Persist one report render package."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO report_render_packages (
+                    package_id, report_id, report_version_id, case_id,
+                    custody_snapshot_id, package_fingerprint, created_at, package_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    package.package_id,
+                    package.report_id,
+                    package.report_version_id,
+                    package.case_id,
+                    package.custody_snapshot_id,
+                    package.package_fingerprint,
+                    to_json_timestamp(package.created_at),
+                    self._json(package.to_schema_dict()),
+                ),
+            )
+
+    def get_report_render_package(self, package_id: str) -> ReportRenderPackage | None:
+        """Return one report render package."""
+
+        row = self.connection.execute(
+            "SELECT package_json FROM report_render_packages WHERE package_id = ?",
+            (package_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return ReportRenderPackage.from_schema_dict(json.loads(str(row["package_json"])))
+
+    def get_report_render_package_by_fingerprint(
+        self, package_fingerprint: str
+    ) -> ReportRenderPackage | None:
+        """Return an existing package for deterministic regeneration."""
+
+        row = self.connection.execute(
+            "SELECT package_json FROM report_render_packages WHERE package_fingerprint = ?",
+            (package_fingerprint,),
+        ).fetchone()
+        if row is None:
+            return None
+        return ReportRenderPackage.from_schema_dict(json.loads(str(row["package_json"])))
+
+    def save_report_export_manifest(
+        self, manifest: ReportExportManifest, report: ReportRecord
+    ) -> None:
+        """Persist one export manifest and update aggregate state."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO report_export_manifests (
+                    export_manifest_id, report_id, report_version_id, case_id, format,
+                    render_package_id, approval_id, custody_snapshot_id, status,
+                    requested_filename, content_fingerprint, manifest_fingerprint,
+                    created_at, manifest_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    manifest.export_manifest_id,
+                    manifest.report_id,
+                    manifest.report_version_id,
+                    manifest.case_id,
+                    manifest.format,
+                    manifest.render_package_id,
+                    manifest.approval_id,
+                    manifest.custody_snapshot_id,
+                    manifest.status,
+                    manifest.requested_filename,
+                    manifest.content_fingerprint,
+                    manifest.manifest_fingerprint,
+                    to_json_timestamp(manifest.created_at),
+                    self._json(manifest.to_schema_dict()),
+                ),
+            )
+            self._update_report_row(report)
+
+    def get_report_export_manifest(
+        self, export_manifest_id: str
+    ) -> ReportExportManifest | None:
+        """Return one report export manifest."""
+
+        row = self.connection.execute(
+            "SELECT manifest_json FROM report_export_manifests WHERE export_manifest_id = ?",
+            (export_manifest_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return ReportExportManifest.from_schema_dict(json.loads(str(row["manifest_json"])))
+
+    def get_report_export_manifest_by_fingerprint(
+        self, manifest_fingerprint: str
+    ) -> ReportExportManifest | None:
+        """Return an existing manifest for idempotent export preparation."""
+
+        row = self.connection.execute(
+            """
+            SELECT manifest_json FROM report_export_manifests
+            WHERE manifest_fingerprint = ?
+            """,
+            (manifest_fingerprint,),
+        ).fetchone()
+        if row is None:
+            return None
+        return ReportExportManifest.from_schema_dict(json.loads(str(row["manifest_json"])))
+
+    def update_report_export_manifest(self, manifest: ReportExportManifest) -> None:
+        """Update mutable export manifest status/metadata."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE report_export_manifests
+                SET status = ?, manifest_json = ?
+                WHERE export_manifest_id = ?
+                """,
+                (
+                    manifest.status,
+                    self._json(manifest.to_schema_dict()),
+                    manifest.export_manifest_id,
+                ),
+            )
+
+    def save_rendered_report_artifact(
+        self,
+        artifact: RenderedReportArtifact,
+        manifest: ReportExportManifest,
+        report: ReportRecord,
+    ) -> None:
+        """Persist validated renderer output metadata and update manifest/report state."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO rendered_report_artifacts (
+                    rendered_artifact_id, export_manifest_id, report_version_id, format,
+                    output_reference, filename, size_bytes, sha256, artifact_fingerprint,
+                    rendered_at, artifact_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    artifact.rendered_artifact_id,
+                    artifact.export_manifest_id,
+                    artifact.report_version_id,
+                    artifact.format,
+                    artifact.output_reference,
+                    artifact.filename,
+                    artifact.size_bytes,
+                    artifact.sha256,
+                    artifact.artifact_fingerprint,
+                    to_json_timestamp(artifact.rendered_at),
+                    self._json(artifact.to_schema_dict()),
+                ),
+            )
+            self.connection.execute(
+                """
+                UPDATE report_export_manifests
+                SET status = ?, manifest_json = ?
+                WHERE export_manifest_id = ?
+                """,
+                (
+                    manifest.status,
+                    self._json(manifest.to_schema_dict()),
+                    manifest.export_manifest_id,
+                ),
+            )
+            self._update_report_row(report)
+
+    def list_rendered_report_artifacts(
+        self, *, export_manifest_id: str
+    ) -> list[RenderedReportArtifact]:
+        """List rendered report output metadata for one manifest."""
+
+        rows = self.connection.execute(
+            """
+            SELECT artifact_json FROM rendered_report_artifacts
+            WHERE export_manifest_id = ?
+            ORDER BY rendered_at, rendered_artifact_id
+            """,
+            (export_manifest_id,),
+        ).fetchall()
+        return [
+            RenderedReportArtifact.from_schema_dict(json.loads(str(row["artifact_json"])))
+            for row in rows
+        ]
+
+    def append_report_export_audit_event(self, event: ReportExportAuditEvent) -> None:
+        """Append one export audit event."""
+
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO report_export_audit_events (
+                    audit_event_id, export_manifest_id, report_id, report_version_id,
+                    case_id, action, status, previous_event_hash, event_hash,
+                    created_at, event_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.audit_event_id,
+                    event.export_manifest_id,
+                    event.report_id,
+                    event.report_version_id,
+                    event.case_id,
+                    event.action,
+                    event.status,
+                    event.previous_event_hash,
+                    event.event_hash,
+                    to_json_timestamp(event.created_at),
+                    self._json(event.to_schema_dict()),
+                ),
+            )
+
+    def list_report_export_audit_events(
+        self, *, export_manifest_id: str
+    ) -> list[ReportExportAuditEvent]:
+        """List append-only export audit events for one manifest."""
+
+        rows = self.connection.execute(
+            """
+            SELECT event_json FROM report_export_audit_events
+            WHERE export_manifest_id = ?
+            ORDER BY created_at, audit_event_id
+            """,
+            (export_manifest_id,),
+        ).fetchall()
+        return [
+            ReportExportAuditEvent.from_schema_dict(json.loads(str(row["event_json"])))
+            for row in rows
+        ]
+
+    def save_report_renderer_capability(self, capability: ReportRendererCapability) -> None:
+        """Persist a report renderer capability statement."""
+
+        generated_at = capability.generated_at or utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO report_renderer_capabilities (
+                    renderer_id, renderer_version, supported_formats_json, is_available,
+                    unavailable_reason, warnings_json, generated_at, capability_version,
+                    capability_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(renderer_id, renderer_version) DO UPDATE SET
+                    supported_formats_json = excluded.supported_formats_json,
+                    is_available = excluded.is_available,
+                    unavailable_reason = excluded.unavailable_reason,
+                    warnings_json = excluded.warnings_json,
+                    generated_at = excluded.generated_at,
+                    capability_version = excluded.capability_version,
+                    capability_json = excluded.capability_json
+                """,
+                (
+                    capability.renderer_id,
+                    capability.renderer_version,
+                    self._json(capability.supported_formats),
+                    int(capability.is_available),
+                    capability.unavailable_reason,
+                    self._json(capability.warnings),
+                    to_json_timestamp(generated_at),
+                    capability.capability_version,
+                    self._json(capability.to_schema_dict()),
                 ),
             )
 

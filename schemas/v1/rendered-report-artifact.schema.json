@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/rendered-report-artifact.schema.json",
+  "title": "APEX Rendered Report Artifact Metadata",
+  "$ref": "#/$defs/renderedReportArtifact",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "developer_message": { "type": ["string", "null"], "maxLength": 2000 }
+      }
+    },
+    "renderedReportArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rendered_artifact_id",
+        "export_manifest_id",
+        "report_version_id",
+        "format",
+        "renderer_id",
+        "renderer_version",
+        "output_reference",
+        "filename",
+        "mime_type",
+        "size_bytes",
+        "sha256",
+        "rendered_at",
+        "warnings",
+        "artifact_fingerprint"
+      ],
+      "properties": {
+        "rendered_artifact_id": { "$ref": "#/$defs/id" },
+        "export_manifest_id": { "$ref": "#/$defs/id" },
+        "report_version_id": { "$ref": "#/$defs/id" },
+        "format": { "enum": ["PDF", "HTML"] },
+        "renderer_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "renderer_version": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "output_reference": {
+          "type": "string",
+          "pattern": "^derived://[A-Za-z0-9_.-]+/[A-Za-z0-9_.@%+=,/-]+$",
+          "not": { "pattern": "(?:^|/)\\.\\.(?:/|$)" }
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180,
+          "not": { "pattern": "^(?:/|[A-Za-z]:|.*(?:^|/)\\.\\.(?:/|$)|.*[/\\\\])" }
+        },
+        "mime_type": { "enum": ["application/pdf", "text/html"] },
+        "size_bytes": { "type": "integer", "minimum": 1, "maximum": 1000000000000 },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "rendered_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "warnings": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "artifact_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    }
+  }
+}

@@ -328,3 +328,28 @@ tests/integration/test_phase7_cli_workflow.py
 Existing files extended in place include the SQLite repository, service factory, domain enum/model/error exports, public engine interface, CLI parser/commands, and JSON schemas. No `mcp`, `prompt`, LLM provider, API-key, chain-of-thought, or runtime network adapter directory is added.
 
 Phase 7 schemas are added under `schemas/v1` for assistance requests, keyword recommendation batches and items, scope summaries, verification events, keyword promotions, and provider capability snapshots.
+
+## Phase 8 구현 구조
+
+Phase 8 keeps report functionality inside the existing engine package:
+
+```text
+src/apex_forensic/domain/models/report.py
+src/apex_forensic/application/services/report.py
+src/apex_forensic/ports/report_renderer.py
+tests/unit/test_phase8_report_contract.py
+tests/integration/test_phase8_cli_workflow.py
+schemas/v1/report-record.schema.json
+schemas/v1/report-version.schema.json
+schemas/v1/report-section.schema.json
+schemas/v1/report-render-package.schema.json
+schemas/v1/ai-report-draft-input.schema.json
+schemas/v1/report-review-event.schema.json
+schemas/v1/report-approval-record.schema.json
+schemas/v1/custody-snapshot.schema.json
+schemas/v1/report-export-manifest.schema.json
+schemas/v1/rendered-report-artifact.schema.json
+schemas/v1/report-renderer-capability.schema.json
+```
+
+Existing files extended in place include the SQLite repository, service factory, domain enum/model/error exports, public engine interface, CLI parser/commands, and `engine-tool-descriptor.schema.json`. No GUI preview, MCP server/tool registration, prompt template, LLM provider, renderer runtime adapter, PDF/HTML library, network renderer, or arbitrary output-path module is added.

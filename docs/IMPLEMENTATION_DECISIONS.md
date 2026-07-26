@@ -86,3 +86,14 @@ Foundation. The implementation keeps Phase 2+ behavior out of runtime code.
 | Review is append-only | Analyst acceptance, rejection, and correction need an auditable history. | `ai_verification_events` records revision, actor, reason, previous hash, and event hash; original AI result rows are not overwritten. |
 | Keyword promotion reuses existing set versioning | Search reproduction already depends on keyword-set versions. | Accepted/corrected recommendations create draft keyword-set versions with AI provenance and do not execute search or activate the set. |
 | Runtime AI execution remains outside core | Phase 7 is an engine contract, not an LLM integration phase. | The default provider returns `CAPABILITY_UNAVAILABLE`; no MCP SDK, LLM SDK, prompt, API-key, chain-of-thought, or network provider code is added. |
+
+## Phase 8 Implementation Decisions
+
+| Decision | Rationale | Result |
+|---|---|---|
+| Reports use a mutable aggregate header plus immutable versions | Workflow state and active-version pointers change, but report content must remain reviewable and reproducible. | `reports` stores the header; `report_versions` and section/reference tables are append-only and content-fingerprinted. |
+| Content fingerprints exclude sequence metadata | Idempotent draft replay should not create a new version solely because the current active pointer changed. | Fingerprints cover content, source kind, citations, references, limitations, coverage, and source revisions while version number and previous-version link are stored separately. |
+| AI draft ingest is validation-only | Phase 8 must not generate report text or persist prompts/raw provider bodies. | `ingest_ai_draft()` requires an existing assistance request, stores provider metadata/response hash only, and marks source kind `AI_DRAFT`. |
+| Review and approval are append-only hash chains | Report decisions need audit history and optimistic-lock conflict detection. | `report_review_events` and `report_approval_records` store sequential revisions, previous hashes, and event hashes with update/delete triggers. |
+| Approval requires custody verification | Exporting an approved report should not hide broken custody metadata. | Approval creates or checks a custody snapshot and blocks when verification is not `VERIFIED`. |
+| Export is a contract, not rendering | PDF/HTML rendering dependencies and command execution are outside the engine boundary. | `ReportRendererPort` exists, default capability is `CAPABILITY_UNAVAILABLE`, and only metadata returned through service validation is persisted. |

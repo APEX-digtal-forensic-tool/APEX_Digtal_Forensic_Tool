@@ -4,6 +4,7 @@
   "title": "APEX API Response Envelope",
   "oneOf": [
     { "$ref": "#/$defs/successResponse" },
+    { "$ref": "#/$defs/engineInterfaceResponse" },
     { "$ref": "common.schema.json#/$defs/errorResponse" }
   ],
   "$defs": {
@@ -30,6 +31,36 @@
           "items": {
             "$ref": "common.schema.json#/$defs/warning"
           }
+        }
+      }
+    },
+    "engineInterfaceResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "interface_version",
+        "request_id",
+        "correlation_id",
+        "status",
+        "data",
+        "warnings",
+        "errors"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "interface_version": { "$ref": "common.schema.json#/$defs/schemaVersion" },
+        "request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "correlation_id": { "type": ["string", "null"], "minLength": 1 },
+        "status": { "enum": ["OK", "ERROR"] },
+        "data": true,
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/warning" }
+        },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/error" }
         }
       }
     }

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-export-manifest.schema.json",
+  "title": "APEX Report Export Manifest",
+  "$ref": "#/$defs/reportExportManifest",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "developer_message": { "type": ["string", "null"], "maxLength": 2000 }
+      }
+    },
+    "reportExportManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "export_manifest_id",
+        "report_id",
+        "report_version_id",
+        "case_id",
+        "format",
+        "render_package_id",
+        "renderer_id",
+        "renderer_version",
+        "requested_filename",
+        "derived_output_root_id",
+        "overwrite_policy",
+        "redaction_policy",
+        "include_citations",
+        "include_custody",
+        "include_technical_appendix",
+        "content_fingerprint",
+        "manifest_fingerprint",
+        "approval_id",
+        "custody_snapshot_id",
+        "status",
+        "warnings",
+        "created_by",
+        "created_at",
+        "manifest_version"
+      ],
+      "properties": {
+        "export_manifest_id": { "$ref": "#/$defs/id" },
+        "report_id": { "$ref": "#/$defs/id" },
+        "report_version_id": { "$ref": "#/$defs/id" },
+        "case_id": { "$ref": "#/$defs/id" },
+        "format": { "enum": ["PDF", "HTML"] },
+        "render_package_id": { "$ref": "#/$defs/id" },
+        "renderer_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "renderer_version": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "requested_filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180,
+          "not": { "pattern": "^(?:/|[A-Za-z]:|.*(?:^|/)\\.\\.(?:/|$)|.*[/\\\\])" }
+        },
+        "derived_output_root_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "overwrite_policy": { "const": "DENY" },
+        "redaction_policy": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "include_citations": { "type": "boolean" },
+        "include_custody": { "type": "boolean" },
+        "include_technical_appendix": { "type": "boolean" },
+        "content_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "manifest_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+        "approval_id": { "$ref": "#/$defs/id" },
+        "custody_snapshot_id": { "$ref": "#/$defs/nullableId" },
+        "status": {
+          "enum": [
+            "PREPARED",
+            "RENDERING",
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "created_by": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "manifest_version": { "$ref": "common.schema.json#/$defs/schemaVersion" }
+      }
+    }
+  }
+}

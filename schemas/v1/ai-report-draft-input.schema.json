@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-report-draft-input.schema.json",
+  "title": "APEX AI Report Draft Input",
+  "$ref": "#/$defs/aiReportDraftInput",
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "metadataString": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "aiReportDraftInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "assistance_request_id",
+        "context_snapshot_ids",
+        "ai_result_ids",
+        "provider_id",
+        "provider_version",
+        "model_id",
+        "external_request_id",
+        "title",
+        "executive_summary",
+        "sections",
+        "citations",
+        "generated_at",
+        "response_hash",
+        "correlation_id"
+      ],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/id" },
+        "assistance_request_id": { "$ref": "#/$defs/id" },
+        "context_snapshot_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "ai_result_ids": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "provider_id": { "$ref": "#/$defs/metadataString" },
+        "provider_version": { "$ref": "#/$defs/metadataString" },
+        "model_id": { "$ref": "#/$defs/metadataString" },
+        "external_request_id": { "type": ["string", "null"], "maxLength": 256 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "executive_summary": { "type": "string", "minLength": 1, "maxLength": 40000 },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": { "$ref": "report-section.schema.json#/$defs/reportSection" }
+        },
+        "citations": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "report-section.schema.json#/$defs/citationRef" }
+        },
+        "generated_at": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+        },
+        "response_hash": { "$ref": "common.schema.json#/$defs/sha256" },
+        "correlation_id": { "type": ["string", "null"], "maxLength": 256 },
+        "limitations": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4000 }
+        }
+      },
+      "propertyNames": {
+        "not": {
+          "pattern": "(?:[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Rr][Oo][Mm][Pp][Tt]|[Cc][Hh][Aa][Ii][Nn][-_]?[Oo][Ff][-_]?[Tt][Hh][Oo][Uu][Gg][Hh][Tt]|[Rr][Aa][Ww][-_]?[Rr][Ee][Ss][Pp][Oo][Nn][Ss][Ee]|[Rr][Aa][Ww][-_]?[Bb][Oo][Dd][Yy]|[Aa][Tt][Tt][Aa][Cc][Hh][Mm][Ee][Nn][Tt][-_]?[Bb][Yy][Tt][Ee][Ss])"
+        }
+      }
+    }
+  }
+}

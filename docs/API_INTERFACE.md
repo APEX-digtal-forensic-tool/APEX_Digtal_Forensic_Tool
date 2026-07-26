@@ -668,3 +668,20 @@ Public interface canonical operations use the `ai.*` namespace, including `ai.re
 Request creation requires a case-owned `analysis_context_snapshot_id`. Result ingestion accepts JSON objects or UTF-8 JSON files and rejects prompt/secret/raw-body fields, oversized payloads, invalid keyword types, invalid hash/IP/URL/domain values, cross-case citations, citations outside the snapshot, resource revision mismatches, and summary script/base64 content. Review operations require actor, reason, target revision, and correction text when action is `CORRECT`.
 
 Promotion requires an accepted or corrected recommendation and creates a draft keyword-set version through the existing keyword-set manager. It is idempotent for the same reviewed recommendation and target set, detects duplicates, requires explicit regex confirmation, and never runs search or activates the set.
+
+## 28. Phase 8 Report CLI/API Contract
+
+Phase 8 exposes engine-side report review and export contracts through `ReportService`, the `report` CLI group, and public interface `report.*` descriptors. It does not add REST, HTTP, MCP tool registration, GUI preview, LLM/prompt execution, or runtime renderer adapters.
+
+Report CLI commands:
+
+- `apex-forensic report create|list|show|archive`
+- `apex-forensic report version-create|version-list|version-show|version-compare|ai-draft-ingest`
+- `apex-forensic report review-submit|review-comment|review-request-changes|review-accept-section|review-reject-section|review-complete|review-reopen|review-history`
+- `apex-forensic report approve|reject|revoke-approval|approval-show`
+- `apex-forensic report custody-snapshot-create|custody-snapshot-show`
+- `apex-forensic report package-create|package-show|export-prepare|export-status|export-record-result|export-capabilities`
+
+Public interface canonical operations include the required read operations `report.get`, `report.list`, `report.version.get`, `report.version.list`, `report.version.compare`, `report.review.history`, `report.approval.get`, `report.custody-snapshot.get`, `report.render-package.get`, `report.export-manifest.get`, `report.export-status`, and `report.capabilities`; mutation operations include `report.create`, `report.version.create`, `report.ai-draft.ingest`, review/approval/custody/package/export operations, and `report.archive`.
+
+Version and AI-draft input is UTF-8 JSON only and goes through bounded JSON validation. The CLI has no prompt option, API-key option, arbitrary output path option, pickle input, shell execution, or renderer command argument. Export filenames are normalized to a filename only, `..` and absolute paths are rejected, and output references must be inside the configured `derived://` root.

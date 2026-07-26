@@ -26,6 +26,7 @@ from apex_forensic.application.services import (
     EvidenceManager,
     FileSystemIndexService,
     MachineExtractionService,
+    ReportService,
     SearchService,
     TimelineService,
     ViewProjectionService,
@@ -46,6 +47,7 @@ class ServiceBundle:
     timeline: TimelineService
     candidates: MachineExtractionService
     ai: AiAssistanceService
+    reports: ReportService
     contexts: ContextService
     context: ContextService
     views: ViewProjectionService
@@ -130,6 +132,14 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         clock=clock,
         id_generator=ids,
     )
+    reports = ReportService(
+        repository=repository,
+        contexts=contexts,
+        ai=ai,
+        custody=custody,
+        clock=clock,
+        id_generator=ids,
+    )
     views = ViewProjectionService(
         repository=repository,
         contexts=contexts,
@@ -141,6 +151,7 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         contexts=contexts,
         views=views,
         ai=ai,
+        reports=reports,
         clock=clock,
         id_generator=ids,
     )
@@ -156,6 +167,7 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         timeline=timeline,
         candidates=candidates,
         ai=ai,
+        reports=reports,
         contexts=contexts,
         context=contexts,
         views=views,

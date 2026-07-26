@@ -744,6 +744,205 @@ def build_parser() -> argparse.ArgumentParser:
     view_capabilities = view_commands.add_parser("capabilities")
     view_capabilities.add_argument("--json", action="store_true")
 
+    report_parser = subcommands.add_parser("report", help="Report contract commands")
+    report_commands = report_parser.add_subparsers(dest="report_command", required=True)
+    report_create = report_commands.add_parser("create")
+    report_create.add_argument("--case-id", required=True)
+    report_create.add_argument("--title", required=True)
+    report_create.add_argument("--created-by", required=True)
+    report_create.add_argument("--description")
+    report_create.add_argument(
+        "--report-type",
+        default="INVESTIGATION",
+        choices=[
+            "INVESTIGATION",
+            "TRIAGE",
+            "INCIDENT_RESPONSE",
+            "EVIDENCE_SUMMARY",
+            "CHAIN_OF_CUSTODY",
+            "TECHNICAL_APPENDIX",
+            "OTHER",
+        ],
+    )
+    report_create.add_argument("--locale")
+    report_create.add_argument("--timezone")
+    report_create.add_argument("--correlation-id")
+    report_create.add_argument("--json", action="store_true")
+
+    report_list = report_commands.add_parser("list")
+    report_list.add_argument("--case-id", required=True)
+    report_list.add_argument("--cursor")
+    report_list.add_argument("--limit", type=int, default=100)
+    report_list.add_argument("--correlation-id")
+    report_list.add_argument("--json", action="store_true")
+
+    report_show = report_commands.add_parser("show")
+    report_show.add_argument("--report-id", required=True)
+    report_show.add_argument("--correlation-id")
+    report_show.add_argument("--json", action="store_true")
+
+    report_version_create = report_commands.add_parser("version-create")
+    report_version_create.add_argument("--report-id", required=True)
+    report_version_create.add_argument("--created-by", required=True)
+    report_version_create.add_argument("--source-kind", default="ANALYST_DRAFT")
+    report_version_create.add_argument("--input-json")
+    report_version_create.add_argument("--input-file", type=Path)
+    report_version_create.add_argument("--correlation-id")
+    report_version_create.add_argument("--json", action="store_true")
+
+    report_version_list = report_commands.add_parser("version-list")
+    report_version_list.add_argument("--report-id", required=True)
+    report_version_list.add_argument("--correlation-id")
+    report_version_list.add_argument("--json", action="store_true")
+
+    report_version_show = report_commands.add_parser("version-show")
+    report_version_show.add_argument("--report-version-id", required=True)
+    report_version_show.add_argument("--correlation-id")
+    report_version_show.add_argument("--json", action="store_true")
+
+    report_version_compare = report_commands.add_parser("version-compare")
+    report_version_compare.add_argument("--left-report-version-id", required=True)
+    report_version_compare.add_argument("--right-report-version-id", required=True)
+    report_version_compare.add_argument("--correlation-id")
+    report_version_compare.add_argument("--json", action="store_true")
+
+    report_ai_draft = report_commands.add_parser("ai-draft-ingest")
+    report_ai_draft.add_argument("--report-id")
+    report_ai_draft.add_argument("--created-by", default="external-ai-layer")
+    report_ai_draft.add_argument("--input-json")
+    report_ai_draft.add_argument("--input-file", type=Path)
+    report_ai_draft.add_argument("--correlation-id")
+    report_ai_draft.add_argument("--json", action="store_true")
+
+    report_archive = report_commands.add_parser("archive")
+    report_archive.add_argument("--report-id", required=True)
+    report_archive.add_argument("--actor-id", required=True)
+    report_archive.add_argument("--reason", required=True)
+    report_archive.add_argument("--correlation-id")
+    report_archive.add_argument("--json", action="store_true")
+
+    report_review_submit = report_commands.add_parser("review-submit")
+    _add_report_review_args(report_review_submit)
+
+    report_review_comment = report_commands.add_parser("review-comment")
+    _add_report_review_args(report_review_comment)
+    report_review_comment.add_argument("--comment", required=True)
+    report_review_comment.add_argument("--section-id")
+
+    report_review_changes = report_commands.add_parser("review-request-changes")
+    _add_report_review_args(report_review_changes)
+    report_review_changes.add_argument("--requested-change", action="append", default=[])
+    report_review_changes.add_argument("--section-id")
+
+    report_review_accept = report_commands.add_parser("review-accept-section")
+    _add_report_review_args(report_review_accept)
+    report_review_accept.add_argument("--section-id", required=True)
+    report_review_accept.add_argument("--comment")
+
+    report_review_reject = report_commands.add_parser("review-reject-section")
+    _add_report_review_args(report_review_reject)
+    report_review_reject.add_argument("--section-id", required=True)
+    report_review_reject.add_argument("--requested-change", action="append", default=[])
+    report_review_reject.add_argument("--comment")
+
+    report_review_complete = report_commands.add_parser("review-complete")
+    _add_report_review_args(report_review_complete)
+
+    report_review_reopen = report_commands.add_parser("review-reopen")
+    _add_report_review_args(report_review_reopen)
+
+    report_review_history = report_commands.add_parser("review-history")
+    report_review_history.add_argument("--report-version-id", required=True)
+    report_review_history.add_argument("--correlation-id")
+    report_review_history.add_argument("--json", action="store_true")
+
+    report_approve = report_commands.add_parser("approve")
+    report_approve.add_argument("--report-version-id", required=True)
+    report_approve.add_argument("--approver-id", required=True)
+    report_approve.add_argument("--reason", required=True)
+    report_approve.add_argument("--custody-snapshot-id")
+    report_approve.add_argument("--expected-review-revision", type=int)
+    report_approve.add_argument("--expected-approval-revision", type=int)
+    report_approve.add_argument("--correlation-id")
+    report_approve.add_argument("--json", action="store_true")
+
+    report_reject = report_commands.add_parser("reject")
+    report_reject.add_argument("--report-version-id", required=True)
+    report_reject.add_argument("--approver-id", required=True)
+    report_reject.add_argument("--reason", required=True)
+    report_reject.add_argument("--expected-approval-revision", type=int)
+    report_reject.add_argument("--correlation-id")
+    report_reject.add_argument("--json", action="store_true")
+
+    report_revoke = report_commands.add_parser("revoke-approval")
+    report_revoke.add_argument("--report-version-id", required=True)
+    report_revoke.add_argument("--actor-id", required=True)
+    report_revoke.add_argument("--reason", required=True)
+    report_revoke.add_argument("--expected-approval-revision", type=int)
+    report_revoke.add_argument("--correlation-id")
+    report_revoke.add_argument("--json", action="store_true")
+
+    report_approval_show = report_commands.add_parser("approval-show")
+    report_approval_show.add_argument("--report-version-id", required=True)
+    report_approval_show.add_argument("--correlation-id")
+    report_approval_show.add_argument("--json", action="store_true")
+
+    report_custody_create = report_commands.add_parser("custody-snapshot-create")
+    report_custody_create.add_argument("--report-version-id", required=True)
+    report_custody_create.add_argument("--captured-by", required=True)
+    report_custody_create.add_argument("--evidence-id", action="append", default=[])
+    report_custody_create.add_argument("--correlation-id")
+    report_custody_create.add_argument("--json", action="store_true")
+
+    report_custody_show = report_commands.add_parser("custody-snapshot-show")
+    report_custody_show.add_argument("--custody-snapshot-id", required=True)
+    report_custody_show.add_argument("--correlation-id")
+    report_custody_show.add_argument("--json", action="store_true")
+
+    report_package_create = report_commands.add_parser("package-create")
+    report_package_create.add_argument("--report-version-id", required=True)
+    report_package_create.add_argument("--created-by", required=True)
+    report_package_create.add_argument("--for-export", action="store_true")
+    report_package_create.add_argument("--custody-snapshot-id")
+    report_package_create.add_argument("--stale-confirmed", action="store_true")
+    report_package_create.add_argument("--correlation-id")
+    report_package_create.add_argument("--json", action="store_true")
+
+    report_package_show = report_commands.add_parser("package-show")
+    report_package_show.add_argument("--package-id", required=True)
+    report_package_show.add_argument("--correlation-id")
+    report_package_show.add_argument("--json", action="store_true")
+
+    report_export_prepare = report_commands.add_parser("export-prepare")
+    report_export_prepare.add_argument("--report-version-id", required=True)
+    report_export_prepare.add_argument("--format", required=True, choices=["PDF", "HTML"])
+    report_export_prepare.add_argument("--filename", required=True)
+    report_export_prepare.add_argument("--created-by", required=True)
+    report_export_prepare.add_argument("--redaction-policy", default="STANDARD")
+    report_export_prepare.add_argument("--overwrite-policy", default="DENY")
+    report_export_prepare.add_argument("--no-citations", action="store_true")
+    report_export_prepare.add_argument("--no-custody", action="store_true")
+    report_export_prepare.add_argument("--no-technical-appendix", action="store_true")
+    report_export_prepare.add_argument("--stale-confirmed", action="store_true")
+    report_export_prepare.add_argument("--correlation-id")
+    report_export_prepare.add_argument("--json", action="store_true")
+
+    report_export_status = report_commands.add_parser("export-status")
+    report_export_status.add_argument("--export-manifest-id", required=True)
+    report_export_status.add_argument("--correlation-id")
+    report_export_status.add_argument("--json", action="store_true")
+
+    report_export_record = report_commands.add_parser("export-record-result")
+    report_export_record.add_argument("--export-manifest-id", required=True)
+    report_export_record.add_argument("--input-json")
+    report_export_record.add_argument("--input-file", type=Path)
+    report_export_record.add_argument("--correlation-id")
+    report_export_record.add_argument("--json", action="store_true")
+
+    report_export_capabilities = report_commands.add_parser("export-capabilities")
+    report_export_capabilities.add_argument("--correlation-id")
+    report_export_capabilities.add_argument("--json", action="store_true")
+
     interface_parser = subcommands.add_parser("interface", help="Public engine interface commands")
     interface_commands = interface_parser.add_subparsers(dest="interface_command", required=True)
     interface_version = interface_commands.add_parser("version")
@@ -873,6 +1072,15 @@ def _add_view_resource_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--resource-type", required=True, choices=_resource_types())
     parser.add_argument("--resource-id", required=True)
     parser.add_argument("--redaction-policy", default="DEFAULT")
+    parser.add_argument("--json", action="store_true")
+
+
+def _add_report_review_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--report-version-id", required=True)
+    parser.add_argument("--actor-id", required=True)
+    parser.add_argument("--reason", required=True)
+    parser.add_argument("--expected-review-revision", type=int)
+    parser.add_argument("--correlation-id")
     parser.add_argument("--json", action="store_true")
 
 
