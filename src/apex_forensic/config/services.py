@@ -7,12 +7,16 @@ from pathlib import Path
 
 from apex_forensic.adapters.artifacts import (
     BrowserHistoryAnalyzer,
+    CommunicationCorePluginAnalyzer,
     MediaMetadataAnalyzer,
     WindowsEventLogAnalyzer,
     WindowsPrefetchAnalyzer,
     WindowsRegistryAnalyzer,
 )
-from apex_forensic.adapters.filesystem import LogicalDirectoryFileSystemProvider
+from apex_forensic.adapters.filesystem import (
+    LogicalDirectoryFileSystemProvider,
+    PyTskFileSystemProvider,
+)
 from apex_forensic.adapters.hashing import HashlibStreamingHashProvider
 from apex_forensic.adapters.persistence.sqlite import SQLiteRepository
 from apex_forensic.adapters.system import SystemClock, UuidGenerator
@@ -23,6 +27,7 @@ from apex_forensic.application.services import (
     ContextService,
     CustodyLedger,
     EngineInterfaceService,
+    EvidenceImageService,
     EvidenceManager,
     FileSystemIndexService,
     MachineExtractionService,
@@ -40,6 +45,7 @@ class ServiceBundle:
     repository: SQLiteRepository
     cases: CaseManager
     evidence: EvidenceManager
+    images: EvidenceImageService
     custody: CustodyLedger
     fs: FileSystemIndexService
     artifacts: ArtifactAnalysisService
@@ -82,11 +88,13 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         id_generator=ids,
         custody_ledger=custody,
     )
+    images = EvidenceImageService(repository=repository, custody_ledger=custody)
     fs = FileSystemIndexService(
         case_repository=repository,
         evidence_repository=repository,
         repository=repository,
         provider=LogicalDirectoryFileSystemProvider(),
+        additional_providers=(PyTskFileSystemProvider(),),
         clock=clock,
         id_generator=ids,
     )
@@ -101,6 +109,7 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
             WindowsPrefetchAnalyzer(),
             MediaMetadataAnalyzer(),
             BrowserHistoryAnalyzer(),
+            CommunicationCorePluginAnalyzer(),
         ),
         clock=clock,
         id_generator=ids,
@@ -160,6 +169,7 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         repository=repository,
         cases=cases,
         evidence=evidence,
+        images=images,
         custody=custody,
         fs=fs,
         artifacts=artifacts,

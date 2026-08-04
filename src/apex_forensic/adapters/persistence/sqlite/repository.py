@@ -72,6 +72,7 @@ from apex_forensic.domain.models import (
     EngineToolDescriptor,
     Evidence,
     EvidenceFingerprint,
+    EvidenceVolume,
     FileSystemNode,
     GuiSessionContext,
     HashRecord,
@@ -181,12 +182,28 @@ _ARTIFACT_FIELD_ALLOWLIST = {
     "table",
     "row_id",
     "url",
+    "cache_url",
     "title",
     "visit_count",
     "search_term",
     "download_path",
     "download_url",
     "referrer_url",
+    "cookie_domain",
+    "credential_origin_domain",
+    "cache_key_sha256",
+    "body_sha256",
+    "communication_app",
+    "communication_platform",
+    "profile_id",
+    "account_id",
+    "conversation_id",
+    "message_id",
+    "sender",
+    "recipients",
+    "message_body",
+    "attachment_name",
+    "attachment_reference",
     "mime_type",
     "state_label",
 }
@@ -318,8 +335,22 @@ def _artifact_document_type(artifact_type: str) -> SearchDocumentType:
         ArtifactType.BROWSER_VISIT.value,
         ArtifactType.BROWSER_SEARCH.value,
         ArtifactType.BROWSER_DOWNLOAD.value,
+        ArtifactType.BROWSER_COOKIE.value,
+        ArtifactType.BROWSER_CREDENTIAL.value,
+        ArtifactType.BROWSER_CACHE_ENTRY.value,
+        ArtifactType.BROWSER_DELETED_SQLITE_ROW.value,
+        ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE.value,
     }:
         return SearchDocumentType.BROWSER
+    if artifact_type in {
+        ArtifactType.COMMUNICATION_PROFILE.value,
+        ArtifactType.COMMUNICATION_ACCOUNT.value,
+        ArtifactType.COMMUNICATION_CONVERSATION.value,
+        ArtifactType.COMMUNICATION_MESSAGE.value,
+        ArtifactType.COMMUNICATION_ATTACHMENT.value,
+        ArtifactType.COMMUNICATION_UNSUPPORTED_STORE.value,
+    }:
+        return SearchDocumentType.COMMUNICATION
     return SearchDocumentType.OTHER
 
 
@@ -383,6 +414,16 @@ def _phase5_browser_artifact_type(artifact_type: ArtifactType) -> str:
         return "SEARCH_TERM"
     if artifact_type is ArtifactType.BROWSER_DOWNLOAD:
         return "DOWNLOAD"
+    if artifact_type is ArtifactType.BROWSER_COOKIE:
+        return "COOKIE"
+    if artifact_type is ArtifactType.BROWSER_CREDENTIAL:
+        return "CREDENTIAL"
+    if artifact_type is ArtifactType.BROWSER_CACHE_ENTRY:
+        return "CACHE_ENTRY"
+    if artifact_type is ArtifactType.BROWSER_DELETED_SQLITE_ROW:
+        return "DELETED_SQLITE_ROW_CANDIDATE"
+    if artifact_type is ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE:
+        return "PRIVATE_MODE_CANDIDATE"
     return "UNKNOWN"
 
 
@@ -481,6 +522,20 @@ def _timeline_source_artifact_types(source_type: str) -> list[str]:
             ArtifactType.BROWSER_VISIT.value,
             ArtifactType.BROWSER_SEARCH.value,
             ArtifactType.BROWSER_DOWNLOAD.value,
+            ArtifactType.BROWSER_COOKIE.value,
+            ArtifactType.BROWSER_CREDENTIAL.value,
+            ArtifactType.BROWSER_CACHE_ENTRY.value,
+            ArtifactType.BROWSER_DELETED_SQLITE_ROW.value,
+            ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE.value,
+        ]
+    if source_type == TimelineSourceType.COMMUNICATION_ARTIFACT.value:
+        return [
+            ArtifactType.COMMUNICATION_PROFILE.value,
+            ArtifactType.COMMUNICATION_ACCOUNT.value,
+            ArtifactType.COMMUNICATION_CONVERSATION.value,
+            ArtifactType.COMMUNICATION_MESSAGE.value,
+            ArtifactType.COMMUNICATION_ATTACHMENT.value,
+            ArtifactType.COMMUNICATION_UNSUPPORTED_STORE.value,
         ]
     return [
         ArtifactType.REGISTRY_KEY.value,
@@ -549,6 +604,32 @@ class SQLiteRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_evidence_case_status
                     ON evidence(case_id, status);
+
+                CREATE TABLE IF NOT EXISTS evidence_volumes (
+                    volume_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                    reader_id TEXT NOT NULL,
+                    reader_version TEXT NOT NULL,
+                    volume_index INTEGER NOT NULL,
+                    scheme TEXT NOT NULL,
+                    partition_type TEXT NOT NULL,
+                    start_lba INTEGER NOT NULL,
+                    end_lba INTEGER NOT NULL,
+                    byte_offset INTEGER NOT NULL,
+                    byte_length INTEGER NOT NULL,
+                    sector_size INTEGER NOT NULL,
+                    name TEXT,
+                    guid TEXT,
+                    is_allocated INTEGER NOT NULL,
+                    raw_locator_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    volume_json TEXT NOT NULL,
+                    UNIQUE(evidence_id, reader_id, reader_version, scheme, byte_offset, byte_length)
+                );
+                CREATE INDEX IF NOT EXISTS idx_evidence_volumes_evidence
+                    ON evidence_volumes(evidence_id, volume_index, byte_offset);
 
                 CREATE TABLE IF NOT EXISTS evidence_hashes (
                     hash_id TEXT PRIMARY KEY,
@@ -2398,6 +2479,13 @@ class SQLiteRepository:
                 """,
                 ("phase8-report-review-export-contract", to_json_timestamp(utc_now())),
             )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("apex-engine-work-package-a-evidence-readers", to_json_timestamp(utc_now())),
+            )
 
     def save_case(self, case: Case) -> None:
         """Persist a new case."""
@@ -2510,6 +2598,41 @@ class SQLiteRepository:
             (case_id,),
         ).fetchall()
         return [self._row_to_evidence(row) for row in rows]
+
+    def replace_evidence_volumes(
+        self, evidence_id: str, volumes: list[EvidenceVolume]
+    ) -> None:
+        """Replace partition enumeration results for an evidence source."""
+
+        with self.connection:
+            self.connection.execute(
+                "DELETE FROM evidence_volumes WHERE evidence_id = ?",
+                (evidence_id,),
+            )
+            self.connection.executemany(
+                """
+                INSERT INTO evidence_volumes (
+                    volume_id, case_id, evidence_id, reader_id, reader_version,
+                    volume_index, scheme, partition_type, start_lba, end_lba,
+                    byte_offset, byte_length, sector_size, name, guid, is_allocated,
+                    raw_locator_json, warnings_json, created_at, volume_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [self._evidence_volume_values(volume) for volume in volumes],
+            )
+
+    def list_evidence_volumes(self, evidence_id: str) -> list[EvidenceVolume]:
+        """Return persisted volume rows for an evidence source."""
+
+        rows = self.connection.execute(
+            """
+            SELECT * FROM evidence_volumes
+            WHERE evidence_id = ?
+            ORDER BY volume_index, byte_offset, volume_id
+            """,
+            (evidence_id,),
+        ).fetchall()
+        return [self._row_to_evidence_volume(row) for row in rows]
 
     def save_hash_record(self, record: HashRecord) -> None:
         """Persist a hash calculation record."""
@@ -3697,6 +3820,11 @@ class SQLiteRepository:
             ArtifactType.BROWSER_VISIT,
             ArtifactType.BROWSER_SEARCH,
             ArtifactType.BROWSER_DOWNLOAD,
+            ArtifactType.BROWSER_COOKIE,
+            ArtifactType.BROWSER_CREDENTIAL,
+            ArtifactType.BROWSER_CACHE_ENTRY,
+            ArtifactType.BROWSER_DELETED_SQLITE_ROW,
+            ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE,
         }:
             browser_artifact = self._browser_artifact_from_artifact(artifact)
             self._save_browser_artifact_projection(browser_artifact)
@@ -3784,7 +3912,7 @@ class SQLiteRepository:
             or fields.get("browser")
             or "UNKNOWN"
         )
-        url = _str_or_none(fields.get("url"))
+        url = _str_or_none(fields.get("url") or fields.get("origin_url") or fields.get("cache_url"))
         download_url = _str_or_none(fields.get("download_url"))
         referrer_url = _str_or_none(fields.get("referrer_url") or fields.get("tab_referrer_url"))
         timestamp = artifact.observed_at_utc
@@ -3822,7 +3950,12 @@ class SQLiteRepository:
             artifact_subtype=artifact.artifact_subtype,
             title=artifact.title,
             url=url,
-            domain=_domain_from_url(url or download_url),
+            domain=_str_or_none(
+                fields.get("domain")
+                or fields.get("cookie_domain")
+                or fields.get("credential_origin_domain")
+            )
+            or _domain_from_url(url or download_url),
             search_term=_str_or_none(fields.get("search_term")),
             download_url=download_url,
             download_path=_str_or_none(fields.get("download_path")),
@@ -4824,10 +4957,14 @@ class SQLiteRepository:
             backend="sqlite-fts5",
             backend_version=sqlite3.sqlite_version,
             fts5_available=available,
-            tokenizer="unicode61",
+            tokenizer="unicode61+apex-search-normalization-ko-v1",
             capabilities=[
                 "METADATA_SEARCH",
                 "ARTIFACT_FIELD_SEARCH",
+                "VERSIONED_SEARCH_COPY_NORMALIZATION",
+                "KOREAN_NFC_CASEFOLD_PATH_NORMALIZATION",
+                "SQLITE_FTS5_UNICODE61_TOKENIZER",
+                "MORPHOLOGICAL_ANALYSIS_NOT_CLAIMED",
                 "TERM",
                 "PHRASE",
                 "PREFIX",
@@ -5967,6 +6104,7 @@ class SQLiteRepository:
                 TimelineSourceType.PREFETCH_ARTIFACT.value,
                 TimelineSourceType.MEDIA_ARTIFACT.value,
                 TimelineSourceType.BROWSER_ARTIFACT.value,
+                TimelineSourceType.COMMUNICATION_ARTIFACT.value,
             }
         rows: list[dict[str, Any]] = []
         for source_type in sorted(
@@ -5977,6 +6115,7 @@ class SQLiteRepository:
                 TimelineSourceType.PREFETCH_ARTIFACT.value,
                 TimelineSourceType.MEDIA_ARTIFACT.value,
                 TimelineSourceType.BROWSER_ARTIFACT.value,
+                TimelineSourceType.COMMUNICATION_ARTIFACT.value,
             )
         ):
             if source_type not in selected or len(rows) >= limit:
@@ -9518,6 +9657,30 @@ class SQLiteRepository:
             self._json(evidence.metadata),
         )
 
+    def _evidence_volume_values(self, volume: EvidenceVolume) -> tuple[Any, ...]:
+        return (
+            volume.volume_id,
+            volume.case_id,
+            volume.evidence_id,
+            volume.reader_id,
+            volume.reader_version,
+            volume.volume_index,
+            volume.scheme,
+            volume.partition_type,
+            volume.start_lba,
+            volume.end_lba,
+            volume.byte_offset,
+            volume.byte_length,
+            volume.sector_size,
+            volume.name,
+            volume.guid,
+            int(volume.is_allocated),
+            self._json(volume.raw_locator),
+            self._json(volume.warnings),
+            to_json_timestamp(volume.created_at),
+            self._json(volume.to_schema_dict()),
+        )
+
     def _job_values(self, job: Job) -> tuple[Any, ...]:
         return (
             job.job_id,
@@ -9609,6 +9772,29 @@ class SQLiteRepository:
             schema_version=str(row["schema_version"]),
             hashes=hashes,
             metadata=json.loads(str(row["metadata_json"])),
+        )
+
+    def _row_to_evidence_volume(self, row: sqlite3.Row) -> EvidenceVolume:
+        return EvidenceVolume(
+            volume_id=str(row["volume_id"]),
+            case_id=str(row["case_id"]),
+            evidence_id=str(row["evidence_id"]),
+            volume_index=int(row["volume_index"]),
+            scheme=str(row["scheme"]),
+            partition_type=str(row["partition_type"]),
+            start_lba=int(row["start_lba"]),
+            end_lba=int(row["end_lba"]),
+            byte_offset=int(row["byte_offset"]),
+            byte_length=int(row["byte_length"]),
+            sector_size=int(row["sector_size"]),
+            is_allocated=bool(row["is_allocated"]),
+            raw_locator=json.loads(str(row["raw_locator_json"])),
+            reader_id=str(row["reader_id"]),
+            reader_version=str(row["reader_version"]),
+            created_at=parse_timestamp(str(row["created_at"])),
+            name=row["name"],
+            guid=row["guid"],
+            warnings=list(json.loads(str(row["warnings_json"]))),
         )
 
     def _list_hash_records(self, evidence_id: str) -> list[HashRecord]:

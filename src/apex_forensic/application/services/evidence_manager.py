@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from apex_forensic._time import to_json_timestamp
+from apex_forensic.adapters.evidence import (
+    EwfEvidenceReader,
+    RawImageReader,
+    VirtualDiskEvidenceReader,
+)
 from apex_forensic.constants import DEFAULT_HASH_CHUNK_SIZE, ENGINE_VERSION, SCHEMA_VERSION
 from apex_forensic.domain.enums import (
     CustodyEventType,
@@ -82,30 +87,39 @@ class EvidenceManager:
         normalized = self._normalize_source_path(source_path)
         stat_result = normalized.stat()
         evidence_type = self._detect_evidence_format(normalized)
-        reader_id = (
-            "apex.directory_metadata_reader"
-            if evidence_type is EvidenceFormat.DIRECTORY
-            else "apex.logical_file_reader"
-        )
-        capabilities = (
-            ["METADATA", "FILESYSTEM_INDEX"]
-            if evidence_type is EvidenceFormat.DIRECTORY
-            else ["READ_STREAM", "FILESYSTEM_INDEX"]
+        reader_id, reader_version, capabilities, reader_metadata = self._reader_metadata(
+            normalized, evidence_type
         )
         fingerprint = None
         if evidence_type is not EvidenceFormat.DIRECTORY:
-            computation = self._hash_provider.compute_file(
-                normalized,
-                [HashAlgorithm.SHA256],
-                chunk_size=DEFAULT_HASH_CHUNK_SIZE,
-            )
+            if evidence_type in {EvidenceFormat.RAW, EvidenceFormat.DD, EvidenceFormat.IMG}:
+                with RawImageReader(normalized, evidence_format=evidence_type) as reader:
+                    source_fingerprint = reader.source_fingerprint
+                computation_digest = str(source_fingerprint["sha256"])
+                size_value = source_fingerprint["size_bytes"]
+                if not isinstance(size_value, int):
+                    raise ValidationError(
+                        "Evidence reader returned an invalid fingerprint size.",
+                        target="fingerprint",
+                    )
+                computation_size = size_value
+                completed_at = self._clock.now()
+            else:
+                computation = self._hash_provider.compute_file(
+                    normalized,
+                    [HashAlgorithm.SHA256],
+                    chunk_size=DEFAULT_HASH_CHUNK_SIZE,
+                )
+                computation_digest = computation.digests[HashAlgorithm.SHA256]
+                computation_size = computation.file_size
+                completed_at = computation.completed_at
             fingerprint = EvidenceFingerprint(
                 algorithm=HashAlgorithm.SHA256,
-                value=computation.digests[HashAlgorithm.SHA256],
-                size_bytes=computation.file_size,
+                value=computation_digest,
+                size_bytes=computation_size,
                 reader_id=reader_id,
-                reader_version=ENGINE_VERSION,
-                created_at=computation.completed_at,
+                reader_version=reader_version,
+                created_at=completed_at,
             )
 
         now = self._clock.now()
@@ -124,10 +138,10 @@ class EvidenceManager:
             schema_version=SCHEMA_VERSION,
             metadata={
                 "reader_id": reader_id,
-                "reader_version": ENGINE_VERSION,
+                "reader_version": reader_version,
                 "capabilities": capabilities,
                 "source_path_policy": "NO_SYMLINK_FOLLOW",
-                "phase1_note": "Logical file bytes are registered without filesystem parsing.",
+                **reader_metadata,
             },
         )
         self._evidence_repository.save_evidence(evidence)
@@ -453,3 +467,59 @@ class EvidenceManager:
         if suffix == ".vhd":
             return EvidenceFormat.VHD
         return EvidenceFormat.RAW
+
+    @staticmethod
+    def _reader_metadata(
+        path: Path, evidence_type: EvidenceFormat
+    ) -> tuple[str, str, list[str], dict[str, Any]]:
+        if evidence_type is EvidenceFormat.DIRECTORY:
+            return (
+                "apex.directory_metadata_reader",
+                ENGINE_VERSION,
+                ["METADATA", "FILESYSTEM_INDEX"],
+                {
+                    "sector_size": None,
+                    "phase_note": "Directory metadata is indexed without reading file bodies.",
+                },
+            )
+        if evidence_type in {EvidenceFormat.RAW, EvidenceFormat.DD, EvidenceFormat.IMG}:
+            probe = RawImageReader.probe(path)
+            return (
+                probe.reader_id,
+                probe.reader_version,
+                [item.capability for item in probe.capabilities if item.status == "SUPPORTED"],
+                {
+                    "sector_size": probe.sector_size,
+                    "reader_capabilities": [item.to_schema_dict() for item in probe.capabilities],
+                    "partition_parser": {
+                        "id": "apex.partition_parser",
+                        "version": "0.1.0",
+                        "status": "AVAILABLE_ON_DEMAND",
+                    },
+                },
+            )
+        if evidence_type is EvidenceFormat.E01:
+            probe = EwfEvidenceReader.probe(path)
+            return (
+                probe.reader_id,
+                probe.reader_version,
+                [item.capability for item in probe.capabilities if item.status == "SUPPORTED"],
+                {
+                    "sector_size": probe.sector_size,
+                    "reader_capabilities": [item.to_schema_dict() for item in probe.capabilities],
+                    "reader_unavailable_reason": probe.unavailable_reason,
+                    "container_hash_only": True,
+                },
+            )
+        probe = VirtualDiskEvidenceReader.probe(path)
+        return (
+            probe.reader_id,
+            probe.reader_version,
+            [item.capability for item in probe.capabilities if item.status == "SUPPORTED"],
+            {
+                "sector_size": probe.sector_size,
+                "reader_capabilities": [item.to_schema_dict() for item in probe.capabilities],
+                "reader_unavailable_reason": probe.unavailable_reason,
+                "container_hash_only": True,
+            },
+        )

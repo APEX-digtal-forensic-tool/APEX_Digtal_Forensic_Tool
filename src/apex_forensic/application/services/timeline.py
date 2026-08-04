@@ -152,6 +152,7 @@ class TimelineService:
                     TimelineSourceType.PREFETCH_ARTIFACT,
                     TimelineSourceType.MEDIA_ARTIFACT,
                     TimelineSourceType.BROWSER_ARTIFACT,
+                    TimelineSourceType.COMMUNICATION_ARTIFACT,
                 )
             ),
             item_budget=item_budget,
@@ -794,8 +795,22 @@ def _artifact_source_type(artifact_type: str) -> TimelineSourceType:
         ArtifactType.BROWSER_VISIT.value,
         ArtifactType.BROWSER_SEARCH.value,
         ArtifactType.BROWSER_DOWNLOAD.value,
+        ArtifactType.BROWSER_COOKIE.value,
+        ArtifactType.BROWSER_CREDENTIAL.value,
+        ArtifactType.BROWSER_CACHE_ENTRY.value,
+        ArtifactType.BROWSER_DELETED_SQLITE_ROW.value,
+        ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE.value,
     }:
         return TimelineSourceType.BROWSER_ARTIFACT
+    if artifact_type in {
+        ArtifactType.COMMUNICATION_PROFILE.value,
+        ArtifactType.COMMUNICATION_ACCOUNT.value,
+        ArtifactType.COMMUNICATION_CONVERSATION.value,
+        ArtifactType.COMMUNICATION_MESSAGE.value,
+        ArtifactType.COMMUNICATION_ATTACHMENT.value,
+        ArtifactType.COMMUNICATION_UNSUPPORTED_STORE.value,
+    }:
+        return TimelineSourceType.COMMUNICATION_ARTIFACT
     return TimelineSourceType.REGISTRY_ARTIFACT
 
 
@@ -838,6 +853,34 @@ def _artifact_event_type(
         if fields.get("end_time_utc") is None:
             return TimelineEventType.BROWSER_DOWNLOAD_STARTED, "BROWSER_DOWNLOAD_STARTED"
         return TimelineEventType.BROWSER_DOWNLOAD_OBSERVED, "BROWSER_DOWNLOAD_OBSERVED"
+    if artifact_type == ArtifactType.BROWSER_COOKIE.value:
+        return TimelineEventType.BROWSER_COOKIE_OBSERVED, "BROWSER_COOKIE_OBSERVED"
+    if artifact_type == ArtifactType.BROWSER_CREDENTIAL.value:
+        return TimelineEventType.BROWSER_CREDENTIAL_OBSERVED, "BROWSER_CREDENTIAL_OBSERVED"
+    if artifact_type == ArtifactType.BROWSER_CACHE_ENTRY.value:
+        return TimelineEventType.BROWSER_CACHE_ENTRY_OBSERVED, "BROWSER_CACHE_ENTRY_OBSERVED"
+    if artifact_type == ArtifactType.BROWSER_DELETED_SQLITE_ROW.value:
+        return (
+            TimelineEventType.BROWSER_DELETED_SQLITE_ROW_CANDIDATE,
+            "BROWSER_DELETED_SQLITE_ROW_CANDIDATE",
+        )
+    if artifact_type == ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE.value:
+        return TimelineEventType.BROWSER_PRIVATE_MODE_CANDIDATE, "BROWSER_PRIVATE_MODE_CANDIDATE"
+    if artifact_type == ArtifactType.COMMUNICATION_PROFILE.value:
+        return TimelineEventType.COMMUNICATION_PROFILE_OBSERVED, "COMMUNICATION_PROFILE"
+    if artifact_type == ArtifactType.COMMUNICATION_ACCOUNT.value:
+        return TimelineEventType.COMMUNICATION_ACCOUNT_OBSERVED, "COMMUNICATION_ACCOUNT"
+    if artifact_type == ArtifactType.COMMUNICATION_CONVERSATION.value:
+        return (
+            TimelineEventType.COMMUNICATION_CONVERSATION_OBSERVED,
+            "COMMUNICATION_CONVERSATION",
+        )
+    if artifact_type == ArtifactType.COMMUNICATION_MESSAGE.value:
+        return TimelineEventType.COMMUNICATION_MESSAGE, "COMMUNICATION_MESSAGE"
+    if artifact_type == ArtifactType.COMMUNICATION_ATTACHMENT.value:
+        return TimelineEventType.COMMUNICATION_ATTACHMENT, "COMMUNICATION_ATTACHMENT"
+    if artifact_type == ArtifactType.COMMUNICATION_UNSUPPORTED_STORE.value:
+        return TimelineEventType.COMMUNICATION_UNSUPPORTED_STORE, "COMMUNICATION_UNSUPPORTED_STORE"
     if artifact_type == ArtifactType.REGISTRY_KEY.value:
         return TimelineEventType.REGISTRY_KEY_LAST_WRITE, "REGISTRY_KEY"
     if artifact_type == ArtifactType.REGISTRY_USERASSIST.value:

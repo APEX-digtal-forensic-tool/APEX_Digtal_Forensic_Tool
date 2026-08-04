@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.metadata
 import struct
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,7 @@ from .common import (
 )
 
 _SUPPORTED_PREFETCH_VERSIONS = {17, 23, 26, 30}
+_MAX_MAM_DECLARED_SIZE = 64 * 1024 * 1024
 _PREFETCH_RUN_COUNT_OFFSETS = {
     17: 0x90,
     23: 0x98,
@@ -72,19 +75,40 @@ class WindowsPrefetchAnalyzer:
                 "PREFETCH_MINIMAL_HEADER",
                 "PREFETCH_SAFE_BOUNDS_CHECKS",
                 "PREFETCH_MAM_COMPRESSION_DETECTION",
+                *(
+                    ("PREFETCH_MAM_DECOMPRESSION",)
+                    if _mam_decompressor_version() is not None
+                    else ()
+                ),
             ),
-            unavailable_capabilities=("PREFETCH_MAM_DECOMPRESSION",),
+            unavailable_capabilities=(
+                ()
+                if _mam_decompressor_version() is not None
+                else ("PREFETCH_MAM_DECOMPRESSION",)
+            ),
             warnings=(
                 {
-                    "code": "UNSUPPORTED_COMPRESSION",
+                    "code": "MAM_DECOMPRESSION_OPTIONAL",
                     "message_key": "warning.prefetch.mam_decompression_unavailable",
                     "developer_message": (
-                        "Windows 10/11 MAM compressed Prefetch files are detected but not "
-                        "decompressed."
+                        "Windows 10/11 MAM compressed Prefetch files require the optional "
+                        "dissect.util LZXPRESS-Huffman decompressor."
                     ),
                 },
             ),
-            metadata={"supported_versions": sorted(_SUPPORTED_PREFETCH_VERSIONS)},
+            metadata={
+                "supported_versions": sorted(_SUPPORTED_PREFETCH_VERSIONS),
+                "mam": {
+                    "header_detection": True,
+                    "decompression": "OPTIONAL_RUNTIME"
+                    if _mam_decompressor_version() is not None
+                    else "CAPABILITY_UNAVAILABLE",
+                    "decompressor": "dissect.util.compression.lzxpress_huffman",
+                    "decompressor_version": _mam_decompressor_version(),
+                    "max_declared_decompressed_size": _MAX_MAM_DECLARED_SIZE,
+                    "compression_bomb_defense": True,
+                },
+            },
         )
 
     def detect_source(self, node: FileSystemNode) -> ArtifactSource | None:
@@ -178,13 +202,28 @@ def _parse_prefetch(
         details={"field_offset": 0, "field_length": min(len(data), 1_048_576)},
     )
     if data.startswith(b"MAM"):
+        mam, decompressed, mam_warnings = _decompress_mam_wrapper(data)
+        if decompressed is not None:
+            nested = _parse_prefetch(
+                evidence=evidence,
+                node=node,
+                source=source,
+                data=decompressed,
+            )
+            nested.fields["mam_header"] = mam
+            nested.fields["compression"] = "MAM"
+            nested.fields["compressed_file_size"] = len(data)
+            nested.fields["decompressed_file_size"] = len(decompressed)
+            nested.fields["decompressed_buffer_hash"] = sha256_hex(decompressed)
+            nested.fields["decompression_status"] = "DECOMPRESSED"
+            nested.fields["user_execution_asserted"] = False
+            nested.warnings.extend(mam_warnings)
+            return nested
         warning = {
-            "code": "UNSUPPORTED_COMPRESSION",
+            "code": mam["warning_code"],
             "message_key": "warning.prefetch.unsupported_compression",
-            "developer_message": (
-                "MAM compressed Prefetch wrapper detected; decompression is not implemented."
-            ),
-            "details": {"compression": "MAM"},
+            "developer_message": mam["warning_message"],
+            "details": mam,
         }
         return make_artifact(
             evidence=evidence,
@@ -202,12 +241,17 @@ def _parse_prefetch(
                 "volume_information": [],
                 "referenced_file_path_candidates": [],
                 "unsupported_reason": "UNSUPPORTED_COMPRESSION",
+                "mam_header": mam,
+                "decompressed_buffer_hash": None,
+                "decompression_status": mam["decompression_status"],
                 "user_execution_asserted": False,
             },
             raw_locator=raw_locator,
             title=f"Unsupported compressed Prefetch: {node.original_name}",
-            summary="MAM compressed Prefetch detected; no decompression was attempted.",
-            parse_status=ArtifactParseStatus.UNSUPPORTED,
+            summary="MAM compressed Prefetch detected but could not be decompressed safely.",
+            parse_status=ArtifactParseStatus.CORRUPT
+            if mam["decompression_status"] == "CORRUPT"
+            else ArtifactParseStatus.UNSUPPORTED,
             confidence=0.4,
             warnings=[warning],
         )
@@ -333,6 +377,82 @@ def _parse_prefetch(
         timezone_confidence="HIGH" if observed_utc is not None else "UNKNOWN",
         warnings=warnings,
     )
+
+
+def _decompress_mam_wrapper(
+    data: bytes,
+) -> tuple[dict[str, Any], bytes | None, list[dict[str, Any]]]:
+    version = data[3] if len(data) >= 4 else None
+    declared_size = struct.unpack_from("<I", data, 4)[0] if len(data) >= 8 else None
+    warning_code = "PREFETCH_MAM_DECOMPRESSOR_UNAVAILABLE"
+    warning_message = "MAM compressed Prefetch wrapper detected; decompressor is unavailable."
+    status = "CAPABILITY_UNAVAILABLE"
+    supported_algorithm = version == 4
+    decompressed: bytes | None = None
+    warnings: list[dict[str, Any]] = []
+    if declared_size is not None and declared_size > _MAX_MAM_DECLARED_SIZE:
+        warning_code = "MAM_DECLARED_SIZE_LIMIT_EXCEEDED"
+        warning_message = "MAM wrapper declares a decompressed size above the safety limit."
+        status = "SIZE_LIMIT_EXCEEDED"
+    elif declared_size is None:
+        warning_code = "MAM_HEADER_TRUNCATED"
+        warning_message = "MAM wrapper is too short to declare decompressed size."
+        status = "CORRUPT"
+    elif not supported_algorithm:
+        warning_code = "MAM_UNSUPPORTED_ALGORITHM"
+        warning_message = "MAM wrapper uses an unsupported compression algorithm marker."
+        status = "UNSUPPORTED_ALGORITHM"
+    else:
+        try:
+            decompressor = importlib.import_module(
+                "dissect.util.compression.lzxpress_huffman"
+            )
+        except ImportError:
+            decompressor = None
+        if decompressor is not None:
+            try:
+                decompressed = decompressor.decompress(data[8:])
+            except Exception:
+                warning_code = "MAM_DECOMPRESSION_FAILED"
+                warning_message = "MAM LZXPRESS-Huffman stream could not be decompressed."
+                status = "CORRUPT"
+            else:
+                if len(decompressed) > _MAX_MAM_DECLARED_SIZE:
+                    warning_code = "MAM_DECOMPRESSED_SIZE_LIMIT_EXCEEDED"
+                    warning_message = (
+                        "MAM decompressed buffer exceeded the configured safety limit."
+                    )
+                    status = "SIZE_LIMIT_EXCEEDED"
+                    decompressed = None
+                elif len(decompressed) != declared_size:
+                    warning_code = "MAM_DECLARED_SIZE_MISMATCH"
+                    warning_message = "MAM decompressed size did not match the declared size."
+                    status = "CORRUPT"
+                    decompressed = None
+                else:
+                    warning_code = "MAM_DECOMPRESSED"
+                    warning_message = "MAM compressed Prefetch was decompressed."
+                    status = "DECOMPRESSED"
+    return {
+        "compression": "MAM",
+        "signature": data[:3].decode("ascii", errors="replace"),
+        "version": version,
+        "declared_decompressed_size": declared_size,
+        "decompressed_size_limit": _MAX_MAM_DECLARED_SIZE,
+        "supported_algorithm": supported_algorithm,
+        "decompressor": "dissect.util.compression.lzxpress_huffman",
+        "decompressor_version": _mam_decompressor_version(),
+        "decompression_status": status,
+        "warning_code": warning_code,
+        "warning_message": warning_message,
+    }, decompressed, warnings
+
+
+def _mam_decompressor_version() -> str | None:
+    try:
+        return importlib.metadata.version("dissect.util")
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 def _unsupported_prefetch_artifact(

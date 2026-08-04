@@ -81,7 +81,12 @@
           "enum": [
             "HISTORY_VISIT",
             "SEARCH_TERM",
-            "DOWNLOAD"
+            "DOWNLOAD",
+            "COOKIE",
+            "CREDENTIAL",
+            "CACHE_ENTRY",
+            "DELETED_SQLITE_ROW_CANDIDATE",
+            "PRIVATE_MODE_CANDIDATE"
           ]
         },
         "artifact_subtype": {

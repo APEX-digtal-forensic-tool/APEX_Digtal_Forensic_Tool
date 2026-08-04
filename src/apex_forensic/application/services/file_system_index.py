@@ -77,6 +77,7 @@ class IndexOptions:
 class _RunState:
     job: Job
     evidence: Evidence
+    provider: FileSystemProvider
     options: IndexOptions
     option_fingerprint: str
     coverage: IndexCoverage
@@ -98,13 +99,14 @@ class FileSystemIndexService:
         evidence_repository: EvidenceRepository,
         repository: FileSystemIndexRepository,
         provider: FileSystemProvider,
+        additional_providers: tuple[FileSystemProvider, ...] = (),
         clock: Clock,
         id_generator: IdGenerator,
     ) -> None:
         self._case_repository = case_repository
         self._evidence_repository = evidence_repository
         self._repository = repository
-        self._provider = provider
+        self._providers = (provider, *additional_providers)
         self._clock = clock
         self._id_generator = id_generator
 
@@ -129,8 +131,7 @@ class FileSystemIndexService:
         """Create and run a filesystem index job synchronously."""
 
         evidence = self._get_evidence_for_case(case_id, evidence_id)
-        if not self._provider.supports_evidence(evidence):
-            self._provider.get_root_node(evidence, index_revision=1)
+        provider = self._provider_for_evidence(evidence)
         options = self._options(
             profile_type=profile_type,
             max_depth=max_depth,
@@ -145,10 +146,10 @@ class FileSystemIndexService:
         option_fingerprint = canonical_sha256(options.to_dict())
         index_revision = self._repository.next_index_revision(
             evidence_id,
-            self._provider.provider_id,
-            self._provider.provider_version,
+            provider.provider_id,
+            provider.provider_version,
         )
-        capabilities = self._provider.capabilities()
+        capabilities = provider.capabilities()
         self._repository.save_fs_provider(
             capabilities.provider_id,
             capabilities.provider_version,
@@ -175,8 +176,8 @@ class FileSystemIndexService:
             job_id=job.job_id,
             case_id=case_id,
             evidence_id=evidence_id,
-            provider_id=self._provider.provider_id,
-            provider_version=self._provider.provider_version,
+            provider_id=provider.provider_id,
+            provider_version=provider.provider_version,
             profile_type=profile_type.value,
             options=options.to_dict(),
             option_fingerprint=option_fingerprint,
@@ -187,8 +188,8 @@ class FileSystemIndexService:
         coverage = IndexCoverage(
             case_id=case_id,
             evidence_id=evidence_id,
-            provider_id=self._provider.provider_id,
-            provider_version=self._provider.provider_version,
+            provider_id=provider.provider_id,
+            provider_version=provider.provider_version,
             profile_type=profile_type,
             option_fingerprint=option_fingerprint,
             status=IndexCoverageStatus.NOT_STARTED,
@@ -198,7 +199,7 @@ class FileSystemIndexService:
             updated_at=now,
         )
         root = self._repository.upsert_fs_node(
-            self._provider.get_root_node(evidence, index_revision=index_revision)
+            provider.get_root_node(evidence, index_revision=index_revision)
         )
         coverage.discovered_items = 1
         if root.is_directory_like and root.is_traversed:
@@ -206,13 +207,14 @@ class FileSystemIndexService:
                 job.job_id, root.node_id, priority=10, depth=0, reason="ROOT", state_sequence=0
             )
         selected_inserted = self._prepare_selected_scopes(
-            evidence, options, index_revision, job.job_id
+            evidence, provider, options, index_revision, job.job_id
         )
         coverage.discovered_items += selected_inserted
         self._repository.upsert_fs_coverage(coverage)
         state = _RunState(
             job=job,
             evidence=evidence,
+            provider=provider,
             options=options,
             option_fingerprint=option_fingerprint,
             coverage=coverage,
@@ -251,6 +253,10 @@ class FileSystemIndexService:
         )
         if coverage is None:
             raise StateConflictError("Index coverage is missing for resume.", target="job_id")
+        provider = self._provider_for_metadata(
+            str(metadata["provider_id"]),
+            str(metadata["provider_version"]),
+        )
         self._repository.reset_interrupted_fs_queue(job_id)
         job.status = JobStatus.RESUMING
         job.job_revision += 1
@@ -260,6 +266,7 @@ class FileSystemIndexService:
         state = _RunState(
             job=job,
             evidence=evidence,
+            provider=provider,
             options=options,
             option_fingerprint=str(metadata["option_fingerprint"]),
             coverage=coverage,
@@ -453,7 +460,7 @@ class FileSystemIndexService:
         self, state: _RunState, item: dict[str, Any], parent: FileSystemNode
     ) -> None:
         batch: list[FileSystemNode] = []
-        for entry in self._provider.iter_directory_entries(
+        for entry in state.provider.iter_directory_entries(
             state.evidence,
             parent,
             index_revision=state.coverage.index_revision,
@@ -566,6 +573,7 @@ class FileSystemIndexService:
     def _prepare_selected_scopes(
         self,
         evidence: Evidence,
+        provider: FileSystemProvider,
         options: IndexOptions,
         index_revision: int,
         job_id: str,
@@ -577,20 +585,20 @@ class FileSystemIndexService:
             for ancestor in ancestors:
                 node = self._repository.get_fs_node_by_relative_path(
                     evidence.evidence_id,
-                    self._provider.provider_id,
-                    self._provider.provider_version,
+                    provider.provider_id,
+                    provider.provider_version,
                     ancestor,
                 )
                 if node is None:
-                    node = self._provider.get_metadata(
+                    node = provider.get_metadata(
                         evidence, ancestor, index_revision=index_revision
                     )
                     self._repository.upsert_fs_node(node)
                     inserted += 1
             node = self._repository.get_fs_node_by_relative_path(
                 evidence.evidence_id,
-                self._provider.provider_id,
-                self._provider.provider_version,
+                provider.provider_id,
+                provider.provider_version,
                 relative_path,
             )
             if node is not None and node.is_directory_like and node.is_traversed:
@@ -620,6 +628,26 @@ class FileSystemIndexService:
                     state_sequence=-1,
                 )
         return inserted
+
+    def _provider_for_evidence(self, evidence: Evidence) -> FileSystemProvider:
+        for provider in self._providers:
+            if provider.supports_evidence(evidence):
+                return provider
+        first = self._providers[0]
+        first.get_root_node(evidence, index_revision=1)
+        return first
+
+    def _provider_for_metadata(self, provider_id: str, provider_version: str) -> FileSystemProvider:
+        for provider in self._providers:
+            if (
+                provider.provider_id == provider_id
+                and provider.provider_version == provider_version
+            ):
+                return provider
+        raise StateConflictError(
+            "Filesystem provider for this job is not configured.",
+            target="provider_id",
+        )
 
     def _record_issue(self, state: _RunState, issue: ProviderScanIssue) -> None:
         if issue.severity == "WARNING":

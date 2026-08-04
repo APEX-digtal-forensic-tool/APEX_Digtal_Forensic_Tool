@@ -146,6 +146,25 @@ def _evidence(args: Namespace, services: Any) -> Any:
             chunk_size=args.chunk_size,
         )
         return {"verification": verification.to_schema_dict(), "job": job.to_schema_dict()}
+    if args.evidence_command == "volumes":
+        return [item.to_schema_dict() for item in services.images.list_volumes(args.evidence_id)]
+    if args.evidence_command == "read-range":
+        return services.images.read_range(
+            evidence_id=args.evidence_id,
+            offset=args.offset,
+            length=args.length,
+        )
+    if args.evidence_command == "unallocated-ranges":
+        return services.images.list_unallocated_ranges(args.evidence_id)
+    if args.evidence_command == "export-range":
+        return services.images.export_range(
+            evidence_id=args.evidence_id,
+            offset=args.offset,
+            length=args.length,
+            output_root=args.output_root,
+            filename=args.filename,
+            overwrite=args.overwrite,
+        )
     if args.evidence_command == "index":
         job, coverage = services.fs.index_evidence(
             case_id=args.case_id,
@@ -195,6 +214,20 @@ def _fs(args: Namespace, services: Any) -> Any:
             args.node_id,
             priority=args.priority,
         ).to_schema_dict()
+    if args.fs_command == "recover-deleted":
+        return services.images.recover_deleted_file(
+            node_id=args.node_id,
+            output_root=args.output_root,
+            filename=args.filename,
+            overwrite=args.overwrite,
+        )
+    if args.fs_command == "export-slack":
+        return services.images.export_file_slack(
+            node_id=args.node_id,
+            output_root=args.output_root,
+            filename=args.filename,
+            overwrite=args.overwrite,
+        )
     raise ValidationError("Unknown filesystem command.", target="fs_command")
 
 
@@ -292,6 +325,11 @@ def _artifact(args: Namespace, services: Any) -> Any:
             "visits": ArtifactType.BROWSER_VISIT,
             "searches": ArtifactType.BROWSER_SEARCH,
             "downloads": ArtifactType.BROWSER_DOWNLOAD,
+            "cookies": ArtifactType.BROWSER_COOKIE,
+            "credentials": ArtifactType.BROWSER_CREDENTIAL,
+            "cache": ArtifactType.BROWSER_CACHE_ENTRY,
+            "deleted": ArtifactType.BROWSER_DELETED_SQLITE_ROW,
+            "private-mode": ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE,
         }
         query = _replace_query_artifact_type(
             _artifact_query(args),
@@ -352,6 +390,11 @@ def _browser(args: Namespace, services: Any) -> Any:
         "history": ArtifactType.BROWSER_VISIT,
         "searches": ArtifactType.BROWSER_SEARCH,
         "downloads": ArtifactType.BROWSER_DOWNLOAD,
+        "cookies": ArtifactType.BROWSER_COOKIE,
+        "credentials": ArtifactType.BROWSER_CREDENTIAL,
+        "cache": ArtifactType.BROWSER_CACHE_ENTRY,
+        "deleted": ArtifactType.BROWSER_DELETED_SQLITE_ROW,
+        "private-mode": ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE,
     }
     if args.browser_command in type_by_command:
         query = _replace_query_artifact_type(

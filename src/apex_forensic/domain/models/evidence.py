@@ -102,7 +102,7 @@ class Evidence:
             "format": self.evidence_type.value,
             "status": self.status.value,
             "size_bytes": self.size_bytes,
-            "sector_size": None,
+            "sector_size": metadata.get("sector_size"),
             "read_only": self.read_only,
             "acquired_at": None,
             "registered_at": to_json_timestamp(self.created_at),
@@ -114,4 +114,57 @@ class Evidence:
             "hashes": [item.to_schema_dict() for item in self.hashes],
             "metadata": metadata,
             "fingerprint": None if self.fingerprint is None else self.fingerprint.to_schema_dict(),
+        }
+
+
+@dataclass(slots=True)
+class EvidenceVolume:
+    """A bounded addressable volume or unallocated disk-image range."""
+
+    volume_id: str
+    case_id: str
+    evidence_id: str
+    volume_index: int
+    scheme: str
+    partition_type: str
+    start_lba: int
+    end_lba: int
+    byte_offset: int
+    byte_length: int
+    sector_size: int
+    is_allocated: bool
+    raw_locator: dict[str, Any]
+    reader_id: str
+    reader_version: str
+    created_at: datetime
+    name: str | None = None
+    guid: str | None = None
+    warnings: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_schema_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible volume DTO."""
+
+        return {
+            "id": self.volume_id,
+            "case_id": self.case_id,
+            "evidence_id": self.evidence_id,
+            "volume_index": self.volume_index,
+            "scheme": self.scheme,
+            "partition_type": self.partition_type,
+            "start_lba": self.start_lba,
+            "end_lba": self.end_lba,
+            "byte_offset": self.byte_offset,
+            "byte_length": self.byte_length,
+            "sector_size": self.sector_size,
+            "allocated": self.is_allocated,
+            "allocation_status": "ALLOCATED" if self.is_allocated else "UNALLOCATED",
+            "name": self.name,
+            "guid": self.guid,
+            "raw_locator": self.raw_locator,
+            "reader": {
+                "id": self.reader_id,
+                "version": self.reader_version,
+            },
+            "warnings": self.warnings,
+            "created_at": to_json_timestamp(self.created_at),
         }

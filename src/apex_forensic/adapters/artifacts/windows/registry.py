@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import codecs
+import hashlib
 import importlib
 import importlib.metadata
 import re
 import shlex
+import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -102,6 +104,17 @@ class WindowsRegistryAnalyzer:
                     ),
                 }
             )
+        regipy_version = self._regipy_version()
+        transaction_capabilities: tuple[str, ...]
+        if regipy_version is None:
+            unavailable.append("REGISTRY_TRANSACTION_LOG_REPLAY")
+            transaction_capabilities = ()
+            transaction_status = "CAPABILITY_UNAVAILABLE"
+            transaction_reason = "regipy is not installed."
+        else:
+            transaction_capabilities = ("REGISTRY_TRANSACTION_LOG_REPLAY",)
+            transaction_status = "OPTIONAL_RUNTIME"
+            transaction_reason = None
         return ArtifactCapability(
             analyzer_id=self.analyzer_id,
             analyzer_version=self.analyzer_version,
@@ -125,14 +138,32 @@ class WindowsRegistryAnalyzer:
                 "REGISTRY_USB_HISTORY",
                 "REGISTRY_TIMEZONE",
                 "REGISTRY_USERASSIST_SAFE",
+                "REGISTRY_EXPORT_DELETED_DIRECTIVE_CANDIDATES",
+                *transaction_capabilities,
             ),
-            unavailable_capabilities=tuple(unavailable),
+            unavailable_capabilities=(
+                *tuple(unavailable),
+                "REGISTRY_BINARY_DELETED_CELL_RECOVERY",
+            ),
             warnings=tuple(warnings),
             metadata={
                 "binary_hive_dependency": "python-registry",
+                "transaction_log_dependency": "regipy",
+                "transaction_log_dependency_version": regipy_version,
                 "live_registry": False,
                 "credential_extraction": False,
-                "transaction_log_recovery": False,
+                "transaction_log_recovery": {
+                    "status": transaction_status,
+                    "supported_log_files": [".LOG", ".LOG1", ".LOG2"],
+                    "reason": transaction_reason,
+                    "base_hive_and_replayed_view_separated": True,
+                    "restored_hive_output_policy": "TEMPORARY_DERIVED_VIEW_ONLY",
+                    "original_hive_mutated": False,
+                },
+                "deleted_key_recovery": {
+                    "registry_export_delete_directives": "SUPPORTED_CANDIDATE",
+                    "binary_deleted_cells": "CAPABILITY_UNAVAILABLE",
+                },
             },
         )
 
@@ -297,6 +328,8 @@ class WindowsRegistryAnalyzer:
         source: ArtifactSource,
         section: _RegSection,
         encoding: str,
+        view_source: str = "REGISTRY_EXPORT",
+        transaction_provenance: dict[str, Any] | None = None,
     ) -> list[ArtifactRecord]:
         artifacts: list[ArtifactRecord] = []
         key_locator = _registry_locator(
@@ -315,20 +348,44 @@ class WindowsRegistryAnalyzer:
             "line_number": section.line_no,
             "last_write_time_raw": None,
             "last_write_time_utc": None,
+            "registry_hive_view": view_source,
+            "deleted_candidate": section.deleted,
+            "recovered_candidate": False,
         }
+        if transaction_provenance is not None:
+            key_fields["transaction_replay_provenance"] = transaction_provenance
+        key_status = ArtifactParseStatus.PARTIAL if section.deleted else ArtifactParseStatus.SUCCESS
+        key_subtype = (
+            "REGISTRY_EXPORT_DELETED_KEY_CANDIDATE"
+            if section.deleted
+            else "REGISTRY_EXPORT_KEY"
+        )
+        key_summary = (
+            "Registry export delete directive observed; key is a deleted-key candidate, "
+            "not a current observed key."
+            if section.deleted
+            else "Registry export key observed in offline text."
+        )
+        if section.deleted:
+            key_fields["deleted_candidate_provenance"] = {
+                "basis": "REG_EXPORT_DELETE_DIRECTIVE",
+                "line_number": section.line_no,
+                "confidence": "HIGH_FOR_EXPORT_DIRECTIVE",
+                "confirmed_binary_deleted_cell": False,
+            }
         artifacts.append(
             make_artifact(
                 evidence=evidence,
                 node=node,
                 source=source,
                 artifact_type=ArtifactType.REGISTRY_KEY,
-                artifact_subtype="REGISTRY_EXPORT_KEY",
+                artifact_subtype=key_subtype,
                 fields=key_fields,
                 raw_locator=key_locator,
                 title=section.path,
-                summary="Registry export key observed in offline text.",
-                parse_status=ArtifactParseStatus.SUCCESS,
-                confidence=0.95,
+                summary=key_summary,
+                parse_status=key_status,
+                confidence=0.75 if section.deleted else 0.95,
             )
         )
         for value in section.values:
@@ -348,20 +405,49 @@ class WindowsRegistryAnalyzer:
                 "is_deleted_directive": value.deleted,
                 "line_number": value.line_no,
                 "hive_type": _hive_type(section.path, node.original_name),
+                "registry_hive_view": view_source,
+                "deleted_candidate": section.deleted or value.deleted,
+                "recovered_candidate": False,
             }
+            if transaction_provenance is not None:
+                value_fields["transaction_replay_provenance"] = transaction_provenance
+            value_subtype = (
+                "REGISTRY_EXPORT_DELETED_VALUE_CANDIDATE"
+                if value.deleted or section.deleted
+                else "REGISTRY_EXPORT_VALUE"
+            )
+            value_status = (
+                ArtifactParseStatus.PARTIAL
+                if value.deleted or section.deleted
+                else ArtifactParseStatus.SUCCESS
+            )
+            value_summary = (
+                "Registry export delete directive observed for this value; value is a "
+                "deleted-value candidate, not a current observed value."
+                if value.deleted or section.deleted
+                else "Registry export value observed in offline text."
+            )
+            if value.deleted or section.deleted:
+                value_fields["deleted_candidate_provenance"] = {
+                    "basis": "REG_EXPORT_DELETE_DIRECTIVE",
+                    "section_line_number": section.line_no,
+                    "value_line_number": value.line_no,
+                    "confidence": "HIGH_FOR_EXPORT_DIRECTIVE",
+                    "confirmed_binary_deleted_cell": False,
+                }
             artifacts.append(
                 make_artifact(
                     evidence=evidence,
                     node=node,
                     source=source,
                     artifact_type=ArtifactType.REGISTRY_VALUE,
-                    artifact_subtype="REGISTRY_EXPORT_VALUE",
+                    artifact_subtype=value_subtype,
                     fields=value_fields,
                     raw_locator=value_locator,
                     title=f"{section.path}\\{value.name}",
-                    summary="Registry export value observed in offline text.",
-                    parse_status=ArtifactParseStatus.SUCCESS,
-                    confidence=0.95,
+                    summary=value_summary,
+                    parse_status=value_status,
+                    confidence=0.7 if value.deleted or section.deleted else 0.95,
                 )
             )
             if _is_autorun_path(section.path) and not value.deleted:
@@ -460,19 +546,51 @@ class WindowsRegistryAnalyzer:
         values = {value.name.casefold(): value.data for value in section.values}
         timezone_key_name = _string_or_none(values.get("timezonekeyname"))
         iana_candidate = _WINDOWS_TZ_TO_IANA.get(timezone_key_name or "")
+        bias = _int_or_none(values.get("bias"))
+        standard_bias = _int_or_none(values.get("standardbias"))
+        daylight_bias = _int_or_none(values.get("daylightbias"))
+        dynamic_dst_disabled = _bool_or_none(values.get("dynamicdaylighttimedisabled"))
         fields = {
             "registry_path": section.path,
             "TimeZoneKeyName": timezone_key_name,
             "StandardName": _string_or_none(values.get("standardname")),
             "DaylightName": _string_or_none(values.get("daylightname")),
-            "Bias": _int_or_none(values.get("bias")),
+            "Bias": bias,
             "ActiveTimeBias": _int_or_none(values.get("activetimebias")),
-            "StandardBias": _int_or_none(values.get("standardbias")),
-            "DaylightBias": _int_or_none(values.get("daylightbias")),
+            "StandardBias": standard_bias,
+            "DaylightBias": daylight_bias,
+            "DynamicDaylightTimeDisabled": dynamic_dst_disabled,
             "registry_last_write_time_raw": None,
             "registry_last_write_time_utc": None,
             "iana_mapping_candidate": iana_candidate,
             "iana_mapping_confidence": "MEDIUM" if iana_candidate else "UNKNOWN",
+            "timezone_resolver": {
+                "source": "WINDOWS_TIMEZONE_CANDIDATE",
+                "confidence": "MEDIUM" if iana_candidate else "LOW",
+                "windows_time_zone_key": timezone_key_name,
+                "iana_candidate": iana_candidate,
+                "bias_minutes": bias,
+                "standard_bias_minutes": standard_bias,
+                "daylight_bias_minutes": daylight_bias,
+                "dynamic_dst": {
+                    "dynamic_daylight_time_disabled": dynamic_dst_disabled,
+                    "dynamic_dst_rules_parsed": False,
+                    "limitation": (
+                        "Dynamic DST transition rules require correlated time-zone database "
+                        "registry keys and are not inferred from this value alone."
+                    ),
+                },
+                "browser_application_offset_policy": (
+                    "Application/browser explicit timestamp offsets are preserved on their "
+                    "own artifacts and not overwritten by this Windows timezone candidate."
+                ),
+                "artifact_offset_policy": "EXPLICIT_OFFSET_WINS_OVER_REGISTRY_CANDIDATE",
+                "analyst_override": {
+                    "applied": False,
+                    "source": "ANALYST_CONFIRMED",
+                    "audit_required": True,
+                },
+            },
         }
         return make_artifact(
             evidence=evidence,
@@ -622,7 +740,20 @@ class WindowsRegistryAnalyzer:
             node=node,
             source=source,
             item_budget=item_budget,
+            view_source="ORIGINAL_HIVE",
+            transaction_provenance=None,
         )
+        replay_warning, replay_artifacts = self._transaction_replay_artifacts(
+            file_path=file_path,
+            evidence=evidence,
+            node=node,
+            source=source,
+            item_budget=item_budget,
+            original_artifacts=artifacts,
+        )
+        if replay_warning is not None:
+            warnings.append(replay_warning)
+        artifacts.extend(replay_artifacts)
         status = (
             ArtifactParseStatus.PARTIAL
             if item_budget is not None and len(artifacts) >= item_budget
@@ -632,7 +763,11 @@ class WindowsRegistryAnalyzer:
             artifacts=tuple(artifacts[:item_budget] if item_budget is not None else artifacts),
             warnings=tuple(warnings),
             parse_status=status,
-            coverage={"binary_backend": "python-registry", "backend_version": backend_version},
+            coverage={
+                "binary_backend": "python-registry",
+                "backend_version": backend_version,
+                "transaction_replay_artifact_count": len(replay_artifacts),
+            },
         )
 
     def _extract_binary_hive_artifacts(
@@ -643,6 +778,8 @@ class WindowsRegistryAnalyzer:
         node: FileSystemNode,
         source: ArtifactSource,
         item_budget: int | None,
+        view_source: str,
+        transaction_provenance: dict[str, Any] | None,
     ) -> tuple[list[ArtifactRecord], list[ArtifactIssue]]:
         artifacts: list[ArtifactRecord] = []
         warnings: list[ArtifactIssue] = []
@@ -654,6 +791,8 @@ class WindowsRegistryAnalyzer:
                     source=source,
                     section=section,
                     encoding="registry-hive",
+                    view_source=view_source,
+                    transaction_provenance=transaction_provenance,
                 )
             )
             if item_budget is not None and len(artifacts) >= item_budget:
@@ -671,6 +810,89 @@ class WindowsRegistryAnalyzer:
                 )
             )
         return artifacts, warnings
+
+    def _transaction_replay_artifacts(
+        self,
+        *,
+        file_path: Path,
+        evidence: Evidence,
+        node: FileSystemNode,
+        source: ArtifactSource,
+        item_budget: int | None,
+        original_artifacts: list[ArtifactRecord],
+    ) -> tuple[ArtifactIssue | None, list[ArtifactRecord]]:
+        if self._regipy_version() is None:
+            return None, []
+        primary, secondary = _transaction_log_paths(file_path)
+        if primary is None:
+            return None, []
+        try:
+            recovery_module = importlib.import_module("regipy.recovery")
+            registry_module = importlib.import_module("Registry.Registry")
+            with tempfile.TemporaryDirectory(prefix="apex-registry-replay-") as temp_dir:
+                restored = Path(temp_dir) / f"{file_path.name}.replayed"
+                restored_path, dirty_pages = recovery_module.apply_transaction_logs(
+                    str(file_path),
+                    str(primary),
+                    secondary_log_path=None if secondary is None else str(secondary),
+                    restored_hive_path=str(restored),
+                    verbose=False,
+                )
+                provenance = {
+                    "status": "APPLIED",
+                    "adapter": "regipy.recovery.apply_transaction_logs",
+                    "adapter_version": self._regipy_version(),
+                    "base_hive_sha256": _file_sha256(file_path),
+                    "primary_log": _log_provenance(primary),
+                    "secondary_log": None if secondary is None else _log_provenance(secondary),
+                    "recovered_dirty_pages": int(dirty_pages),
+                    "original_hive_mutated": False,
+                    "replayed_view_separated": True,
+                }
+                replayed_registry = registry_module.Registry(str(restored_path))
+                replayed, warnings = self._extract_binary_hive_artifacts(
+                    registry=replayed_registry,
+                    evidence=evidence,
+                    node=node,
+                    source=source,
+                    item_budget=item_budget,
+                    view_source="REPLAYED_TRANSACTION_LOG",
+                    transaction_provenance=provenance,
+                )
+        except Exception as error:
+            return (
+                issue(
+                    severity="WARNING",
+                    code="REGISTRY_TRANSACTION_LOG_REPLAY_FAILED",
+                    message_key="warning.registry.transaction_log_replay_failed",
+                    developer_message=(
+                        "Registry transaction logs were discovered but could not be applied."
+                    ),
+                    node=node,
+                    details={
+                        "primary_log": str(primary),
+                        "secondary_log": None if secondary is None else str(secondary),
+                        "error_type": type(error).__name__,
+                    },
+                ),
+                [],
+            )
+        original_keys = {_registry_logical_key(artifact) for artifact in original_artifacts}
+        for artifact in replayed:
+            logical_key = _registry_logical_key(artifact)
+            artifact.fields["transaction_replay_provenance"] = provenance
+            artifact.fields["recovered_candidate"] = logical_key not in original_keys
+            artifact.fields["recovered_candidate_provenance"] = {
+                "basis": "PRESENT_ONLY_IN_REPLAYED_VIEW"
+                if logical_key not in original_keys
+                else "PRESENT_IN_REPLAYED_VIEW",
+                "confidence": "MEDIUM",
+                "binary_deleted_cell_recovery": False,
+            }
+            artifact.raw_locator["details"]["registry_hive_view"] = "REPLAYED_TRANSACTION_LOG"
+        if warnings:
+            return warnings[0], replayed
+        return None, replayed
 
     def _binary_sections(self, registry: Any, node: FileSystemNode) -> Iterable[_RegSection]:
         paths = _binary_target_paths(node.original_name)
@@ -710,6 +932,13 @@ class WindowsRegistryAnalyzer:
     def _python_registry_version() -> str | None:
         try:
             return importlib.metadata.version("python-registry")
+        except importlib.metadata.PackageNotFoundError:
+            return None
+
+    @staticmethod
+    def _regipy_version() -> str | None:
+        try:
+            return importlib.metadata.version("regipy")
         except importlib.metadata.PackageNotFoundError:
             return None
 
@@ -940,6 +1169,49 @@ def _registry_locator(
     )
 
 
+def _transaction_log_paths(hive_path: Path) -> tuple[Path | None, Path | None]:
+    """Return adjacent primary/secondary hive transaction logs without following links."""
+
+    candidates = (
+        hive_path.with_name(f"{hive_path.name}.LOG1"),
+        hive_path.with_name(f"{hive_path.name}.LOG"),
+    )
+    primary = next((candidate for candidate in candidates if _safe_adjacent_file(candidate)), None)
+    secondary = hive_path.with_name(f"{hive_path.name}.LOG2")
+    return primary, secondary if _safe_adjacent_file(secondary) else None
+
+
+def _safe_adjacent_file(path: Path) -> bool:
+    try:
+        return path.exists() and path.is_file() and not path.is_symlink()
+    except OSError:
+        return False
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _log_provenance(path: Path) -> dict[str, Any]:
+    return {
+        "path": path.name,
+        "size_bytes": path.stat().st_size,
+        "sha256": _file_sha256(path),
+    }
+
+
+def _registry_logical_key(artifact: ArtifactRecord) -> tuple[str, str | None, str | None]:
+    return (
+        artifact.artifact_type.value,
+        _string_or_none(artifact.fields.get("registry_path")),
+        _string_or_none(artifact.fields.get("value_name")),
+    )
+
+
 def _normalized_registry_path(path: str) -> str:
     return path.replace("/", "\\").casefold()
 
@@ -1024,6 +1296,13 @@ def _int_or_none(value: Any) -> int | None:
         return None if value is None else int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    integer = _int_or_none(value)
+    if integer is None:
+        return None
+    return bool(integer)
 
 
 def _json_value_data(value: Any) -> Any:

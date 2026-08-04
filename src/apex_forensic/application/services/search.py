@@ -6,6 +6,7 @@ import base64
 import json
 import re
 import time
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -54,6 +55,8 @@ from apex_forensic.ports.search_index import SearchIndexProvider, SearchReposito
 MAX_QUERY_LIMIT = 1000
 MAX_REGEX_LENGTH = 512
 DEFAULT_SEARCH_CACHE_TTL_SECONDS: int | None = None
+SEARCH_NORMALIZATION_VERSION = "apex-search-normalization-ko-v1"
+SEARCH_TOKENIZER_VERSION = "sqlite-fts5-unicode61-apex-ko-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +98,31 @@ class _SearchRunState:
     warning_count: int = 0
     error_count: int = 0
     current_source: tuple[str, str] | None = None
+
+
+def _normalize_search_copy(value: str) -> str:
+    normalized = unicodedata.normalize("NFC", value)
+    normalized = normalized.replace("\\", "/")
+    normalized = normalized.casefold()
+    normalized = re.sub(r"/+", "/", normalized)
+    normalized = re.sub(r"\s+", " ", normalized, flags=re.UNICODE)
+    return normalized.strip()
+
+
+def _normalized_structured_fields(row: dict[str, Any]) -> dict[str, Any]:
+    original = str(row["searchable_text"])
+    fields = dict(row.get("structured_fields") or {})
+    fields["search_normalization"] = {
+        "version": SEARCH_NORMALIZATION_VERSION,
+        "tokenizer_version": SEARCH_TOKENIZER_VERSION,
+        "unicode_normalization": "NFC",
+        "case_folding": "casefold",
+        "path_separator_normalization": "\\\\ -> /",
+        "hangul_policy": "NFC_COMPOSED_JAMO_WHEN_CANONICAL",
+        "morphological_analysis": False,
+        "original_search_text_sha256": canonical_sha256(original),
+    }
+    return fields
 
 
 class SearchService:
@@ -334,7 +362,12 @@ class SearchService:
             if keyword_set is None:
                 raise NotFoundError("KEYWORD_SET_NOT_FOUND", "Keyword set not found.")
             effective_keyword_set_version = keyword_set.version
-        effective_query_text = self._effective_query_text(query_text, keyword_set)
+        raw_effective_query_text = self._effective_query_text(query_text, keyword_set)
+        effective_query_text = (
+            raw_effective_query_text
+            if query_mode is SearchQueryMode.REGEX_METADATA
+            else _normalize_search_copy(raw_effective_query_text)
+        )
         index_revision = self._search_index.current_search_index_revision(case_id)
         source_revision_fingerprint = self._search_repository.search_source_revision_fingerprint(
             case_id=case_id,
@@ -345,8 +378,13 @@ class SearchService:
         time_to_json = None if time_to is None else to_json_timestamp(time_to)
         options = {
             "case_id": case_id,
-            "query_text": query_text,
+            "query_text": effective_query_text,
+            "original_query_text": query_text,
             "effective_query_text": effective_query_text,
+            "raw_effective_query_text": raw_effective_query_text,
+            "normalized_effective_query_text": effective_query_text,
+            "normalization_version": SEARCH_NORMALIZATION_VERSION,
+            "tokenizer_version": SEARCH_TOKENIZER_VERSION,
             "query_mode": query_mode.value,
             "evidence_ids": evidence_ids or [],
             "source_types": [item.value for item in (source_types or ())],
@@ -363,7 +401,12 @@ class SearchService:
             "sort": sort,
             "cache_ttl_seconds": DEFAULT_SEARCH_CACHE_TTL_SECONDS,
         }
-        options_fingerprint = canonical_sha256(options)
+        fingerprint_options = {
+            key: value
+            for key, value in options.items()
+            if key not in {"original_query_text", "raw_effective_query_text"}
+        }
+        options_fingerprint = canonical_sha256(fingerprint_options)
         cache_key = canonical_sha256(
             {
                 "case_id": case_id,
@@ -830,9 +873,11 @@ class SearchService:
             document_type=document_type,
             title=str(row["title"]),
             path=row.get("path"),
-            normalized_path=row.get("normalized_path"),
-            searchable_text=str(row["searchable_text"]),
-            structured_fields=dict(row.get("structured_fields") or {}),
+            normalized_path=None
+            if row.get("normalized_path") is None
+            else _normalize_search_copy(str(row["normalized_path"])),
+            searchable_text=_normalize_search_copy(str(row["searchable_text"])),
+            structured_fields=_normalized_structured_fields(row),
             observed_at_utc=None
             if observed_at is None
             else observed_at

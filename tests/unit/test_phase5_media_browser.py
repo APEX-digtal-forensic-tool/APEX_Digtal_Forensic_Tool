@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
 import sys
@@ -68,6 +69,13 @@ def _minimal_mp4() -> bytes:
     trak = _mp4_box(b"trak", mdia)
     return _mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isommp42") + _mp4_box(
         b"moov", _mp4_box(b"mvhd", mvhd) + trak
+    )
+
+
+def _tiny_png() -> bytes:
+    return base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/"
+        "pLvAAAAAElFTkSuQmCC"
     )
 
 
@@ -263,6 +271,167 @@ def _create_chromium_history_with_visits(path: Path, count: int) -> None:
                 url=f"https://example.com/page-{index}",
                 title=f"Page {index}",
             )
+    finally:
+        connection.close()
+
+
+def _create_chromium_cookies(path: Path, *, with_deleted_candidate: bool = False) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE cookies (
+                host_key TEXT,
+                name TEXT,
+                value TEXT,
+                encrypted_value BLOB,
+                path TEXT,
+                creation_utc INTEGER,
+                expires_utc INTEGER,
+                last_access_utc INTEGER,
+                is_secure INTEGER,
+                is_httponly INTEGER,
+                has_expires INTEGER,
+                is_persistent INTEGER,
+                samesite INTEGER,
+                source_scheme INTEGER,
+                source_port INTEGER
+            );
+            """
+        )
+        created = _webkit_time(datetime(2024, 4, 5, 6, 7, 8, tzinfo=UTC))
+        encrypted = b"v10" + (b"0" * 32)
+        connection.execute(
+            """
+            INSERT INTO cookies VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                ".example.com",
+                "session_id",
+                "",
+                encrypted,
+                "/",
+                created,
+                created + 10_000,
+                created + 20_000,
+                1,
+                1,
+                1,
+                1,
+                0,
+                2,
+                443,
+            ),
+        )
+        if with_deleted_candidate:
+            for index in range(160):
+                connection.execute(
+                    """
+                    INSERT INTO cookies VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )
+                    """,
+                    (
+                        ".deleted.example",
+                        f"deleted-{index}",
+                        "super-secret-cookie" * 256,
+                        b"",
+                        "/",
+                        created,
+                        created,
+                        created,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+            connection.commit()
+            connection.execute("DELETE FROM cookies WHERE host_key = '.deleted.example'")
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _create_chromium_login_data(path: Path) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE logins (
+                origin_url TEXT,
+                action_url TEXT,
+                signon_realm TEXT,
+                username_value TEXT,
+                password_value BLOB,
+                date_created INTEGER,
+                date_last_used INTEGER,
+                date_password_modified INTEGER,
+                times_used INTEGER,
+                scheme INTEGER
+            );
+            """
+        )
+        created = _webkit_time(datetime(2024, 4, 6, 7, 8, 9, tzinfo=UTC))
+        connection.execute(
+            "INSERT INTO logins VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "https://accounts.example.com/login",
+                "https://accounts.example.com/session",
+                "https://accounts.example.com/",
+                "alice@example.com",
+                b"v10" + (b"1" * 32),
+                created,
+                created + 10_000,
+                created + 20_000,
+                4,
+                0,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _create_firefox_cookies(path: Path) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE moz_cookies (
+                host TEXT,
+                name TEXT,
+                value TEXT,
+                path TEXT,
+                expiry INTEGER,
+                lastAccessed INTEGER,
+                creationTime INTEGER,
+                isSecure INTEGER,
+                isHttpOnly INTEGER
+            );
+            """
+        )
+        created = int(datetime(2024, 4, 7, 8, 9, 10, tzinfo=UTC).timestamp() * 1_000_000)
+        connection.execute(
+            "INSERT INTO moz_cookies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                ".mozilla.example",
+                "auth",
+                "firefox-secret-cookie",
+                "/",
+                int(datetime(2025, 1, 1, tzinfo=UTC).timestamp()),
+                created,
+                created,
+                1,
+                1,
+            ),
+        )
+        connection.commit()
     finally:
         connection.close()
 
@@ -910,6 +1079,211 @@ def test_phase5_firefox_input_history_is_limited_candidate_not_search(
     assert timeline_searches.page.returned == 0
 
 
+def test_phase5_browser_cookie_and_credential_stores_are_redacted(
+    services,
+    tmp_path: Path,
+    schema_validator,
+) -> None:
+    evidence_dir = tmp_path / "browser-secret-stores"
+    chrome_dir = evidence_dir / "Chrome" / "Default"
+    firefox_dir = evidence_dir / "Firefox" / "default-release"
+    chrome_dir.mkdir(parents=True)
+    firefox_dir.mkdir(parents=True)
+    _create_chromium_cookies(chrome_dir / "Cookies")
+    _create_chromium_login_data(chrome_dir / "Login Data")
+    _create_firefox_cookies(firefox_dir / "cookies.sqlite")
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    job, _ = services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["browser.history"],
+    )
+    assert job.status == "PARTIAL"
+
+    cookies = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.BROWSER_COOKIE, limit=10)
+    )
+    credentials = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.BROWSER_CREDENTIAL)
+    )
+    assert cookies.returned == 2
+    assert credentials.returned == 1
+
+    chromium_cookie = next(
+        item for item in cookies.items if item.fields["browser_family"] == "CHROMIUM"
+    )
+    firefox_cookie = next(
+        item for item in cookies.items if item.fields["browser_family"] == "FIREFOX"
+    )
+    credential = credentials.items[0]
+    assert chromium_cookie.fields["cookie_domain"] == ".example.com"
+    assert chromium_cookie.fields["decryption_status"] == "KEY_UNAVAILABLE"
+    assert chromium_cookie.fields["encrypted_blob_policy"]["hash_only"] is True
+    assert firefox_cookie.fields["decryption_status"] == "PLAINTEXT_REDACTED"
+    assert credential.fields["credential_origin_domain"] == "accounts.example.com"
+    assert credential.fields["username_present"] is True
+    assert credential.fields["username_plaintext_redacted"] is True
+    assert credential.fields["password_plaintext_emitted"] is False
+    assert credential.fields["decryption_status"] == "KEY_UNAVAILABLE"
+
+    for artifact in (*cookies.items, credential):
+        payload = json.dumps(artifact.fields, sort_keys=True)
+        assert "super-secret-cookie" not in payload
+        assert "firefox-secret-cookie" not in payload
+        assert "alice@example.com" not in payload
+        assert artifact.fields["secret_handling_policy"]["search_index_default_exclude"] is True
+        schema_validator.validate_artifact(artifact.to_schema_dict())
+
+    services.search.index(case_id=case.case_id)
+    secret_search = services.search.query(
+        case_id=case.case_id,
+        query_text="firefox-secret-cookie",
+    )
+    domain_search = services.search.query(case_id=case.case_id, query_text="example.com")
+    assert secret_search.execution.result_count == 0
+    assert domain_search.execution.result_count >= 1
+
+
+def test_phase5_chromium_secret_decryption_requires_explicit_external_key() -> None:
+    result = browser_adapter.decrypt_chromium_aes_gcm_secret(
+        b"v10" + (b"0" * 32),
+        key=None,
+        key_provider_id=None,
+        key_provider_version=None,
+    )
+
+    assert result["status"] == "KEY_UNAVAILABLE"
+    assert result["failure_reason"] == "EXTERNAL_KEY_REQUIRED"
+    assert result["plaintext_emitted"] is False
+    assert "plaintext" not in result
+
+
+def test_phase5_chromium_aes_gcm_decryption_runtime_success_and_auth_failure() -> None:
+    crypto = pytest.importorskip("cryptography.hazmat.primitives.ciphers.aead")
+    key = b"\x01" * 32
+    nonce = b"\x02" * 12
+    plaintext = "한글-secret-value".encode()
+    encrypted = b"v10" + nonce + crypto.AESGCM(key).encrypt(nonce, plaintext, None)
+
+    redacted = browser_adapter.decrypt_chromium_aes_gcm_secret(
+        encrypted,
+        key=key,
+        key_provider_id="fixture-key",
+        key_provider_version="1",
+    )
+
+    assert redacted["status"] == "DECRYPTED"
+    assert redacted["plaintext_emitted"] is False
+    assert redacted["plaintext_length"] == len(plaintext)
+    assert len(redacted["plaintext_sha256"]) == 64
+    assert "plaintext" not in redacted
+
+    emitted = browser_adapter.decrypt_chromium_aes_gcm_secret(
+        encrypted,
+        key=key,
+        key_provider_id="fixture-key",
+        key_provider_version="1",
+        include_plaintext=True,
+    )
+    assert emitted["status"] == "DECRYPTED"
+    assert emitted["plaintext"] == plaintext
+
+    failed = browser_adapter.decrypt_chromium_aes_gcm_secret(
+        encrypted[:-1] + bytes([encrypted[-1] ^ 0xFF]),
+        key=key,
+        key_provider_id="fixture-key",
+        key_provider_version="1",
+    )
+    assert failed["status"] == "DECRYPTION_FAILED"
+    assert failed["failure_reason"] == "AES_GCM_AUTHENTICATION_FAILED"
+    assert failed["plaintext_emitted"] is False
+    assert "plaintext" not in failed
+
+
+def test_phase5_browser_cache_deleted_sqlite_and_private_mode_candidates(
+    services,
+    tmp_path: Path,
+    schema_validator,
+) -> None:
+    evidence_dir = tmp_path / "browser-candidates"
+    chrome_dir = evidence_dir / "Chrome" / "Default"
+    guest_dir = evidence_dir / "Chrome" / "Guest Profile"
+    cache_dir = chrome_dir / "Cache" / "Cache_Data"
+    cache_dir.mkdir(parents=True)
+    guest_dir.mkdir(parents=True)
+    cache_bytes = b"HTTP cache object bytes"
+    (cache_dir / "f_000001").write_bytes(cache_bytes)
+    _create_chromium_cookies(chrome_dir / "Cookies", with_deleted_candidate=True)
+    _create_chromium_history(guest_dir / "History")
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    discovery = services.artifacts.discover_sources(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["browser.history"],
+    )
+    assert "BROWSER_CACHE_FILE" in {item["source_kind"] for item in discovery["sources"]}
+
+    services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["browser.history"],
+    )
+    cache = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.BROWSER_CACHE_ENTRY)
+    )
+    deleted = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.BROWSER_DELETED_SQLITE_ROW)
+    )
+    private = services.artifacts.list_artifacts(
+        ArtifactQuery(
+            case_id=case.case_id,
+            artifact_type=ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE,
+        )
+    )
+    assert cache.returned == 1
+    assert deleted.returned >= 1
+    assert private.returned == 1
+
+    cache_artifact = cache.items[0]
+    assert cache_artifact.fields["body_offset"] == 0
+    assert cache_artifact.fields["body_length"] == len(cache_bytes)
+    assert len(cache_artifact.fields["body_sha256"]) == 64
+    assert cache_artifact.raw_locator["details"]["body_length"] == len(cache_bytes)
+    assert cache_artifact.fields["bounded_extraction"]["truncated"] is False
+    assert any(
+        warning["code"] == "BROWSER_CACHE_FORMAT_PARTIAL"
+        for warning in cache_artifact.warnings
+    )
+
+    deleted_candidate = deleted.items[0]
+    assert deleted_candidate.fields["confirmed_row"] is False
+    assert deleted_candidate.fields["deleted_record_content_recovered"] is False
+    assert deleted_candidate.fields["candidate_semantics"] == (
+        "DELETED_OR_UNAPPLIED_ROW_CANDIDATE_NOT_CONFIRMED_ROW"
+    )
+    assert "SQLITE_FREELIST_PAGES_PRESENT" in deleted_candidate.fields["candidate_basis"]
+
+    private_candidate = private.items[0]
+    assert private_candidate.fields["private_mode_candidate"] is True
+    assert private_candidate.fields["private_mode_confirmed"] is False
+    assert private_candidate.fields["absence_of_evidence_not_private_mode_evidence"] is True
+
+    for artifact in (cache_artifact, deleted_candidate, private_candidate):
+        schema_validator.validate_artifact(artifact.to_schema_dict())
+
+    services.timeline.build(case_id=case.case_id)
+    cache_events = services.timeline.list_events(
+        case_id=case.case_id,
+        event_types=[TimelineEventType.BROWSER_CACHE_ENTRY_OBSERVED],
+    )
+    assert cache_events.page.returned >= 1
+
+
 def test_phase5_browser_projection_displayed_case_time_converts_timezone(
     services,
     tmp_path: Path,
@@ -1091,6 +1465,97 @@ def test_phase5_media_decompression_bomb_and_corrupt_boundaries(
     corrupt = next(item for item in page.items if item.source_path.endswith("corrupt.jpg"))
     assert any(warning["code"] == "IMAGE_DECOMPRESSION_BOMB_LIMIT" for warning in huge.warnings)
     assert corrupt.parse_status is ArtifactParseStatus.CORRUPT
+
+
+def test_phase5_media_raster_thumbnail_rendering_and_frame_capability(
+    services,
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "media-derived"
+    media_dir = evidence_dir / "media"
+    media_dir.mkdir(parents=True)
+    (media_dir / "pixel.png").write_bytes(_tiny_png())
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["media.metadata"],
+    )
+    page = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, artifact_type=ArtifactType.MEDIA_IMAGE)
+    )
+    image = page.items[0]
+    thumbnail = image.fields["thumbnail_cache"]
+    assert thumbnail["status"] == "GENERATED"
+    assert thumbnail["pixel_rendered"] is True
+    assert thumbnail["output_format"] == "PNG"
+    assert thumbnail["width"] == 1
+    assert thumbnail["height"] == 1
+    assert thumbnail["relative_path"].endswith(".png")
+    assert len(thumbnail["content_sha256"]) == 64
+    assert thumbnail["source_content_sha256"] == image.raw_locator["content_sha256"]
+
+    row = services.repository.connection.execute(
+        "SELECT relative_path, content_sha256 FROM cache_entries WHERE key_sha256 = ?",
+        (thumbnail["cache_key"],),
+    ).fetchone()
+    assert row is not None
+    assert row["relative_path"] == thumbnail["relative_path"]
+    assert row["content_sha256"] == thumbnail["content_sha256"]
+
+    capability = media_adapter.MediaMetadataAnalyzer().capabilities().to_schema_dict()
+    ffmpeg = capability["metadata"]["ffmpeg"]
+    if media_adapter.shutil.which("ffmpeg") is None:
+        assert "FFMPEG_FRAME_SAMPLING" in capability["unavailable_capabilities"]
+        assert ffmpeg["is_available"] is False
+    else:
+        assert ffmpeg["is_available"] is True
+        sampled = media_adapter._ffmpeg_sample_frame(
+            file_path=media_dir / "pixel.png",
+            timestamp_seconds=0,
+        )
+        assert sampled["status"] in {"GENERATED", "FAILED"}
+
+
+def test_phase5_ffmpeg_video_frame_sampling_runtime(tmp_path: Path) -> None:
+    ffmpeg = media_adapter.shutil.which("ffmpeg")
+    ffprobe = media_adapter.shutil.which("ffprobe")
+    if ffmpeg is None or ffprobe is None:
+        pytest.skip("ffmpeg/ffprobe binaries are not available on PATH")
+    video = tmp_path / "sample.mp4"
+    created = media_adapter._run_bounded_process(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=16x16:d=1:r=1",
+            "-frames:v",
+            "1",
+            str(video),
+        ],
+        timeout=10,
+        max_bytes=256 * 1024,
+    )
+    assert created.returncode == 0
+    assert video.exists()
+
+    sampled = media_adapter._ffmpeg_sample_frame(file_path=video, timestamp_seconds=0)
+
+    assert sampled["status"] == "GENERATED"
+    assert sampled["frame_count"] == 1
+    assert sampled["output_format"] == "PNG"
+    assert len(sampled["sha256"]) == 64
+    assert sampled["size_bytes"] > 0
+
+    metadata = media_adapter._ffprobe_metadata(file_path=video, media_kind="VIDEO")
+    assert metadata["parse_status"] is ArtifactParseStatus.SUCCESS
+    assert metadata["metadata"]["width"] == 16
+    assert metadata["metadata"]["height"] == 16
 
 
 def test_phase5_ffprobe_timestamp_normalization_cases() -> None:

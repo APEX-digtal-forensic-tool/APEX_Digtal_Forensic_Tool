@@ -793,7 +793,11 @@ class ArtifactAnalysisService:
         state: _ArtifactRunState,
         source: ArtifactSource,
     ) -> int | None:
-        if source.source_kind is ArtifactSourceKind.BROWSER_SQLITE_DB:
+        if source.source_kind in {
+            ArtifactSourceKind.BROWSER_SQLITE_DB,
+            ArtifactSourceKind.EMAIL_MBOX,
+            ArtifactSourceKind.COMMUNICATION_SQLITE_DB,
+        }:
             if state.options.item_budget is not None:
                 return max(1, state.options.item_budget - state.artifacts_this_run)
             return state.options.batch_size

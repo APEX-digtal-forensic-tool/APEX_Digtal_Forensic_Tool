@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "jsonschema>=4.22",
+  "pytsk3>=20260715",
   "tzdata; platform_system == 'Windows'",
 ]
 
@@ -22,9 +23,22 @@ dev = [
 windows-artifacts = [
   "python-registry>=1.3.1",
   "python-evtx>=0.8.1",
+  "regipy>=6.3.0",
+  "dissect.util>=3.24",
+  "pywin32>=306; platform_system == 'Windows'",
 ]
 browser-media = [
   "Pillow>=10.0",
+  "cryptography>=42.0",
+]
+filesystem-image = [
+  "pytsk3>=20260715",
+]
+expert-witness = [
+  "libewf-python>=20240506",
+]
+virtual-disk = [
+  "libvhdi-python>=20251119",
 ]
 
 [project.scripts]
