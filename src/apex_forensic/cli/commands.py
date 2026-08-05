@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import os
 import sys
 from argparse import Namespace
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from apex_forensic.adapters.ai import OpenAICompatibleConfig, OpenAICompatibleProvider
+from apex_forensic.adapters.decryption import (
+    DpapiExternalKeyProvider,
+    DpapiUnavailableProvider,
+    KakaoTalkEncryptedStoreProvider,
+    NssUnavailableProvider,
+)
+from apex_forensic.adapters.machine_extraction import (
+    RapidOcrProvider,
+    TesseractCliOcrProvider,
+    WhisperCppCliSttProvider,
+)
+from apex_forensic.adapters.report import RuntimeReportRenderer
 from apex_forensic.config import build_services
 from apex_forensic.domain.enums import (
     AnalysisContextPurpose,
@@ -31,7 +47,15 @@ from apex_forensic.domain.enums import (
     TimezoneConfidence,
 )
 from apex_forensic.domain.errors import ApexError, ValidationError
-from apex_forensic.domain.models import ArtifactQuery
+from apex_forensic.domain.models import (
+    AiProviderCapability,
+    ArtifactQuery,
+    DecryptionResult,
+    SecretDerivationInput,
+    SecretMaterial,
+    SecretProviderCapability,
+    SecretReference,
+)
 
 from .parser import build_parser
 
@@ -77,6 +101,10 @@ def _dispatch(args: Namespace, services: Any) -> Any:
         return _browser(args, services)
     if args.command == "media":
         return _media(args, services)
+    if args.command == "machine":
+        return _machine(args, services)
+    if args.command == "secret":
+        return _secret(args, services)
     if args.command == "candidate":
         return _candidate(args, services)
     if args.command == "ai":
@@ -281,6 +309,32 @@ def _artifact(args: Namespace, services: Any) -> Any:
             evidence_id=args.evidence_id,
         )
     if args.artifact_command == "registry":
+        if args.registry_command == "carve-deleted":
+            query = _artifact_query(args)
+            query = ArtifactQuery(
+                case_id=query.case_id,
+                evidence_id=query.evidence_id,
+                source_file_node_id=query.source_file_node_id,
+                analyzer_id=query.analyzer_id or "windows.registry",
+                parse_status=query.parse_status,
+                has_warnings=query.has_warnings,
+                limit=query.limit,
+                cursor=query.cursor,
+            )
+            page = services.artifacts.list_artifacts(query)
+            items = [
+                item.to_schema_dict()
+                for item in page.items
+                if item.artifact_subtype.startswith("REGISTRY_BINARY_DELETED_")
+            ]
+            return {
+                "items": items,
+                "page": {
+                    "next_cursor": page.next_cursor,
+                    "has_more": page.has_more,
+                    "returned": len(items),
+                },
+            }
         query = _artifact_query(args)
         type_by_command = {
             "autoruns": ArtifactType.REGISTRY_AUTORUN,
@@ -336,6 +390,33 @@ def _artifact(args: Namespace, services: Any) -> Any:
             type_by_command[args.browser_command],
         )
         return services.artifacts.list_artifacts(query).to_schema_dict()
+    if args.artifact_command == "communication":
+        type_by_command = {
+            "messages": ArtifactType.COMMUNICATION_MESSAGE,
+            "attachments": ArtifactType.COMMUNICATION_ATTACHMENT,
+            "unsupported": ArtifactType.COMMUNICATION_UNSUPPORTED_STORE,
+            "kakaotalk": ArtifactType.COMMUNICATION_UNSUPPORTED_STORE,
+        }
+        query = _replace_query_artifact_type(
+            _artifact_query(args),
+            type_by_command[args.communication_command],
+        )
+        page = services.artifacts.list_artifacts(query)
+        if args.communication_command != "kakaotalk":
+            return page.to_schema_dict()
+        items = [
+            item.to_schema_dict()
+            for item in page.items
+            if item.fields.get("communication_app") == "KAKAOTALK"
+        ]
+        return {
+            "items": items,
+            "page": {
+                "next_cursor": page.next_cursor,
+                "has_more": page.has_more,
+                "returned": len(items),
+            },
+        }
     raise ValidationError("Unknown artifact command.", target="artifact_command")
 
 
@@ -504,9 +585,188 @@ def _candidate(args: Namespace, services: Any) -> Any:
     raise ValidationError("Unknown candidate command.", target="candidate_command")
 
 
+def _machine(args: Namespace, services: Any) -> Any:
+    if args.machine_command == "ocr" and args.ocr_command == "analyze":
+        ocr_provider = (
+            RapidOcrProvider(timeout=args.timeout)
+            if args.provider == "rapidocr"
+            else TesseractCliOcrProvider(executable=args.tesseract, timeout=args.timeout)
+        )
+        rows = services.candidates.analyze_image_file(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            source_node_id=args.source_node_id,
+            path=str(args.path),
+            provider=ocr_provider,
+            languages=args.language or ["eng"],
+            source_revision=args.source_revision,
+        )
+        return [row.to_schema_dict() for row in rows]
+    if args.machine_command == "stt" and args.stt_command == "analyze":
+        stt_provider = WhisperCppCliSttProvider(
+            executable=args.whisper,
+            model_path=args.model_path,
+            timeout=args.timeout,
+        )
+        rows = services.candidates.analyze_audio_file(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            source_node_id=args.source_node_id,
+            path=str(args.path),
+            provider=stt_provider,
+            language=args.language,
+            source_revision=args.source_revision,
+        )
+        return [row.to_schema_dict() for row in rows]
+    raise ValidationError("Unknown machine command.", target="machine_command")
+
+
+def _secret(args: Namespace, services: Any) -> Any:
+    if args.secret_command == "capability":
+        providers = _secret_runtime_providers()
+        if args.provider == "all":
+            return [
+                _record_secret_provider_capability(services, provider.capabilities())
+                for provider in providers.values()
+            ]
+        return _record_secret_provider_capability(
+            services,
+            providers[args.provider].capabilities(),
+        )
+    if args.secret_command == "decrypt-dpapi":
+        derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+        result = DpapiUnavailableProvider().decrypt_blob(
+            derivation,
+            _read_secret_runtime_file(args.input_file),
+        )
+        return _record_decryption_result(services, result)
+    if args.secret_command == "decrypt-nss":
+        primary_password = (
+            os.environ.get(args.primary_password_env)
+            if args.primary_password_env is not None
+            else None
+        )
+        derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+        return _record_decryption_results(
+            services,
+            NssUnavailableProvider().decrypt_logins(
+                derivation,
+                profile_path=str(args.profile_path),
+                primary_password=primary_password,
+            ),
+        )
+    if args.secret_command == "dpapi":
+        dpapi_provider = DpapiUnavailableProvider()
+        if args.dpapi_command == "decrypt-blob":
+            derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+            result = dpapi_provider.decrypt_blob(
+                derivation,
+                _read_secret_runtime_file(args.input_file),
+            )
+            return _record_decryption_result(services, result)
+        if args.dpapi_command == "inspect-local-state":
+            return dpapi_provider.inspect_chromium_local_state(
+                case_id=args.case_id,
+                evidence_id=args.evidence_id,
+                local_state_path=str(args.local_state_path),
+                source_revision=args.source_revision,
+            )
+        if args.dpapi_command == "decrypt-chromium-secret":
+            derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+            key_material = _secret_material_from_env(args, derivation)
+            result = DpapiExternalKeyProvider().decrypt_chromium_secret(
+                derivation,
+                _read_secret_runtime_file(args.input_file),
+                key_material,
+                include_plaintext=False,
+            )
+            return _record_decryption_result(services, result)
+        if args.dpapi_command == "discover-profiles":
+            return dpapi_provider.discover_profiles(
+                case_id=args.case_id,
+                evidence_id=args.evidence_id,
+                root_path=str(args.root_path),
+            )
+        raise ValidationError("Unknown DPAPI command.", target="dpapi_command")
+    if args.secret_command == "nss":
+        nss_provider = NssUnavailableProvider()
+        if args.nss_command == "discover-profiles":
+            return nss_provider.discover_profiles(
+                case_id=args.case_id,
+                evidence_id=args.evidence_id,
+                root_path=str(args.root_path),
+            )
+        if args.nss_command == "decrypt-logins":
+            primary_password = (
+                os.environ.get(args.primary_password_env)
+                if args.primary_password_env is not None
+                else None
+            )
+            derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+            return _record_decryption_results(
+                services,
+                nss_provider.decrypt_logins(
+                    derivation,
+                    profile_path=str(args.profile_path),
+                    primary_password=primary_password,
+                ),
+            )
+        raise ValidationError("Unknown NSS command.", target="nss_command")
+    if args.secret_command == "kakaotalk":
+        kakaotalk_provider = KakaoTalkEncryptedStoreProvider()
+        if args.kakaotalk_command == "inspect":
+            return kakaotalk_provider.inspect_store(
+                case_id=args.case_id,
+                evidence_id=args.evidence_id,
+                store_path=str(args.path),
+            )
+        if args.kakaotalk_command == "decrypt-store":
+            derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+            return _record_decryption_result(
+                services,
+                kakaotalk_provider.decrypt_store(derivation, store_path=str(args.path)),
+            )
+        raise ValidationError("Unknown KakaoTalk command.", target="kakaotalk_command")
+    raise ValidationError("Unknown secret command.", target="secret_command")
+
+
+def _record_secret_provider_capability(
+    services: Any,
+    capability: SecretProviderCapability,
+) -> dict[str, Any]:
+    services.repository.save_secret_provider_capability(capability)
+    return capability.to_schema_dict()
+
+
+def _record_decryption_result(services: Any, result: DecryptionResult) -> dict[str, Any]:
+    if services.repository.get_case(result.attempt.case_id) is not None:
+        services.repository.save_decryption_result(result)
+    return result.to_schema_dict()
+
+
+def _record_decryption_results(
+    services: Any,
+    results: list[DecryptionResult],
+) -> list[dict[str, Any]]:
+    return [_record_decryption_result(services, item) for item in results]
+
+
+def _record_ai_provider_capability(
+    services: Any,
+    capability: AiProviderCapability,
+) -> dict[str, Any]:
+    services.repository.save_ai_provider_capability(capability)
+    return capability.to_schema_dict()
+
+
 def _ai(args: Namespace, services: Any) -> Any:
     if args.ai_command == "request-capabilities":
         return services.ai.capabilities()
+    if args.ai_command == "provider-capability":
+        return _record_ai_provider_capability(
+            services,
+            _ai_runtime_provider(args).capabilities(),
+        )
     if args.ai_command == "request-create":
         return services.ai.create_request_from_context_snapshot(
             case_id=args.case_id,
@@ -535,6 +795,11 @@ def _ai(args: Namespace, services: Any) -> Any:
         return services.ai.ingest_keyword_batch(
             assistance_request_id=args.assistance_request_id,
             payload=_json_input(args),
+        )
+    if args.ai_command == "generate-keywords":
+        return services.ai.generate_keyword_recommendations(
+            assistance_request_id=args.assistance_request_id,
+            provider=_ai_runtime_provider(args),
         )
     if args.ai_command == "keyword-batch-show":
         return services.ai.get_keyword_batch(args.recommendation_batch_id)
@@ -587,6 +852,19 @@ def _ai(args: Namespace, services: Any) -> Any:
         return services.ai.ingest_scope_summary(
             assistance_request_id=args.assistance_request_id,
             payload=_json_input(args),
+        ).to_schema_dict()
+    if args.ai_command == "generate-summary":
+        return services.ai.generate_scope_summary(
+            assistance_request_id=args.assistance_request_id,
+            provider=_ai_runtime_provider(args),
+        ).to_schema_dict()
+    if args.ai_command == "generate-report-draft":
+        request = services.ai.get_request(args.assistance_request_id)
+        payload = _ai_runtime_provider(args).generate_report_draft(request)
+        return services.reports.ingest_ai_draft(
+            payload=payload,
+            report_id=args.report_id,
+            created_by=args.created_by,
         ).to_schema_dict()
     if args.ai_command == "summary-list":
         if args.scope_summary_id is not None:
@@ -1128,6 +1406,10 @@ def _report(args: Namespace, services: Any) -> Any:
         return result.to_schema_dict()
     if args.report_command == "export-capabilities":
         return services.reports.renderer_capabilities().to_schema_dict()
+    if args.report_command == "render-html":
+        return _render_report_runtime(args, services, "HTML")
+    if args.report_command == "render-pdf":
+        return _render_report_runtime(args, services, "PDF")
     raise ValidationError("Unknown report command.", target="report_command")
 
 
@@ -1166,6 +1448,110 @@ def _hash_record_output(record: Any) -> dict[str, Any]:
         "verification_status": record.verification_status,
         "bytes_hashed": record.bytes_hashed,
     }
+
+
+def _render_report_runtime(args: Namespace, services: Any, format_value: str) -> Any:
+    renderer = RuntimeReportRenderer(output_root=args.output_root)
+    manifest = services.reports.prepare_export(
+        report_version_id=args.report_version_id,
+        format=format_value,
+        filename=args.filename,
+        created_by=args.created_by,
+        redaction_policy=args.redaction_policy,
+        include_citations=not args.no_citations,
+        include_custody=not args.no_custody,
+        include_technical_appendix=not args.no_technical_appendix,
+        stale_confirmed=args.stale_confirmed,
+        renderer=renderer,
+    )
+    if manifest.status == "PREPARED":
+        services.reports.render_export(
+            export_manifest_id=manifest.export_manifest_id,
+            renderer=renderer,
+        )
+    return services.reports.export_status(manifest.export_manifest_id)
+
+
+def _ai_runtime_provider(args: Namespace) -> OpenAICompatibleProvider:
+    return OpenAICompatibleProvider(
+        OpenAICompatibleConfig(
+            provider_id=args.provider_id,
+            base_url=args.base_url,
+            model=args.model,
+            api_key_env=args.api_key_env,
+            timeout=args.timeout,
+            max_output=args.max_output,
+            temperature=args.temperature,
+            request_policy=args.request_policy,
+        )
+    )
+
+
+def _secret_runtime_providers() -> dict[str, Any]:
+    return {
+        "dpapi": DpapiUnavailableProvider(),
+        "dpapi-external": DpapiExternalKeyProvider(),
+        "nss": NssUnavailableProvider(),
+        "kakaotalk": KakaoTalkEncryptedStoreProvider(),
+    }
+
+
+def _secret_derivation_input(args: Namespace, *, key_source_kind: str) -> SecretDerivationInput:
+    return SecretDerivationInput(
+        case_id=args.case_id,
+        evidence_id=args.evidence_id,
+        key_source_kind=key_source_kind,
+        references=[],
+        parameters={},
+    )
+
+
+def _secret_material_from_env(args: Namespace, derivation: SecretDerivationInput) -> SecretMaterial:
+    env_name = args.key_hex_env or args.key_b64_env
+    value = os.environ.get(env_name)
+    if value is None:
+        raise ValidationError(
+            "Secret key environment variable is not set.",
+            target="key_env",
+            details={"key_env": env_name},
+        )
+    try:
+        key = (
+            bytes.fromhex(value.strip())
+            if args.key_hex_env
+            else base64.b64decode(value.encode("ascii"), validate=True)
+        )
+    except (ValueError, binascii.Error) as error:
+        raise ValidationError(
+            "Secret key environment variable is not valid hex/base64.",
+            target="key_env",
+            details={"key_env": env_name},
+        ) from error
+    return SecretMaterial(
+        reference=SecretReference(
+            secret_id=args.secret_id,
+            case_id=derivation.case_id,
+            evidence_id=derivation.evidence_id,
+            key_source_kind=derivation.key_source_kind,
+            provider_id="cli-env",
+            source_kind="ENVIRONMENT_VARIABLE",
+            source_path=None,
+            raw_locator={"env_name": env_name, "value_emitted": False},
+        ),
+        value=key,
+        algorithm="AES-GCM",
+    )
+
+
+def _read_secret_runtime_file(path: Path) -> bytes:
+    size = path.stat().st_size
+    if size > 64 * 1024 * 1024:
+        raise ValidationError(
+            "Secret runtime input file exceeds the size limit.",
+            target="input_file",
+            details={"max_bytes": 64 * 1024 * 1024},
+        )
+    return path.read_bytes()
 
 
 def _json_arg(value: str | None, target: str) -> dict[str, Any]:

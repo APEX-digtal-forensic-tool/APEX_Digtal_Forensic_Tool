@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-render-result.schema.json",
+  "title": "APEX Report Render Result",
+  "oneOf": [
+    { "$ref": "#/$defs/completedReportRenderResult" },
+    { "$ref": "#/$defs/cancelledReportRenderResult" }
+  ],
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "completedReportRenderResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "output_reference",
+        "filename",
+        "mime_type",
+        "size_bytes",
+        "sha256",
+        "renderer_id",
+        "renderer_version",
+        "warnings"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "status": { "const": "COMPLETED" },
+        "output_reference": {
+          "$ref": "derived-output.schema.json#/$defs/derivedOutputReference"
+        },
+        "filename": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "mime_type": { "enum": ["text/html", "application/pdf"] },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "renderer_id": { "type": "string", "minLength": 1 },
+        "renderer_version": { "type": "string", "minLength": 1 },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        }
+      }
+    },
+    "cancelledReportRenderResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "warnings"],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "status": { "const": "CANCELLED" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        }
+      }
+    }
+  }
+}

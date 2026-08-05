@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/registry-deleted-candidate.schema.json",
+  "title": "APEX Registry Deleted Cell Candidate",
+  "$ref": "#/$defs/registryDeletedCandidate",
+  "$defs": {
+    "registryDeletedCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_type",
+        "source_region",
+        "absolute_offset",
+        "length",
+        "hbin_offset",
+        "confidence",
+        "reasons",
+        "name",
+        "value_type",
+        "value_data",
+        "data_reference_offset",
+        "parent_cell_offset",
+        "partial",
+        "overwritten",
+        "raw_name_hex"
+      ],
+      "properties": {
+        "candidate_type": { "enum": ["NK", "VK", "SK"] },
+        "source_region": { "enum": ["FREE_CELL", "HBIN_SLACK"] },
+        "absolute_offset": { "type": "integer", "minimum": 0 },
+        "length": { "type": "integer", "minimum": 1 },
+        "hbin_offset": { "type": "integer", "minimum": 0 },
+        "confidence": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "name": { "type": ["string", "null"], "maxLength": 4096 },
+        "value_type": { "type": ["string", "null"], "maxLength": 128 },
+        "value_data": true,
+        "data_reference_offset": { "type": ["integer", "null"], "minimum": 0 },
+        "parent_cell_offset": { "type": ["integer", "null"], "minimum": 0 },
+        "partial": { "type": "boolean" },
+        "overwritten": { "type": "boolean" },
+        "raw_name_hex": { "type": ["string", "null"], "pattern": "^(?:[0-9a-fA-F]{2})*$" }
+      }
+    }
+  }
+}

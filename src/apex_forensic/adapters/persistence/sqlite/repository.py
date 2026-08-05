@@ -68,6 +68,8 @@ from apex_forensic.domain.models import (
     Case,
     CustodyEvent,
     CustodySnapshotRecord,
+    DecryptionAttempt,
+    DecryptionResult,
     EngineInterfaceVersion,
     EngineToolDescriptor,
     Evidence,
@@ -101,6 +103,7 @@ from apex_forensic.domain.models import (
     SearchIndexCapability,
     SearchQuery,
     SearchResult,
+    SecretProviderCapability,
     ThumbnailRecord,
     TimelineBuildCoverage,
     TimelineEvent,
@@ -1313,6 +1316,65 @@ class SQLiteRepository:
                     PRIMARY KEY (provider_id, provider_version, capability_type)
                 );
 
+                CREATE TABLE IF NOT EXISTS secret_provider_capabilities (
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    capability_type TEXT NOT NULL,
+                    runtime_status TEXT NOT NULL,
+                    supported_key_sources_json TEXT NOT NULL,
+                    supported_algorithms_json TEXT NOT NULL,
+                    requires_host INTEGER NOT NULL,
+                    requires_network INTEGER NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    capability_version TEXT NOT NULL,
+                    capability_json TEXT NOT NULL,
+                    PRIMARY KEY (provider_id, provider_version, capability_type)
+                );
+                CREATE INDEX IF NOT EXISTS idx_secret_capabilities_status
+                    ON secret_provider_capabilities(capability_type, runtime_status);
+
+                CREATE TABLE IF NOT EXISTS decryption_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT REFERENCES evidence(evidence_id),
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    algorithm TEXT NOT NULL,
+                    key_source_kind TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    error_code TEXT,
+                    error_message TEXT,
+                    warnings_json TEXT NOT NULL,
+                    attempt_fingerprint TEXT NOT NULL,
+                    attempt_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_decryption_attempts_case
+                    ON decryption_attempts(case_id, started_at DESC, attempt_id);
+                CREATE INDEX IF NOT EXISTS idx_decryption_attempts_provider
+                    ON decryption_attempts(provider_id, provider_version, status);
+
+                CREATE TABLE IF NOT EXISTS decryption_results (
+                    attempt_id TEXT PRIMARY KEY
+                        REFERENCES decryption_attempts(attempt_id),
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    evidence_id TEXT REFERENCES evidence(evidence_id),
+                    status TEXT NOT NULL,
+                    output_kind TEXT,
+                    content_sha256 TEXT,
+                    content_length INTEGER,
+                    partial INTEGER NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    result_fingerprint TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_decryption_results_case
+                    ON decryption_results(case_id, status, attempt_id);
+
                 CREATE TABLE IF NOT EXISTS cache_entries (
                     key_sha256 TEXT PRIMARY KEY,
                     case_id TEXT NOT NULL REFERENCES cases(case_id),
@@ -2282,6 +2344,30 @@ class SQLiteRepository:
                     SELECT RAISE(ABORT, 'candidate_review_events are append-only');
                 END;
 
+                CREATE TRIGGER IF NOT EXISTS decryption_attempts_no_update
+                BEFORE UPDATE ON decryption_attempts
+                BEGIN
+                    SELECT RAISE(ABORT, 'decryption_attempts are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS decryption_attempts_no_delete
+                BEFORE DELETE ON decryption_attempts
+                BEGIN
+                    SELECT RAISE(ABORT, 'decryption_attempts are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS decryption_results_no_update
+                BEFORE UPDATE ON decryption_results
+                BEGIN
+                    SELECT RAISE(ABORT, 'decryption_results are append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS decryption_results_no_delete
+                BEFORE DELETE ON decryption_results
+                BEGIN
+                    SELECT RAISE(ABORT, 'decryption_results are append-only');
+                END;
+
                 CREATE TRIGGER IF NOT EXISTS ai_keyword_recommendations_no_update
                 BEFORE UPDATE ON ai_keyword_recommendations
                 BEGIN
@@ -2485,6 +2571,13 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("apex-engine-work-package-a-evidence-readers", to_json_timestamp(utc_now())),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("apex-engine-advanced-runtime-audit", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -4418,6 +4511,182 @@ class SQLiteRepository:
                 (capability_type,),
             ).fetchall()
         return [self._row_to_provider_capability(row) for row in rows]
+
+    def save_secret_provider_capability(self, capability: SecretProviderCapability) -> None:
+        """Persist a secret/decryption provider capability statement without key material."""
+
+        generated_at = to_json_timestamp(capability.generated_at or utc_now())
+        data = capability.to_schema_dict()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO secret_provider_capabilities (
+                    provider_id, provider_version, capability_type, runtime_status,
+                    supported_key_sources_json, supported_algorithms_json, requires_host,
+                    requires_network, warnings_json, generated_at, capability_version,
+                    capability_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider_id, provider_version, capability_type) DO UPDATE SET
+                    runtime_status = excluded.runtime_status,
+                    supported_key_sources_json = excluded.supported_key_sources_json,
+                    supported_algorithms_json = excluded.supported_algorithms_json,
+                    requires_host = excluded.requires_host,
+                    requires_network = excluded.requires_network,
+                    warnings_json = excluded.warnings_json,
+                    generated_at = excluded.generated_at,
+                    capability_version = excluded.capability_version,
+                    capability_json = excluded.capability_json
+                """,
+                (
+                    capability.provider_id,
+                    capability.provider_version,
+                    capability.capability_type,
+                    capability.runtime_status,
+                    self._json(capability.supported_key_sources),
+                    self._json(capability.supported_algorithms),
+                    int(capability.requires_host),
+                    int(capability.requires_network),
+                    self._json(data["warnings"]),
+                    generated_at,
+                    capability.capability_version,
+                    self._json(data),
+                ),
+            )
+
+    def list_secret_provider_capabilities(
+        self,
+        *,
+        capability_type: str | None = None,
+    ) -> list[SecretProviderCapability]:
+        """Return stored secret/decryption provider capabilities."""
+
+        if capability_type is None:
+            rows = self.connection.execute(
+                """
+                SELECT * FROM secret_provider_capabilities
+                ORDER BY capability_type, provider_id, provider_version
+                """
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """
+                SELECT * FROM secret_provider_capabilities
+                WHERE capability_type = ?
+                ORDER BY provider_id, provider_version
+                """,
+                (capability_type,),
+            ).fetchall()
+        return [self._row_to_secret_provider_capability(row) for row in rows]
+
+    def save_decryption_attempt(self, attempt: DecryptionAttempt) -> None:
+        """Insert one sanitized decryption attempt audit row."""
+
+        with self.connection:
+            self._insert_decryption_attempt(attempt)
+
+    def save_decryption_result(self, result: DecryptionResult) -> None:
+        """Persist one sanitized decryption result and its attempt metadata."""
+
+        data = result.to_schema_dict(include_plaintext=False)
+        if "plaintext_b64" in data:
+            raise ValueError("decryption result audit payload must not include plaintext")
+        attempt = result.attempt
+        created_at = attempt.completed_at or utc_now()
+        with self.connection:
+            self._insert_decryption_attempt(attempt)
+            self.connection.execute(
+                """
+                INSERT INTO decryption_results (
+                    attempt_id, case_id, evidence_id, status, output_kind, content_sha256,
+                    content_length, partial, citations_json, metadata_json,
+                    result_fingerprint, result_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt.attempt_id,
+                    attempt.case_id,
+                    attempt.evidence_id,
+                    result.status,
+                    result.output_kind,
+                    result.content_sha256,
+                    result.content_length,
+                    int(result.partial),
+                    self._json(data["citations"]),
+                    self._json(data["metadata"]),
+                    canonical_sha256(data),
+                    self._json(data),
+                    to_json_timestamp(created_at),
+                ),
+            )
+
+    def _insert_decryption_attempt(self, attempt: DecryptionAttempt) -> None:
+        data = attempt.to_schema_dict()
+        self.connection.execute(
+            """
+            INSERT INTO decryption_attempts (
+                attempt_id, case_id, evidence_id, provider_id, provider_version,
+                algorithm, key_source_kind, status, started_at, completed_at,
+                error_code, error_message, warnings_json, attempt_fingerprint,
+                attempt_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                attempt.attempt_id,
+                attempt.case_id,
+                attempt.evidence_id,
+                attempt.provider_id,
+                attempt.provider_version,
+                attempt.algorithm,
+                attempt.key_source_kind,
+                attempt.status,
+                to_json_timestamp(attempt.started_at),
+                self._nullable_timestamp(attempt.completed_at),
+                attempt.error_code,
+                data.get("error_message"),
+                self._json(data["warnings"]),
+                canonical_sha256(data),
+                self._json(data),
+            ),
+        )
+
+    def get_decryption_result(self, attempt_id: str) -> dict[str, Any] | None:
+        """Return one stored decryption result schema payload without plaintext bytes."""
+
+        row = self.connection.execute(
+            "SELECT result_json FROM decryption_results WHERE attempt_id = ?",
+            (attempt_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(json.loads(str(row["result_json"])))
+
+    def list_decryption_results(
+        self,
+        *,
+        case_id: str,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """List stored decryption result schema payloads for one case."""
+
+        if status is None:
+            rows = self.connection.execute(
+                """
+                SELECT result_json FROM decryption_results
+                WHERE case_id = ?
+                ORDER BY created_at DESC, attempt_id
+                """,
+                (case_id,),
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                """
+                SELECT result_json FROM decryption_results
+                WHERE case_id = ? AND status = ?
+                ORDER BY created_at DESC, attempt_id
+                """,
+                (case_id, status),
+            ).fetchall()
+        return [dict(json.loads(str(row["result_json"]))) for row in rows]
 
     def save_machine_candidate(self, candidate: MachineExtractedCandidate) -> None:
         """Insert one immutable machine-extracted candidate."""
@@ -9301,6 +9570,24 @@ class SQLiteRepository:
             warnings=list(json.loads(str(row["warnings_json"]))),
             metadata=dict(json.loads(str(row["metadata_json"]))),
             updated_at=parse_timestamp(str(row["updated_at"])),
+        )
+
+    def _row_to_secret_provider_capability(
+        self,
+        row: sqlite3.Row,
+    ) -> SecretProviderCapability:
+        return SecretProviderCapability(
+            provider_id=str(row["provider_id"]),
+            provider_version=str(row["provider_version"]),
+            capability_type=str(row["capability_type"]),
+            runtime_status=str(row["runtime_status"]),
+            supported_key_sources=list(json.loads(str(row["supported_key_sources_json"]))),
+            supported_algorithms=list(json.loads(str(row["supported_algorithms_json"]))),
+            requires_host=bool(row["requires_host"]),
+            requires_network=bool(row["requires_network"]),
+            warnings=list(json.loads(str(row["warnings_json"]))),
+            generated_at=parse_timestamp(str(row["generated_at"])),
+            capability_version=str(row["capability_version"]),
         )
 
     def _row_to_machine_candidate(self, row: sqlite3.Row) -> MachineExtractedCandidate:

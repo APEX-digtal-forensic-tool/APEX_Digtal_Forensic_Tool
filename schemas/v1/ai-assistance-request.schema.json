@@ -35,6 +35,7 @@
       "enum": [
         "RECOMMEND_KEYWORDS",
         "SUMMARIZE_SCOPE",
+        "GENERATE_REPORT_DRAFT",
         "EXPLAIN_SELECTION",
         "SUGGEST_NEXT_ANALYSIS",
         "OTHER"

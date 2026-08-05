@@ -30,6 +30,7 @@ from apex_forensic.domain.models import (
     ArtifactSource,
     Evidence,
     FileSystemNode,
+    RegistryDeletedCellCandidate,
 )
 
 from .common import (
@@ -39,6 +40,7 @@ from .common import (
     make_raw_locator,
     source_shell,
 )
+from .registry_carving import RegistryDeletedCellCarver
 
 _REGISTRY_HIVE_NAMES = {"SYSTEM", "SOFTWARE", "NTUSER.DAT", "USRCLASS.DAT"}
 _AUTORUN_SUFFIXES = (
@@ -139,12 +141,10 @@ class WindowsRegistryAnalyzer:
                 "REGISTRY_TIMEZONE",
                 "REGISTRY_USERASSIST_SAFE",
                 "REGISTRY_EXPORT_DELETED_DIRECTIVE_CANDIDATES",
+                "REGISTRY_BINARY_DELETED_CELL_RECOVERY",
                 *transaction_capabilities,
             ),
-            unavailable_capabilities=(
-                *tuple(unavailable),
-                "REGISTRY_BINARY_DELETED_CELL_RECOVERY",
-            ),
+            unavailable_capabilities=tuple(unavailable),
             warnings=tuple(warnings),
             metadata={
                 "binary_hive_dependency": "python-registry",
@@ -162,7 +162,10 @@ class WindowsRegistryAnalyzer:
                 },
                 "deleted_key_recovery": {
                     "registry_export_delete_directives": "SUPPORTED_CANDIDATE",
-                    "binary_deleted_cells": "CAPABILITY_UNAVAILABLE",
+                    "binary_deleted_cells": "IMPLEMENTED_RUNTIME",
+                    "candidate_semantics": "DELETED_CELL_CANDIDATE_NOT_OBSERVED_FACT",
+                    "free_cell_and_hbin_slack": True,
+                    "transaction_replay_separated": True,
                 },
             },
         )
@@ -702,6 +705,14 @@ class WindowsRegistryAnalyzer:
         file_path: Path,
         item_budget: int | None,
     ) -> ArtifactAnalysisResult:
+        carved_artifacts, carving_warnings, carving_coverage = self._binary_deleted_cell_artifacts(
+            evidence=evidence,
+            node=node,
+            source=source,
+            file_path=file_path,
+            item_budget=item_budget,
+            known_artifacts=[],
+        )
         backend_version = self._python_registry_version()
         if backend_version is None:
             warning = issue(
@@ -713,14 +724,45 @@ class WindowsRegistryAnalyzer:
                 details={"optional_dependency": "python-registry"},
             )
             return ArtifactAnalysisResult(
-                warnings=(warning,),
-                parse_status=ArtifactParseStatus.UNSUPPORTED,
-                coverage={"source_kind": source.source_kind.value},
+                artifacts=tuple(carved_artifacts),
+                warnings=(warning, *carving_warnings),
+                parse_status=ArtifactParseStatus.PARTIAL
+                if carved_artifacts
+                else ArtifactParseStatus.UNSUPPORTED,
+                coverage={
+                    "source_kind": source.source_kind.value,
+                    "binary_deleted_cell_carving": carving_coverage,
+                },
             )
         try:
             registry_module = importlib.import_module("Registry.Registry")
             registry = registry_module.Registry(str(file_path))
         except Exception as error:
+            if carved_artifacts:
+                return ArtifactAnalysisResult(
+                    artifacts=tuple(carved_artifacts),
+                    warnings=(
+                        issue(
+                            severity="WARNING",
+                            code="REGISTRY_HIVE_OPEN_FAILED",
+                            message_key="warning.registry_hive.open_failed",
+                            developer_message=(
+                                "Binary registry hive could not be opened for logical parsing; "
+                                "deleted-cell carving candidates were still recovered."
+                            ),
+                            node=node,
+                            details={"error_type": type(error).__name__},
+                        ),
+                        *carving_warnings,
+                    ),
+                    parse_status=ArtifactParseStatus.PARTIAL,
+                    coverage={
+                        "binary_backend": "python-registry",
+                        "backend_version": backend_version,
+                        "logical_parse_status": "FAILED",
+                        "binary_deleted_cell_carving": carving_coverage,
+                    },
+                )
             return ArtifactAnalysisResult(
                 errors=(
                     issue(
@@ -754,6 +796,18 @@ class WindowsRegistryAnalyzer:
         if replay_warning is not None:
             warnings.append(replay_warning)
         artifacts.extend(replay_artifacts)
+        carved_artifacts, carving_warnings, carving_coverage = self._binary_deleted_cell_artifacts(
+            evidence=evidence,
+            node=node,
+            source=source,
+            file_path=file_path,
+            item_budget=None
+            if item_budget is None
+            else max(0, item_budget - len(artifacts)),
+            known_artifacts=[*artifacts],
+        )
+        warnings.extend(carving_warnings)
+        artifacts.extend(carved_artifacts)
         status = (
             ArtifactParseStatus.PARTIAL
             if item_budget is not None and len(artifacts) >= item_budget
@@ -767,7 +821,134 @@ class WindowsRegistryAnalyzer:
                 "binary_backend": "python-registry",
                 "backend_version": backend_version,
                 "transaction_replay_artifact_count": len(replay_artifacts),
+                "binary_deleted_cell_carving": carving_coverage,
             },
+        )
+
+    def _binary_deleted_cell_artifacts(
+        self,
+        *,
+        evidence: Evidence,
+        node: FileSystemNode,
+        source: ArtifactSource,
+        file_path: Path,
+        item_budget: int | None,
+        known_artifacts: list[ArtifactRecord],
+    ) -> tuple[list[ArtifactRecord], list[ArtifactIssue], dict[str, Any]]:
+        report = RegistryDeletedCellCarver().carve(file_path, max_candidates=item_budget)
+        warnings = [
+            issue(
+                severity="WARNING",
+                code=str(warning.get("code", "REGISTRY_DELETED_CELL_CARVING_WARNING")),
+                message_key="warning.registry.deleted_cell_carving",
+                developer_message=str(
+                    warning.get("developer_message", "Registry carving warning.")
+                ),
+                node=node,
+                details=dict(warning),
+            )
+            for warning in report.warnings
+        ]
+        artifacts = [
+            self._deleted_cell_artifact(
+                evidence=evidence,
+                node=node,
+                source=source,
+                candidate=candidate,
+                replay_dedup_status=_deleted_cell_dedup_status(candidate, known_artifacts),
+            )
+            for candidate in report.candidates
+        ]
+        return artifacts, warnings, report.coverage | {"status": report.status}
+
+    def _deleted_cell_artifact(
+        self,
+        *,
+        evidence: Evidence,
+        node: FileSystemNode,
+        source: ArtifactSource,
+        candidate: RegistryDeletedCellCandidate,
+        replay_dedup_status: str,
+    ) -> ArtifactRecord:
+        hive_root = _canonical_hive_path(node.original_name, "")
+        if candidate.candidate_type == "VK":
+            artifact_type = ArtifactType.REGISTRY_VALUE
+            subtype = "REGISTRY_BINARY_DELETED_VK_CANDIDATE"
+            registry_path = f"{hive_root}<unlinked-value-parent>"
+            value_name = candidate.name
+            title = f"Deleted registry value candidate: {candidate.name}"
+        elif candidate.candidate_type == "SK":
+            artifact_type = ArtifactType.REGISTRY_KEY
+            subtype = "REGISTRY_BINARY_DELETED_SK_CANDIDATE"
+            registry_path = f"{hive_root}<security-key-candidate>"
+            value_name = None
+            title = "Deleted registry security cell candidate"
+        else:
+            artifact_type = ArtifactType.REGISTRY_KEY
+            subtype = "REGISTRY_BINARY_DELETED_NK_CANDIDATE"
+            registry_path = f"{hive_root}<unlinked-key-parent>\\{candidate.name}"
+            value_name = None
+            title = f"Deleted registry key candidate: {candidate.name}"
+        raw_locator = make_raw_locator(
+            evidence_id=evidence.evidence_id,
+            source_file_node_id=node.node_id,
+            source_path=node.display_path,
+            source_reference=title,
+            locator_type="REGISTRY_HIVE_CELL",
+            offset=candidate.absolute_offset,
+            length=candidate.length,
+            encoding=None,
+            view_types=["HEX"],
+            limitations=[
+                "Binary deleted-cell carving recovers candidates only; parentage may be partial.",
+                "Candidate is not promoted to a current observed registry fact.",
+            ],
+            details={
+                "candidate_type": candidate.candidate_type,
+                "source_region": candidate.source_region,
+                "hbin_offset": candidate.hbin_offset,
+            },
+        )
+        fields = {
+            "registry_path": registry_path,
+            "value_name": value_name,
+            "value_type": candidate.value_type,
+            "normalized_value": candidate.value_data,
+            "hive_type": _hive_type(registry_path, node.original_name),
+            "registry_hive_view": "BINARY_DELETED_CELL_CARVING",
+            "deleted_candidate": True,
+            "recovered_candidate": True,
+            "binary_deleted_cell": True,
+            "candidate_semantics": "DELETED_CELL_CANDIDATE_NOT_OBSERVED_FACT",
+            "candidate_type": candidate.candidate_type,
+            "cell_offset": candidate.absolute_offset,
+            "cell_length": candidate.length,
+            "hbin_offset": candidate.hbin_offset,
+            "source_region": candidate.source_region,
+            "confidence_label": candidate.confidence,
+            "confidence_reasons": list(candidate.reasons),
+            "partial": candidate.partial,
+            "overwritten": candidate.overwritten,
+            "parent_cell_offset": candidate.parent_cell_offset,
+            "data_reference_offset": candidate.data_reference_offset,
+            "raw_name_hex": candidate.raw_name_hex,
+            "transaction_replay_dedup": replay_dedup_status,
+        }
+        return make_artifact(
+            evidence=evidence,
+            node=node,
+            source=source,
+            artifact_type=artifact_type,
+            artifact_subtype=subtype,
+            fields=fields,
+            raw_locator=raw_locator,
+            title=title,
+            summary=(
+                "Registry free-cell/slack candidate recovered from binary hive. "
+                "This is a carved candidate, not an observed current key or value."
+            ),
+            parse_status=ArtifactParseStatus.PARTIAL,
+            confidence=_candidate_confidence(candidate.confidence),
         )
 
     def _extract_binary_hive_artifacts(
@@ -1210,6 +1391,33 @@ def _registry_logical_key(artifact: ArtifactRecord) -> tuple[str, str | None, st
         _string_or_none(artifact.fields.get("registry_path")),
         _string_or_none(artifact.fields.get("value_name")),
     )
+
+
+def _deleted_cell_dedup_status(
+    candidate: RegistryDeletedCellCandidate,
+    known_artifacts: list[ArtifactRecord],
+) -> str:
+    if not known_artifacts:
+        return "NO_REPLAY_CONTEXT"
+    candidate_name = _string_or_none(candidate.name)
+    if candidate_name is None:
+        return "DISTINCT_FROM_TRANSACTION_REPLAY"
+    for artifact in known_artifacts:
+        registry_path = _string_or_none(artifact.fields.get("registry_path"))
+        value_name = _string_or_none(artifact.fields.get("value_name"))
+        if candidate.candidate_type == "VK" and value_name == candidate_name:
+            return "DUPLICATE_VALUE_NAME_IN_PARSED_VIEW"
+        if (
+            candidate.candidate_type == "NK"
+            and registry_path is not None
+            and registry_path.endswith(f"\\{candidate_name}")
+        ):
+            return "DUPLICATE_KEY_NAME_IN_PARSED_VIEW"
+    return "DISTINCT_FROM_TRANSACTION_REPLAY"
+
+
+def _candidate_confidence(label: str) -> float:
+    return {"HIGH": 0.78, "MEDIUM": 0.55, "LOW": 0.3}.get(label, 0.2)
 
 
 def _normalized_registry_path(path: str) -> str:

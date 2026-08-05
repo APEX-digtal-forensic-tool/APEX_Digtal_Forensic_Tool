@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/machine-extraction-result.schema.json",
+  "title": "APEX Machine Extraction Result",
+  "$ref": "#/$defs/machineExtractionResult",
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "machineExtractionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "provider_id",
+        "provider_version",
+        "extraction_type",
+        "candidates",
+        "warnings",
+        "candidate_semantics"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "status": {
+          "enum": [
+            "COMPLETED",
+            "PARTIAL",
+            "CAPABILITY_UNAVAILABLE",
+            "FAILED",
+            "CANCELLED"
+          ]
+        },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "provider_version": { "type": "string", "minLength": 1 },
+        "extraction_type": { "enum": ["OCR", "STT"] },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "machine-extracted-candidate.schema.json#/$defs/machineExtractedCandidate"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "candidate_semantics": { "const": "MACHINE_EXTRACTED_CANDIDATE_NOT_OBSERVED_FACT" }
+      }
+    }
+  }
+}

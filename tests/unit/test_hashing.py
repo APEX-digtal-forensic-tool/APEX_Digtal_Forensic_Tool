@@ -21,8 +21,12 @@ def test_streaming_md5_sha1_sha256(sample_file: Path) -> None:
     data = sample_file.read_bytes()
 
     assert computation.bytes_hashed == len(data)
-    assert computation.digests[HashAlgorithm.MD5] == hashlib.md5(data).hexdigest()
-    assert computation.digests[HashAlgorithm.SHA1] == hashlib.sha1(data).hexdigest()
+    assert computation.digests[HashAlgorithm.MD5] == hashlib.md5(
+        data, usedforsecurity=False
+    ).hexdigest()
+    assert computation.digests[HashAlgorithm.SHA1] == hashlib.sha1(
+        data, usedforsecurity=False
+    ).hexdigest()
     assert computation.digests[HashAlgorithm.SHA256] == hashlib.sha256(data).hexdigest()
 
 

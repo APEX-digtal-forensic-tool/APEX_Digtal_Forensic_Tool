@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/decryption-request.schema.json",
+  "title": "APEX Decryption Request",
+  "$ref": "#/$defs/decryptionRequest",
+  "$defs": {
+    "secretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "secret_id",
+        "case_id",
+        "evidence_id",
+        "key_source_kind",
+        "provider_id",
+        "source_kind",
+        "source_path",
+        "source_revision",
+        "fingerprint",
+        "raw_locator",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "secret_id": { "type": "string", "minLength": 1 },
+        "case_id": { "type": "string", "minLength": 1 },
+        "evidence_id": { "type": ["string", "null"] },
+        "key_source_kind": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "source_kind": { "type": "string", "minLength": 1 },
+        "source_path": { "type": ["string", "null"] },
+        "source_revision": { "type": ["integer", "null"], "minimum": 0 },
+        "fingerprint": { "type": ["string", "null"] },
+        "raw_locator": { "type": "object", "additionalProperties": true },
+        "created_at": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "decryptionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "case_id",
+        "evidence_id",
+        "key_source_kind",
+        "references",
+        "parameters"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "case_id": { "type": "string", "minLength": 1 },
+        "evidence_id": { "type": ["string", "null"] },
+        "key_source_kind": { "type": "string", "minLength": 1 },
+        "references": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/secretReference" }
+        },
+        "parameters": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
+}

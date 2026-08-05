@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ from apex_forensic.adapters.artifacts.communication import (
     KakaoTalkEncryptedStoreDiscoveryAnalyzer,
     TelegramSQLiteFixtureAnalyzer,
 )
+from apex_forensic.cli.commands import main
 from apex_forensic.domain.enums import (
     AnalysisProfileType,
     ArtifactParseStatus,
@@ -303,6 +305,7 @@ def test_communication_sqlite_discord_telegram_and_kakao_unsupported(
     services,
     tmp_path: Path,
     schema_validator,
+    capsys,
 ) -> None:
     evidence_dir = tmp_path / "communication-sqlite"
     discord_dir = evidence_dir / "Discord"
@@ -343,6 +346,23 @@ def test_communication_sqlite_discord_telegram_and_kakao_unsupported(
     assert messages.returned == 2
     assert attachments.returned == 1
     assert unsupported.returned == 1
+
+    cli_exit = main(
+        [
+            "--db",
+            str(services.repository.db_path),
+            "artifact",
+            "communication",
+            "kakaotalk",
+            "--case-id",
+            case.case_id,
+            "--json",
+        ]
+    )
+    cli_result = json.loads(capsys.readouterr().out)
+    assert cli_exit == 0
+    assert cli_result["page"]["returned"] == 1
+    assert cli_result["items"][0]["fields"]["unsupported_reason"] == "KEY_UNAVAILABLE"
 
     discord = next(
         item for item in messages.items if item.fields["communication_app"] == "DISCORD"

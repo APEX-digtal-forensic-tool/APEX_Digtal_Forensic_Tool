@@ -1207,6 +1207,8 @@ class AiAssistanceService:
             operations = [AiRequestedOperation.RECOMMEND_KEYWORDS.value]
         elif purpose == AiAssistancePurpose.SCOPE_SUMMARY.value:
             operations = [AiRequestedOperation.SUMMARIZE_SCOPE.value]
+        elif purpose == AiAssistancePurpose.REPORT_INPUT.value:
+            operations = [AiRequestedOperation.GENERATE_REPORT_DRAFT.value]
         else:
             operations = [
                 AiRequestedOperation.RECOMMEND_KEYWORDS.value,

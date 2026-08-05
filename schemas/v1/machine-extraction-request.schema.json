@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/machine-extraction-request.schema.json",
+  "title": "APEX Machine Extraction Request",
+  "$ref": "#/$defs/machineExtractionRequest",
+  "$defs": {
+    "machineExtractionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "case_id",
+        "evidence_id",
+        "source_node_id",
+        "path",
+        "source_revision",
+        "extraction_type",
+        "provider_id",
+        "languages",
+        "model_path",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "case_id": { "type": "string", "minLength": 1 },
+        "evidence_id": { "type": "string", "minLength": 1 },
+        "source_node_id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "source_revision": { "type": "integer", "minimum": 0 },
+        "extraction_type": { "enum": ["OCR", "STT"] },
+        "provider_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 32 }
+        },
+        "model_path": { "type": ["string", "null"], "maxLength": 4096 },
+        "timeout_seconds": { "type": "number", "exclusiveMinimum": 0, "maximum": 3600 }
+      }
+    }
+  }
+}

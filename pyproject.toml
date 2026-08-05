@@ -31,6 +31,13 @@ browser-media = [
   "Pillow>=10.0",
   "cryptography>=42.0",
 ]
+machine-extraction = [
+  "rapidocr>=3,<4",
+  "onnxruntime>=1.18,<2",
+]
+report-renderer = [
+  "reportlab>=4.2",
+]
 filesystem-image = [
   "pytsk3>=20260715",
 ]

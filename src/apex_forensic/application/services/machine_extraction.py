@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from apex_forensic.domain.errors import NotFoundError, ValidationError
@@ -18,6 +19,8 @@ from apex_forensic.ports.case_repository import CaseRepository
 from apex_forensic.ports.clock import Clock
 from apex_forensic.ports.id_generator import IdGenerator
 from apex_forensic.ports.machine_extraction import MachineExtractionRepository
+from apex_forensic.ports.ocr_provider import OcrProviderPort
+from apex_forensic.ports.stt_provider import SttProviderPort
 
 _REVIEW_STATUSES = {"UNREVIEWED", "ACCEPTED", "REJECTED", "CORRECTED"}
 _FINAL_REVIEW_STATUSES = {"ACCEPTED", "REJECTED", "CORRECTED"}
@@ -58,6 +61,66 @@ class MachineExtractionService:
         """Return OCR/STT provider capabilities; defaults are unavailable contracts."""
 
         return self._repository.list_provider_capabilities(capability_type=capability_type)
+
+    def analyze_image_file(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str,
+        source_node_id: str,
+        path: str,
+        provider: OcrProviderPort,
+        languages: list[str] | None = None,
+        source_revision: int = 0,
+    ) -> list[MachineExtractedCandidate]:
+        """Run an OCR provider and persist machine-extracted candidates."""
+
+        self._require_case(case_id)
+        capability = provider.capabilities()
+        self._repository.save_provider_capability(capability)
+        rows = provider.analyze_image(Path(path), languages=languages or ["eng"])
+        return self._save_runtime_candidates(
+            case_id=case_id,
+            evidence_id=evidence_id,
+            source_node_id=source_node_id,
+            source_type="IMAGE_FILE",
+            extraction_type="OCR",
+            provider_id=provider.provider_id,
+            provider_version=provider.provider_version,
+            rows=rows,
+            source_revision=source_revision,
+            source_path=path,
+        )
+
+    def analyze_audio_file(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str,
+        source_node_id: str,
+        path: str,
+        provider: SttProviderPort,
+        language: str | None = None,
+        source_revision: int = 0,
+    ) -> list[MachineExtractedCandidate]:
+        """Run an STT provider and persist machine-extracted candidates."""
+
+        self._require_case(case_id)
+        capability = provider.capabilities()
+        self._repository.save_provider_capability(capability)
+        rows = provider.analyze_audio(Path(path), language=language)
+        return self._save_runtime_candidates(
+            case_id=case_id,
+            evidence_id=evidence_id,
+            source_node_id=source_node_id,
+            source_type="AUDIO_FILE",
+            extraction_type="STT",
+            provider_id=provider.provider_id,
+            provider_version=provider.provider_version,
+            rows=rows,
+            source_revision=source_revision,
+            source_path=path,
+        )
 
     def list_candidates(
         self,
@@ -182,6 +245,63 @@ class MachineExtractionService:
                 )
             )
 
+    def _save_runtime_candidates(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str,
+        source_node_id: str,
+        source_type: str,
+        extraction_type: str,
+        provider_id: str,
+        provider_version: str,
+        rows: list[dict[str, Any]],
+        source_revision: int,
+        source_path: str,
+    ) -> list[MachineExtractedCandidate]:
+        now = self._clock.now()
+        candidates: list[MachineExtractedCandidate] = []
+        for index, row in enumerate(rows):
+            text = str(row.get("text") or "").strip()
+            if not text:
+                continue
+            candidate = MachineExtractedCandidate(
+                candidate_id=self._id_generator.new_id(),
+                case_id=case_id,
+                evidence_id=evidence_id,
+                source_node_id=source_node_id,
+                source_type=source_type,
+                extraction_type=extraction_type,
+                text=text,
+                language=None if row.get("language") is None else str(row.get("language")),
+                confidence=float(row.get("confidence", 0.0)),
+                provider_id=provider_id,
+                provider_version=provider_version,
+                model_id=None if row.get("model_id") is None else str(row.get("model_id")),
+                region=dict(row["region"]) if isinstance(row.get("region"), dict) else None,
+                frame_number=None,
+                media_timestamp_ms=None,
+                audio_start_ms=_optional_int(row.get("audio_start_ms")),
+                audio_end_ms=_optional_int(row.get("audio_end_ms")),
+                raw_locator={
+                    "source_path": source_path,
+                    "source_node_id": source_node_id,
+                    "candidate_index": index,
+                    "locator_type": extraction_type,
+                },
+                citations=[],
+                review_status="UNREVIEWED",
+                reviewed_by=None,
+                reviewed_at=None,
+                correction_text=None,
+                source_revision=source_revision,
+                is_partial=bool(row.get("is_partial", False)),
+                created_at=now,
+            )
+            self._repository.save_machine_candidate(candidate)
+            candidates.append(candidate)
+        return candidates
+
 
 def _parse_review_status(value: str) -> str:
     normalized = value.replace("-", "_").replace(".", "_").upper()
@@ -216,3 +336,12 @@ def _decode_candidate_cursor(cursor: str | None) -> str | None:
         return candidate_id
     except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
         raise ValidationError("Invalid candidate cursor.", target="cursor") from error
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
