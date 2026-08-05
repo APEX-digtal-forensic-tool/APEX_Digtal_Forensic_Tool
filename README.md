@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 구현과 통합 보안·기능 감사 및 Windows·Linux 회귀 검증 완료** 상태입니다.
-> Case·Evidence·Hash·SQLite·Chain of Custody, Progressive File System Indexing, Windows Artifact Analysis, SQLite FTS5 Search, Keyword Set, Search Reproduction·Cache, Timeline·Timezone, Chromium·Firefox Browser Artifact, Image·Video·Audio Metadata, Machine-extracted Candidate, GUI Context, Analysis Context Snapshot, View Projection, Safe Raw Read, Public Engine Interface, AI Assistance Engine Contract 및 Report Review·Approval·Export Contract가 구현되었습니다.
+> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 기반 기능과 Core Runtime 확장을 구현하고 Windows·Linux 회귀 검증을 완료한 Goal-scope Feature Complete Candidate** 상태입니다.
+> 기존 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive Indexing, Windows Artifact, Search·Timeline, Browser·Media, Context, AI Assistance Contract 및 Report Contract에 더해 RAW·DD·IMG·E01·VHD·VHDX Reader, MBR·GPT·Extended Partition, `pytsk3` 기반 Image File System, 삭제 파일·Unallocated·Slack 처리, Registry Transaction Replay, Prefetch MAM, Windows Event Message Rendering, Browser Cache·삭제 Candidate, Communication Analyzer, 실제 Thumbnail 및 제한된 Video Frame Sampling을 구현했습니다.
 >
-> 통합 감사에서는 Read Interface의 Mutation 실행 차단, 인덱싱 후 Symlink·Reparse Point 교체 방어, Windows-safe Export Filename 검증, Export Manifest 상태 전이 검증, Export Prepare 멱등성 및 AI Revision Resolver 예외 처리 문제를 수정했습니다. 현재 회귀 기준은 **94개 Test 통과**, Ruff·mypy 및 52개 JSON Schema 설계 검증 통과입니다. 실제 Desktop GUI, Web Server, MCP Server·Tool Registration, LLM·Prompt·Agent Loop, 실제 AI Provider 실행, 실제 OCR·STT 및 PDF·HTML Rendering은 이후 단계 또는 별도 담당 범위입니다.
+> Windows Event Message Renderer는 실제 Windows Host에서 검증했으며, Windows·Linux 전체 `pytest`, Ruff, mypy, Python·Node Design Validator 및 `git diff --check`를 통과했습니다. 현재 미지원 범위는 DPAPI·NSS 자동 복호화, KakaoTalk 암호화 DB 복호화, Registry Binary Deleted-cell Carving, 실제 Desktop GUI·MCP·LLM·OCR·STT 및 PDF·HTML Rendering입니다. X-Ways·Autopsy 대비 성능 우위는 Benchmark 전까지 주장하지 않습니다.
 
 ---
 
@@ -115,7 +115,7 @@ File Tree 및 Partial Result 표시
 Background Index 및 Artifact 분석
 ```
 
-현재 Directory Evidence와 Logical File Evidence에서 지원하는 Analysis Profile:
+현재 Directory·Logical File Evidence와 지원되는 Disk Image File System에서 사용하는 Analysis Profile:
 
 | Profile | 목적 | 현재 구현 범위 |
 |---|---|---|
@@ -237,20 +237,21 @@ Native Analysis Adapter Layer
 └── Multimedia Processor
 ```
 
-검토 가능한 Native 기술 후보:
+현재 적용하거나 선택적으로 연결하는 Native 기술:
 
-- Sleuth Kit 및 `libtsk`
-- `pytsk3` 또는 유지보수 가능한 Python Binding
-- E01 처리를 위한 `libewf` 또는 `pyewf`
-- VHD/VHDX 처리를 위한 `libvhdi`
-- SQLite FTS5 또는 동등한 Search Index
+- `pytsk3` 기반 Disk Image File System Provider
+- E01·EWF 처리를 위한 `libewf-python`
+- VHD 처리를 위한 `libvhdi-python`
+- VHDX 처리를 위한 외부 `qemu-img`
+- SQLite FTS5 Search Index
 - Python `hashlib`가 사용하는 Native Hash 구현
-- FFmpeg 또는 ffprobe
-- YARA 및 `yara-python`
-- `mmap` 기반 Random Access
-- 병목 구간용 Rust, C 또는 C++ Extension
+- Pillow 기반 Image Parsing·Raster Thumbnail
+- FFmpeg·ffprobe 기반 Media Metadata·제한된 Frame Sampling
+- Windows Event Message Rendering을 위한 `pywin32`
 
-구체적인 Library는 다음 기준으로 검토한 후 확정합니다.
+YARA, `mmap`, Rust·C·C++ Accelerator는 현재 구현 완료 범위가 아니며 Benchmark와 실제 병목 근거를 확인한 뒤 검토합니다.
+
+Native Library와 Tool은 다음 기준으로 선택·유지합니다.
 
 - Windows 지원 여부
 - Python 버전 호환성
@@ -516,16 +517,16 @@ Timezone 후보 출처:
 - Raw Locator 및 Citation
 - Artifact CLI와 Unit·Integration Test
 
-현재 제한:
+현재 확장 상태:
 
-- Binary Registry Hive와 EVTX 실행 분석은 `windows-artifacts` Optional Dependency가 필요
-- Prefetch MAM Compression은 감지하지만 압축 해제는 미지원
-- Event Message DLL Rendering 미지원
-- Live Windows Artifact Acquisition 및 Remote Registry 미지원
-- Registry Transaction Log·삭제 Key 복구 미지원
-- Credential·Secret·Password Hash 추출 미지원
-- Artifact Search와 Registry·Event Log·Prefetch Timeline Projection·Query는 Phase 4에서 구현되었으며, Phase 6 Context Snapshot·View Projection에서 재사용합니다. 실제 GUI와 AI 실행 계층은 아직 포함하지 않습니다.
-- E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing 미지원
+- Binary Registry Hive와 EVTX 분석은 `windows-artifacts` Optional Dependency가 필요
+- `regipy` 기반 Registry Transaction Log Replay와 Replayed View를 지원
+- Registry Export Directive·Replay 기반 삭제 Candidate를 제공하지만 Binary Deleted-cell Carving은 미지원
+- `dissect.util` 기반 Prefetch MAM 압축 해제와 Size Limit을 지원
+- Windows·`pywin32` 환경에서 Host 등록 Provider Metadata 기반 Event Message Rendering을 지원
+- Live Windows Artifact Acquisition, Remote Registry, SAM Hash·SECURITY Secret 추출은 미지원
+- Artifact Search와 Registry·Event Log·Prefetch Timeline Projection·Query는 Phase 4에서 구현되었으며 Phase 6 Context Snapshot·View Projection에서 재사용합니다.
+- Disk Image Reader·File System Parsing·삭제 복구는 아래 Core Runtime 확장에서 구현되었습니다.
 
 ### Phase 4 — Search, Keyword Set 및 Timeline
 
@@ -568,10 +569,10 @@ Search Index와 Timeline Build Job은 Checkpoint·Resume, Cooperative Pause·Can
 - `apex-forensic keyword-set create|list|show|add|remove|activate|archive|version`
 - `apex-forensic timeline build|status|resume|cancel|list|show`
 
-Phase 4 비지원 범위는 file body full text indexing, Office/PDF extraction, OCR/STT, YARA,
-AI Keyword Recommendation, LLM/agent loop, GUI/web/MCP server, report renderer, disk-image internal
-parser, deleted/slack/unallocated search, live acquisition, credential/secret extraction, broad
-Windows timezone auto-confirmation, compromise 자동 확정, benchmark 우위 주장입니다.
+Phase 4 비지원 범위는 File Body Full-text Indexing, Office·PDF Extraction, OCR·STT, YARA,
+실제 AI Keyword 생성, LLM·Agent Loop, GUI·Web·MCP Server, 실제 Report Renderer,
+Unallocated Raw Content Search, Live Acquisition, DPAPI·NSS 자동 복호화, 광범위한
+Windows Timezone 자동 확정, 침해 자동 확정 및 Benchmark 우위 주장입니다.
 
 ### Phase 5 — Browser Communications & Media Metadata MVP
 
@@ -622,10 +623,11 @@ Machine Extraction 구현 범위:
 - 기본 OCR·STT Provider의 `CAPABILITY_UNAVAILABLE` 처리
 - 실제 OCR·STT Engine 실행은 미지원
 
-Phase 5 비지원 범위는 Browser Password·Secret·Cookie 복호화, DPAPI, Cache Body 복원,
-Incognito 복원, 삭제 Browser Record Carving, Cloud Sync, 실제 OCR·STT, Video 전체 Frame Sampling,
-Subtitle·Audio Transcription, Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP·AI 실행 및 Report
-Renderer입니다.
+현재 Browser·Media 확장에서는 외부 Key 기반 Chromium AES-GCM, Browser Cache,
+WAL·Freelist 삭제 Candidate, Private-mode Candidate, Pillow Raster Thumbnail 및 제한된
+FFmpeg Frame Sampling을 지원합니다. DPAPI·NSS 자동 복호화, KakaoTalk 암호화 DB 복호화,
+Cloud Sync, 실제 OCR·STT, Video 전체 Frame 분석, Subtitle·Audio Transcription,
+Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP·AI 실행 및 실제 Report Renderer는 미지원입니다.
 
 
 ### Phase 6 — GUI Context, Analysis Snapshot 및 View Runtime
@@ -654,10 +656,9 @@ Renderer입니다.
 - MCP Server·SDK·Tool Registration 미포함
 - LLM Provider·Prompt·Agent Loop·API Key 미포함
 - LLM 기반 Keyword Recommendation과 Scope Summary 생성 미포함
-- Report Review·Approval Engine Contract는 Phase 8에서 구현되었으며, 실제 PDF·HTML Renderer와 GUI Preview는 미구현
+- Report Review·Approval Engine Contract는 Phase 8에서 구현되었으며 실제 PDF·HTML Renderer와 GUI Preview는 미구현
 - 임의 Local Path 직접 읽기 금지
-- Disk Image 내부 Raw Locator와 File System Parser 미지원
-- Deleted·Unallocated·Slack 영역 Raw Read 미지원
+- Disk Image Raw Range·File System·삭제·Slack 경로는 Evidence·Node·Offset·Length·Provider 검증 후에만 접근
 - Role 기반 Raw View 권한 정책은 Backend·Frontend 통합 단계에서 구현
 
 ### Phase 7 — AI Assistance Engine Contract
@@ -700,9 +701,37 @@ Renderer입니다.
 - 전자서명·실제 사용자 인증·RBAC·Billing 미지원
 - Rendered Output은 Original Evidence가 아닌 Derived Data Metadata로만 관리
 
+### Core Runtime Feature Completion — 완료
+
+Phase 1~8 기반 위에 다음 Runtime을 추가했습니다.
+
+- RAW·DD·IMG Reader와 Bounded Random Read
+- Optional `libewf-python` 기반 E01·EWF Reader
+- Optional `libvhdi-python` 기반 VHD Reader
+- 외부 `qemu-img` 기반 VHDX Read-only 변환 경로
+- MBR·GPT·Extended Partition·Protective MBR·Superfloppy 분석
+- `pytsk3` 기반 NTFS·FAT·exFAT·ext 계열 Image File System Tree
+- 삭제 File Recovery, Unallocated Range, File Slack Read·Export
+- Registry Transaction Log Replay와 Original·Replayed View 분리
+- Prefetch MAM 압축 해제와 Corrupt·Size-limit 방어
+- Windows Host Event Message Rendering
+- Browser AES-GCM 외부 Key 복호화, Cache, WAL·Freelist·Private-mode Candidate
+- Email·Discord·Telegram Communication Analyzer와 KakaoTalk 암호화 Store Discovery
+- Pillow Raster Thumbnail과 제한된 FFmpeg Frame Sampling
+- NFC·Casefold·Path·한글 자모·영문·숫자 혼합 Search 정규화
+- Recovery 실패 시 Partial·Temp Output 정리 및 외부 Process Error 노출 방어
+
+현재 명시적 미지원 경계:
+
+- DPAPI·NSS 자동 복호화
+- KakaoTalk 암호화 DB 복호화
+- Registry Binary Deleted-cell Carving
+- 형태소 기반 한국어 검색
+- 실제 OCR·STT·MCP·LLM·PDF·HTML Renderer
+
 ### Phase 1~8 통합 감사 및 회귀 검증
 
-통합 감사에서 발견된 2 High, 2 Medium, 2 Low Finding을 모두 수정했습니다.
+Phase 1~8 통합 감사에서 발견된 2 High, 2 Medium, 2 Low Finding과 Core Runtime 완료 감사에서 추가 발견된 3 Medium Finding을 모두 수정했습니다.
 
 - Read 전용 Interface가 Mutation Operation을 실행하지 못하도록 Descriptor의 `mutates_state` 경계 강제
 - 인덱싱 이후 Source Path가 Symlink·Junction·Reparse Point로 교체된 경우 Artifact 분석 차단
@@ -710,11 +739,14 @@ Renderer입니다.
 - 유효하지 않은 Export Manifest 상태에서 Renderer Result로 완료 처리하는 경로 차단
 - 같은 Export 요청의 반복 Prepare에서 Render Package가 중복 생성되지 않도록 멱등 처리
 - AI Revision 검증에서 예상하지 못한 Resolver Exception을 숨기지 않도록 예외 범위 축소
+- Browser AES-GCM 실패 시 Backend Exception 문자열 노출 차단
+- ffmpeg·ffprobe Raw stderr 반사를 Hash·Length·Return code 진단으로 교체
+- 삭제 File Recovery 실패 시 Partial·Temp Output 정리
+- Windows Event Message Renderer의 실제 PyHANDLE 전달 경로와 Host 검증 추가
 - 수정 사항별 집중 Regression Test 추가
-- Windows·Linux 전체 회귀 Test 94개 통과
-- Ruff, mypy 81 Source File 및 52개 JSON Schema 설계 검증 통과
+- Windows·Linux 전체 `pytest`, Ruff, mypy 91 Source File 및 52개 JSON Schema 설계 검증 통과
 
-감사 결과 기준 미해결 Finding:
+현재 Test·감사 범위의 미해결 Finding:
 
 - Critical: 0
 - High: 0
@@ -739,7 +771,7 @@ Renderer입니다.
 
 등록 가능한 Evidence 형식:
 
-- E01
+- E01·EWF
 - RAW
 - DD
 - IMG
@@ -750,45 +782,60 @@ Renderer입니다.
 
 기능:
 
-- Evidence 등록
+- Evidence 등록과 형식 식별
 - Metadata 확인
-- MD5, SHA-1, SHA-256 Hash 계산
+- MD5·SHA-1·SHA-256 Hash 계산
 - 무결성 검증
 - Analysis Profile 지정
 - Evidence Fingerprint 기반 중복 분석 방지
-- 원본 Evidence 읽기 전용 처리
+- 원본 Evidence Read-only 처리
 - Chain of Custody 기본 Event 생성
+- Bounded Raw Range Read·Export
+- MBR·GPT·Extended Partition·Protective MBR·Superfloppy 열거
+- Partition-level Unallocated Range 열거
+- Reader·Provider Capability와 Version 기록
+
+Reader 조건:
+
+- RAW·DD·IMG: 기본 Runtime
+- E01·EWF: Optional `libewf-python`
+- VHD: Optional `libvhdi-python`
+- VHDX: 외부 `qemu-img` 기반 Read-only 변환 경로
+- Image File System: `pytsk3`
 
 ### File System Analysis
 
 현재 구현:
 
-- Directory Evidence read-only Metadata 탐색
-- Logical File Evidence를 단일 Root/File Node로 표현
-- `os.scandir()` 기반 순회
-- 원본 이름과 한글·Unicode 상대 경로 보존
-- Root / Parent / Child / Node 상세 조회
+- Directory Evidence와 Logical File Evidence의 Read-only Metadata 탐색
+- RAW·DD·IMG 및 지원 Dependency가 있는 E01·VHD·VHDX 내부 File System Tree
+- `pytsk3` 기반 NTFS·FAT·exFAT·ext 계열 Provider
+- Root·Parent·Child·Node 상세 조회
 - Quick Triage Partial File Tree
 - Selected Scope 우선 처리
 - Full Metadata Index
 - Priority Queue와 SQLite Batch 저장
-- Checkpoint / Resume
-- Cooperative Pause / Cancel
-- Partial Result 및 Coverage 상태
+- Checkpoint·Resume
+- Cooperative Pause·Cancel
+- Partial Result와 Coverage 상태
 - Opaque Stable Cursor Pagination
-- Symlink 및 Reparse Point 기본 미추적
-- 권한·변경 오류의 Warning 기록
-- 확장자 및 표준 `mimetypes` 기반 MIME Candidate
-- Metadata Index 중 File Body 미열람 및 자동 Hash 미실행
+- 한글·Unicode 경로 보존
+- Symlink·Reparse Point 기본 미추적
+- 권한·변경 오류 Warning
+- Extension·표준 `mimetypes` 기반 MIME Candidate
+- Image 내부 Extent·Raw Locator
+- 삭제 Node 표시와 제한된 File Recovery
+- Unallocated Range 조회·Read·Export
+- File Slack 조회·Export
+- Recovery Output Hash·Partial·Provenance 기록
 
 현재 제한:
 
-- E01 / RAW / DD / IMG / VHD / VHDX 내부 탐색은 `CAPABILITY_UNAVAILABLE`
-- 삭제 File 탐색 및 복구 미지원
-- NTFS / FAT / exFAT / ext 직접 Parser 미지원
-- Unallocated / Slack Space 분석 미지원
-- File Content 기반 Magic Detection 미지원
-- Disk Image Raw Locator 미지원
+- File System 지원 범위는 `pytsk3`와 연결된 Native Provider가 실제로 인식하는 Format으로 제한
+- 손상·Overwrite된 삭제 File을 완전 복구로 표시하지 않음
+- Directory Evidence Manifest Hash 미지원
+- File Content 전체 Magic·YARA·Office·PDF Full-text 분석 미지원
+- VHDX는 `qemu-img`가 없으면 `CAPABILITY_UNAVAILABLE`
 
 ### Windows Artifact Analysis
 
@@ -799,22 +846,24 @@ Renderer입니다.
 현재 구현:
 
 - Windows Registry Export Text (`.reg`)
-- UTF-16LE 및 UTF-8 BOM 처리
+- UTF-16LE·UTF-8 BOM 처리
 - String·Expand String·DWORD·QWORD·Binary·Multi String의 안전한 범위
-- Run / RunOnce Autorun
+- Run·RunOnce Autorun
 - USBSTOR 기반 USB Device History
 - TimeZoneInformation
-- UserAssist ROT13 및 알려진 Count 구조의 안전한 범위
-- `python-registry`가 설치된 경우 SYSTEM·SOFTWARE·NTUSER.DAT·USRCLASS.DAT Offline Hive Capability
-- Parser Backend와 Version 기록
-- Logical Raw Locator 및 Citation
+- UserAssist ROT13과 알려진 Count 구조의 안전한 범위
+- Optional `python-registry` 기반 SYSTEM·SOFTWARE·NTUSER.DAT·USRCLASS.DAT Offline Hive Parse
+- Optional `regipy` 기반 Transaction Log Replay
+- Original View와 Replayed View 분리
+- Export Directive·Replay 기반 삭제 Candidate
+- Parser Backend·Version·Source Revision·Raw Locator·Citation 기록
 
 현재 제한:
 
-- SAM Password Hash, SECURITY Secret 및 Credential 추출 미지원
-- Registry Transaction Log 및 삭제 Key 복구 미지원
-- Live / Remote Registry 미지원
-- Binary Parser Dependency가 없으면 `CAPABILITY_UNAVAILABLE` 또는 `UNSUPPORTED`
+- SAM Password Hash·SECURITY Secret 추출 미지원
+- HBIN Free Cell·Slack 직접 Carving과 삭제 `nk`·`vk`·`sk` 관계 복원 미지원
+- Live·Remote Registry 미지원
+- Optional Dependency가 없으면 해당 Capability는 `CAPABILITY_UNAVAILABLE`
 
 #### Event Log
 
@@ -823,23 +872,26 @@ Renderer입니다.
 - Exported Windows Event XML
 - XML Namespace 안전 처리
 - Channel·Provider·Event ID·Record ID·Computer·User SID·Process ID·Thread ID 보존
-- EventData / UserData 및 Raw XML 보존
-- 주요 Security·System·Sysmon Event ID의 Subtype·Title 후보
-- `python-evtx`가 설치된 경우 Binary `.evtx` Iterator Capability
+- EventData·UserData·Raw XML 보존
+- 주요 Security·System·Sysmon Event ID의 Subtype·Title Candidate
+- Optional `python-evtx` 기반 Binary `.evtx` Iterator
+- Windows·`pywin32` 기반 Host 등록 Provider Metadata Message Rendering
+- EvtQuery·EvtNext 원본 PyHANDLE을 사용하는 검증된 Event-handle 경로
 - Item Budget·Cancellation·Partial Result
-- Record 기반 Raw Locator 및 Citation
+- Record 기반 Raw Locator·Citation
 
-현재 제한:
+보안 경계:
 
-- Event Message DLL Rendering 미지원
-- Event ID만으로 침해 또는 악성 여부를 확정하지 않음
-- Binary Parser Dependency가 없으면 `CAPABILITY_UNAVAILABLE` 또는 `UNSUPPORTED`
+- 분석 Evidence의 Message DLL을 로드하거나 실행하지 않음
+- Windows Host에 정상 등록된 Provider Metadata만 사용
+- Event ID만으로 침해·악성 여부를 확정하지 않음
+- Windows 또는 `pywin32`가 없으면 Message Rendering은 `CAPABILITY_UNAVAILABLE`
 
 #### Prefetch
 
 현재 구현:
 
-- `.pf` Version 17·23·26·30의 테스트된 최소 Metadata Parser
+- `.pf` Version 17·23·26·30 Metadata Parser
 - Executable Name
 - Prefetch Hash
 - Format Version
@@ -847,71 +899,79 @@ Renderer입니다.
 - Run Count
 - 안전하게 확인 가능한 Last Run Time
 - Bounds Check와 손상 입력 처리
-- Field Offset / Length 기반 Raw Locator
+- Field Offset·Length 기반 Raw Locator
 - MAM Compression 감지
+- Optional `dissect.util` 기반 MAM 압축 해제
+- Corrupt Stream 처리와 Decompressed Size Limit
+- Referenced Path Candidate
 
 현재 제한:
 
 - 알 수 없는 Version은 `UNSUPPORTED`
-- MAM Compression 압축 해제 미지원
 - Prefetch만으로 사용자가 직접 프로그램을 실행했다고 단정하지 않음
-- Volume 및 Referenced File Path는 안전하게 파싱 가능한 범위만 제공
+- Volume·Referenced File Path는 안전하게 파싱 가능한 범위만 제공
 
 ### Browser Communications MVP
 
 현재 구현:
 
-- File System Index 기반 Chromium / Firefox Profile 후보 발견
-- Windows / Linux Path Allowlist, Unicode Path 보존, Profile 중복 방지
-- Profile 발견과 Browser 사용 확정을 분리하고 `user_candidate`는 후보로만 보존
-- Chromium `History` SQLite의 방문, 검색어, 다운로드 추출
-- Firefox `places.sqlite` 방문 및 Download Annotation Candidate 추출
-- 원본 DB를 직접 수정하지 않는 플랫폼 임시 디렉터리 기반 Snapshot Reader
-- Main DB / WAL / SHM 조합 보존과 Component Hash 기반 Source Fingerprint
-- Windows-safe SQLite File URI와 읽기 전용 `SELECT`
-- Snapshot Cleanup 전에 SQLite Connection을 명시적으로 Close
-- Cleanup 실패를 Initial DB Open 실패와 구분하는 구조화 Warning
-- Source별 Deterministic Checkpoint, Bounded Batch Iteration 및 Resume
-- DB 내부 반복 중 Cooperative Pause / Cancel
-- Source Fingerprint, Snapshot Hash, Profile / DB / Table / Row Logical Raw Locator 기록
-- Raw Timestamp Semantics, UTC 정규화 근거, Case Timezone 표시 분리
-- Stable Cursor 기반 조회, Search / Timeline Projection
-- Windows와 Linux에서 동일한 Synthetic Fixture 기반 회귀 검증
+- File System Index 기반 Chromium·Firefox Profile Candidate Discovery
+- Windows·Linux Path Allowlist, Unicode Path 보존, Profile 중복 방지
+- Chromium History SQLite의 Visit·Search·Download 분석
+- Firefox `places.sqlite` Visit와 Download Annotation Candidate
+- Main DB·WAL·SHM을 함께 보존하는 Read-only SQLite Snapshot
+- Component Hash 기반 Source Fingerprint·Revision
+- 플랫폼 임시 Directory와 Windows-safe SQLite File URI
+- Source별 Checkpoint·Resume·Pause·Cancel
+- DB·Table·Row Logical Raw Locator
+- Browser Artifact Stable Cursor·Search·Timeline Projection
+- Cookie·Credential 구조화 Candidate
+- Browser Cache Artifact
+- WAL·Freelist 기반 삭제 Record Candidate
+- Private-mode 흔적 Candidate
+- 외부 Key 기반 Chromium AES-GCM 복호화
+- Key 부재·인증 실패·Redaction 경계
 
 현재 제한:
 
-- Password / Secret / Cookie 복호화, Cache Body 복원, 삭제 Record Carving, Incognito 복원,
-  Cloud Sync 분석은 구현하지 않음
-- Firefox Search Term은 재현 가능한 Source가 없으면 완료 기능으로 표시하지 않음
-- Firefox `moz_inputhistory`는 URL-bar 입력 Candidate로 보존하며, 확인된 Search Term이나
-  Browser Search Timeline Event로 투영하지 않음
-- `danger_type` 등 다운로드 상태 값만으로 악성 여부를 확정하지 않음
+- Windows DPAPI Master Key 자동 획득 미지원
+- 사용자 SID·Password·NT Hash·Domain Backup Key 기반 Offline DPAPI 복구 미지원
+- Firefox NSS `key4.db` 자동 복호화 미지원
+- Live Host Credential Store를 암묵적으로 사용하지 않음
+- 복호화된 Password·Cookie를 일반 Log나 Error Message에 출력하지 않음
+- WAL·Freelist·Private-mode 결과는 확정 복구가 아니라 Candidate로 보존
+- Cloud Sync 분석 미지원
 
-후순위 Plugin 범위:
+Communication Analyzer:
 
 - Email
 - Discord
 - Telegram
-- KakaoTalk
-- 기타 Messenger
+- KakaoTalk 암호화 Store Discovery
+
+KakaoTalk는 OS·앱 Version별 Key 획득과 암호화 DB 복호화를 지원하지 않습니다.
 
 ### Timeline Analysis
 
 현재 구현:
 
-- File System Timestamp와 Registry·Event Log·Prefetch·Browser·Media Artifact Timestamp 투영
+- File System Timestamp와 Registry·Event Log·Prefetch·Browser·Media·Communication Artifact Timestamp Projection
 - Raw Timestamp·Raw Timezone 보존
-- UTC 정규화 및 Case Timezone 표시
-- Timezone Source·Confidence와 Timestamp Semantics 기록
-- Event Type 및 Time Range Filter
+- UTC 정규화와 Case Timezone 표시
+- Timezone Source·Confidence·Timestamp Semantics
+- IANA Timezone과 Windows TimeZoneKeyName Candidate
+- DST, Ambiguous·Nonexistent Local Time 경계
+- Analyst Override
+- Event Type·Time Range Filter
 - Opaque Stable Cursor Pagination
 - Raw Locator와 Citation 가능한 Timeline Event
-- Build Job의 Checkpoint·Resume 및 Cooperative Pause·Cancel
+- Build Job Checkpoint·Resume·Pause·Cancel
 
-추후 구현:
+현재 제한:
 
-- 광범위한 Windows Timezone 자동 판별
-- AI 기반 사건 흐름 요약
+- 불명확한 Naive Timestamp를 UTC로 임의 확정하지 않음
+- Timezone Candidate가 불충분하면 분석자 확인 필요
+- AI 기반 사건 흐름 요약은 외부 AI Layer 담당
 
 ### Search & Discovery
 
@@ -921,19 +981,20 @@ Renderer입니다.
 - Case·Evidence Scope와 Filter 기반 조회
 - Opaque Stable Cursor Pagination
 - Search Result Cache와 Revision 기반 무효화
-- Keyword Set 및 Immutable Versioning
+- Keyword Set과 Immutable Versioning
 - Search Reproduction·History·Rerun
-- Index Job의 Checkpoint·Resume 및 Cooperative Pause·Cancel
+- Index Job Checkpoint·Resume·Pause·Cancel
+- NFC·Casefold·Path 정규화
+- 한글 완성형·자모·영문·숫자·경로 혼합 Fixture
+- Canonical-equivalent Query Cache 일치
+- File System·Artifact·Browser·Media·Communication·Timeline Projection 검색
 
-추후 구현:
+현재 제한:
 
-- Regex 및 File Body Full Text Search
-- Office·PDF·OCR/STT 추출 Text 검색
-- Deleted·Unallocated·Slack 영역 검색
-- 한국어 형태소·Tokenizer 최적화 및 Localization 확장
-- YARA 및 AI Keyword Recommendation
-
----
+- 형태소 분석 지원을 주장하지 않음
+- Office·PDF·OCR·STT Full-text Extraction 미지원
+- Unallocated Raw Content Full-text Search 미지원
+- YARA와 실제 AI Keyword 생성은 별도 Runtime
 
 ## AI Keyword Recommendation
 
@@ -1074,29 +1135,33 @@ Phase 6에서는 동일 Resource를 세 단계 Projection으로 조회할 수 �
 
 현재 구현:
 
-- Image / Video / Audio File 후보 분류
-- JPEG / PNG / GIF / BMP / TIFF / WEBP Header Metadata와 JPEG EXIF / GPS Candidate
-- MP4 Container Duration / Codec Metadata 및 Optional `ffprobe` 기반 Video / Audio Metadata
-- `ffprobe` 미설치 또는 실패 시 `CAPABILITY_UNAVAILABLE` / Warning을 기록하고 가짜 성공 금지
-- `Z`, `+HH:MM`, `-HH:MM` 및 Fractional Second Media Timestamp 정규화
-- Timezone 없는 EXIF / Media Timestamp를 UTC로 임의 확정하지 않음
-- argv 기반 `ffprobe` 실행, `shell=True` 금지 및 Argument Injection 방지
-- Timeout과 stdout / stderr Streaming Output Size Limit
-- Windows / Linux 공통 동작을 위한 동시 Pipe Reader와 Process Cleanup
-- Decompression Bomb, 손상 File, Read Limit, File Size Limit 보호
-- Source Revision, Raw Locator, Citation, Search / Timeline Projection, Stable Cursor 조회
-- Hash 검증 가능한 Thumbnail Derivative Metadata를 `cache_entries`와 `thumbnail_records`에 저장
+- Image·Video·Audio File Candidate 분류
+- JPEG·PNG·GIF·BMP·TIFF·WEBP Header Metadata
+- JPEG EXIF·GPS·Orientation·Camera Make·Model Candidate
+- MP4 기본 Container Metadata
+- Optional `ffprobe` 기반 Video·Audio Metadata
+- Pillow 기반 실제 Raster Thumbnail
+- Thumbnail Hash·Source Revision·Derived Metadata
+- Optional `ffmpeg` 기반 제한된 Video Frame Sampling
+- `Z`, 명시적 UTC Offset, Fractional Second Timestamp 정규화
+- Timezone 없는 Media Timestamp의 UTC 임의 확정 금지
+- argv 기반 외부 Process 실행, `shell=True` 금지
+- Timeout·Streaming Output Size Limit·Process Cleanup
+- Decompression Bomb·손상 File·Read Limit 보호
+- Search·Timeline Projection과 Stable Cursor
 
 현재 제한:
 
-- Pixel 자동 회전, 원본 Media 수정, Reverse Geocoding, 자동 대량 Thumbnail Rendering은 구현하지 않음
-- Video 전체 Frame Sampling, Subtitle 추출, OCR/STT 실행은 구현하지 않음
+- 원본 Media 수정 미지원
+- Reverse Geocoding, 얼굴·객체·내용 분석 미지원
+- Video 전체 Frame 분석, Subtitle 추출, Audio Transcription 미지원
+- `ffmpeg`·`ffprobe`·Pillow가 없으면 해당 기능은 `CAPABILITY_UNAVAILABLE`
 
 ### Machine-extracted Candidate
 
 OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
-Provider Port와 Candidate Review Workflow는 구현되어 있으며 기본 OCR/STT Provider는
-`CAPABILITY_UNAVAILABLE`을 반환합니다. 실제 OCR/STT Engine은 실행하지 않습니다.
+Provider Port와 Candidate Review Workflow는 구현되어 있으며 기본 OCR·STT Provider는
+`CAPABILITY_UNAVAILABLE`을 반환합니다. 실제 OCR·STT Engine은 실행하지 않습니다.
 
 Review 상태:
 
@@ -1118,8 +1183,6 @@ Candidate에는 다음 정보를 포함합니다.
 - Analyst Review Status
 
 AI는 검토되지 않은 Candidate를 확정 사실로 표현할 수 없습니다.
-
----
 
 ## Chain of Custody
 
@@ -1277,7 +1340,9 @@ APEX는 다음 원칙에 따라 디지털 증거를 처리합니다.
 - Case 및 Evidence
 - Hash 및 무결성
 - Progressive Indexing
-- File System 및 Artifact 분석
+- Evidence Reader·Partition·File System 분석
+- 삭제 File·Unallocated·Slack Recovery·Export
+- Artifact 분석
 - Timeline 및 Timezone 정규화
 - Search, Keyword Set 및 Index
 - Cache와 Analysis Job
@@ -1373,107 +1438,73 @@ APEX/
 │   ├── MODULE_RESPONSIBILITIES.md
 │   └── REQUIREMENTS_TRACEABILITY.md
 │
-├── src/
-│   └── apex_forensic/
-│       ├── adapters/
-│       │   ├── artifacts/
-│       │   │   ├── browser.py
-│       │   │   ├── media.py
-│       │   │   └── windows/
-│       │   ├── filesystem/
-│       │   ├── hashing/
-│       │   ├── persistence/
-│       │   │   └── sqlite/
-│       │   │       └── repository.py
-│       │   └── schema/
-│       ├── application/
-│       │   └── services/
-│       │       ├── ai_assistance.py
-│       │       ├── artifact_analysis.py
-│       │       ├── context.py
-│       │       ├── file_system_index.py
-│       │       ├── machine_extraction.py
-│       │       ├── report.py
-│       │       ├── search.py
-│       │       └── timeline.py
-│       ├── cli/
-│       │   ├── commands.py
-│       │   └── parser.py
-│       ├── config/
-│       ├── domain/
-│       │   └── models/
-│       │       ├── ai.py
-│       │       ├── artifact.py
-│       │       ├── browser_media.py
-│       │       ├── context.py
-│       │       ├── filesystem.py
-│       │       ├── report.py
-│       │       ├── search.py
-│       │       └── timeline.py
-│       ├── jobs/
-│       └── ports/
-│           ├── ai_assistance.py
-│           ├── artifact_analyzer.py
-│           ├── artifact_repository.py
-│           ├── browser_analyzer.py
-│           ├── file_system_repository.py
-│           ├── filesystem_provider.py
-│           ├── machine_extraction.py
-│           ├── media_analyzer.py
-│           ├── raw_reader.py
-│           ├── report_renderer.py
-│           ├── search_index.py
-│           └── timeline_repository.py
+├── src/apex_forensic/
+│   ├── adapters/
+│   │   ├── artifacts/
+│   │   │   ├── browser.py
+│   │   │   ├── media.py
+│   │   │   ├── communication/
+│   │   │   └── windows/
+│   │   ├── evidence/
+│   │   │   ├── ewf.py
+│   │   │   ├── partitions.py
+│   │   │   ├── raw.py
+│   │   │   └── virtual_disk.py
+│   │   ├── filesystem/
+│   │   │   └── pytsk.py
+│   │   ├── hashing/
+│   │   ├── persistence/sqlite/
+│   │   │   └── repository.py
+│   │   └── schema/
+│   ├── application/services/
+│   │   ├── ai_assistance.py
+│   │   ├── artifact_analysis.py
+│   │   ├── context.py
+│   │   ├── evidence_image.py
+│   │   ├── file_system_index.py
+│   │   ├── machine_extraction.py
+│   │   ├── report.py
+│   │   ├── search.py
+│   │   └── timeline.py
+│   ├── cli/
+│   │   ├── commands.py
+│   │   └── parser.py
+│   ├── config/
+│   ├── domain/
+│   ├── jobs/
+│   └── ports/
+│       ├── ai_assistance.py
+│       ├── artifact_analyzer.py
+│       ├── browser_analyzer.py
+│       ├── evidence_reader.py
+│       ├── filesystem_provider.py
+│       ├── machine_extraction.py
+│       ├── media_analyzer.py
+│       ├── raw_reader.py
+│       ├── report_renderer.py
+│       ├── search_index.py
+│       └── timeline_repository.py
 │
-├── schemas/
-│   └── v1/
-│       ├── ai-assistance-request.schema.json
-│       ├── ai-keyword-promotion.schema.json
-│       ├── ai-keyword-recommendation-batch.schema.json
-│       ├── ai-keyword-recommendation.schema.json
-│       ├── ai-provider-capability.schema.json
-│       ├── ai-report-draft-input.schema.json
-│       ├── ai-scope-summary.schema.json
-│       ├── ai-verification-event.schema.json
-│       ├── analysis-context-snapshot.schema.json
-│       ├── analysis-scope-context.schema.json
-│       ├── context-revision-state.schema.json
-│       ├── custody-snapshot.schema.json
-│       ├── engine-interface.schema.json
-│       ├── engine-tool-descriptor.schema.json
-│       ├── gui-session-context.schema.json
-│       ├── raw-read-request.schema.json
-│       ├── raw-read-response.schema.json
-│       ├── raw-view.schema.json
-│       ├── rendered-report-artifact.schema.json
-│       ├── report-approval-record.schema.json
-│       ├── report-export-manifest.schema.json
-│       ├── report-record.schema.json
-│       ├── report-render-package.schema.json
-│       ├── report-renderer-capability.schema.json
-│       ├── report-review-event.schema.json
-│       ├── report-section.schema.json
-│       ├── report-version.schema.json
-│       └── view-projection.schema.json
-│
+├── schemas/v1/
 ├── tests/
+│   ├── fixtures/registry/
 │   ├── integration/
-│   │   ├── test_phase6_cli_workflow.py
-│   │   ├── test_phase7_cli_workflow.py
-│   │   └── test_phase8_cli_workflow.py
 │   └── unit/
+│       ├── test_communication_artifacts.py
+│       ├── test_evidence_readers.py
+│       ├── test_image_filesystem_provider.py
 │       ├── test_phase5_media_browser.py
 │       ├── test_phase6_context_views.py
 │       ├── test_phase7_ai_assistance.py
-│       └── test_phase8_report_contract.py
+│       ├── test_phase8_report_contract.py
+│       └── test_windows_artifacts.py
 │
 └── tools/
     ├── validate_design.mjs
     ├── validate_design_basic.py
-    └── validate_design.sh
+    ├── validate_design.sh
+    └── verify_windows_event_message_renderer.py
 ```
-
----
 
 ## 설계 문서
 
@@ -1610,25 +1641,31 @@ APEX/
 - [x] Windows-safe Export Filename 및 Derived Root 검증
 - [x] Export Manifest 상태 전이와 Prepare 멱등성 검증
 - [x] AI Revision Resolver 예외 처리 강화
-- [x] 수정 사항 Regression Test 및 Windows·Linux 94 Test 통과
+- [x] 수정 사항 Regression Test와 Windows·Linux 전체 회귀 검증
+- [x] RAW·DD·IMG·E01·VHD·VHDX Reader와 Partition 분석
+- [x] `pytsk3` 기반 Image File System Tree
+- [x] 삭제 File Recovery, Unallocated Range 및 Slack Export
+- [x] Registry Transaction Log Replay와 삭제 Candidate
+- [x] Prefetch MAM 압축 해제와 Windows Event Message Rendering
+- [x] Browser AES-GCM 외부 Key 복호화, Cache·삭제·Private-mode Candidate
+- [x] Email·Discord·Telegram Communication Analyzer
+- [x] Raster Thumbnail과 제한된 Video Frame Sampling
+- [x] 한국어 NFC·Casefold·Path·자모 Search 정규화
+- [x] Windows Event Message Renderer 실제 Host 검증
+- [x] mypy 91 Source File, Python·Node 52 Schema Validator 통과
 
 ### 구현 예정
 
-- [ ] E01 / RAW / DD / IMG / VHD / VHDX 내부 File System Parsing
-- [ ] 삭제 File Recovery 및 Unallocated / Slack 분석
-- [ ] Registry Transaction Log 및 삭제 Key Recovery
-- [ ] Prefetch MAM Compression 해제
-- [ ] Event Message DLL Rendering
-- [ ] 광범위한 Windows Timezone Resolver 및 Timestamp Normalizer 확장
-- [ ] Browser Credential / Cookie Decryption 및 Deleted Record Recovery
-- [ ] Email / Discord / Telegram / KakaoTalk Plugin
-- [ ] Raster Thumbnail Rendering 및 제한된 Video Frame Sampling
-- [ ] 실제 OCR / STT Provider 및 Candidate Extraction
+- [ ] DPAPI Offline Master Key 자동 복구와 안전한 Secret Provider
+- [ ] Firefox NSS `key4.db` 자동 복호화
+- [ ] Registry HBIN Free Cell·Slack 기반 Binary Deleted-cell Carving
+- [ ] 지원 OS·앱 Version을 고정한 KakaoTalk 암호화 DB 복호화
+- [ ] 형태소 기반 한국어 Search 검토
+- [ ] 실제 OCR·STT Provider와 Candidate Extraction
 - [ ] 외부 AI Adapter 품질 평가와 실제 Provider 통합 검증
 - [ ] 실제 PDF·HTML Renderer Adapter와 GUI Report Preview
-- [ ] 한국어 Search 및 Localization
-- [ ] 성능 Benchmark 및 외부 전문가 검토
-- [ ] Windows Desktop Packaging
+- [ ] 성능·정확성 Benchmark 및 외부 전문가 검토
+- [ ] Windows Desktop Packaging과 CI Matrix
 
 ### 별도 담당
 
@@ -1774,16 +1811,19 @@ APEX/
 - [x] Provider-neutral Renderer Port와 기본 `CAPABILITY_UNAVAILABLE`
 - [x] 실제 AI Draft 생성, LLM/Prompt/MCP, GUI Preview, PDF/HTML Rendering 제외
 
-### Phase 9 — Benchmark 및 배포
+### Phase 9 — Advanced Recovery, Benchmark 및 배포
 
+- DPAPI·NSS Offline Secret Recovery
+- Registry Binary Deleted-cell Carving
+- 지원 Version을 고정한 KakaoTalk DB 복호화
 - 동일 조건 기반 내부 Benchmark
-- Progressive Indexing 및 Cache Cold/Warm 비교
+- Progressive Indexing 및 Cache Cold·Warm 비교
+- Evidence Reader·File System·Recovery 정확성 검증
 - Timezone 정확성과 Timeline 재현성 검증
 - Chain of Custody 무결성 검증
-- AI Citation 및 Keyword 추천 유용성 평가
 - 공개 또는 Synthetic Evidence 기반 외부 전문가 검토
 - 전문가 피드백 반영 및 재검증
-- Native Dependency Packaging 검증
+- Native Dependency Packaging·CI Matrix 검증
 - Windows Desktop Packaging
 - 최종 문서 및 Release 준비
 
@@ -1832,14 +1872,17 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 
 ## 설계 및 회귀 검증
 
-현재 Phase 1~8 통합 회귀 기준:
+현재 통합 회귀 기준:
 
-- Windows·Linux `pytest`: 94 passed
+- Windows·Linux 전체 `pytest`: 통과
+- Optional Native Dependency가 없는 환경의 Test: 명시적 Skip
+- Windows Event Message Renderer: 실제 Host 검증 통과
 - Ruff: All checks passed
-- mypy: 81 source files, no issues
-- Python Design Validator: 1607 checks, 52 schemas
+- mypy: 91 source files, no issues
+- Python Design Validator: 1607 checks, 52 schemas, 103 requirements, 101 endpoints
 - Node Design Validator: 3586 checks, 52 schemas
-- 통합 감사 미해결 Finding: Critical 0 / High 0 / Medium 0 / Low 0
+- `git diff --check`: 통과
+- 현재 Test·감사 범위의 미해결 Finding: Critical 0 / High 0 / Medium 0 / Low 0
 
 ### Python 기본 검증
 
@@ -1854,6 +1897,14 @@ python -X utf8 .\tools\validate_design_basic.py
 ```powershell
 node .\tools\validate_design.mjs
 ```
+
+### Windows Event Message Renderer 검증
+
+```powershell
+python .\tools\verify_windows_event_message_renderer.py --require-rendered
+```
+
+정상 결과는 `message_rendered: true`와 `WINDOWS_ADAPTER_RENDERED`입니다.
 
 ### Linux / WSL / CI 검증
 
