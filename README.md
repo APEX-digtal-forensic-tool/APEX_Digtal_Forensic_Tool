@@ -9,10 +9,11 @@ Frontend GUI, Backend Identity·Billing, MCP Server, LLM Provider, Prompt 및 Ag
 > **현재 상태**
 >
 > Phase 1~8에서 정의한 **엔진 기반 기능과 외부 연동 계약 범위**를 구현했습니다.
+> 이후 Disk Image Reader·Partition 분석·Image 내부 File System 탐색·삭제 파일·Unallocated·Slack 처리와 Windows·Browser·Communication·Media Runtime을 확장했습니다.
 > 이는 전체 디지털 포렌식 제품의 모든 기능이 완성됐다는 의미가 아닙니다.
 >
-> 현재 실제 분석 대상은 Directory·일반 파일과 지원되는 Registry·Event Log·Prefetch·Browser·Media Artifact입니다.
-> E01·RAW·DD·IMG·VHD·VHDX 내부 File System 탐색, 삭제 파일 복구, 실제 OCR·STT, 실제 AI 실행 및 PDF·HTML 렌더링은 아직 지원하지 않습니다.
+> Windows·Linux 전체 회귀 검증과 Windows Event Message Renderer 실제 Host 검증을 완료했습니다.
+> 현재 미지원 범위는 DPAPI·NSS 자동 복호화, KakaoTalk 암호화 DB 복호화, Registry Binary Deleted-cell Carving, 실제 OCR·STT·AI 실행 및 PDF·HTML 렌더링입니다.
 
 ---
 
@@ -27,17 +28,33 @@ Frontend GUI, Backend Identity·Billing, MCP Server, LLM Provider, Prompt 및 Ag
 | 파일 Hash·무결성 | `IMPLEMENTED` | 일반 파일 MD5·SHA-1·SHA-256 Streaming Hash와 재검증 |
 | Directory Hash | `UNSUPPORTED` | Directory Manifest Hash 정책 미구현 |
 | Chain of Custody | `IMPLEMENTED` | Append-only Event, Hash Chain, Correction Event |
-| Progressive Indexing | `IMPLEMENTED` | Directory 및 단일 일반 파일 Metadata Index |
+| Progressive Indexing | `IMPLEMENTED` | Quick Triage·Selected Scope·Full Analysis, Checkpoint·Resume |
+| RAW·DD·IMG Reader | `IMPLEMENTED` | Bounded Read, Hash, Partition Probe, Raw Range Export |
+| E01·EWF Reader | `OPTIONAL` | `libewf-python` 설치 시 실제 EWF Read |
+| VHD Reader | `OPTIONAL` | `libvhdi-python` 설치 시 실제 VHD Read |
+| VHDX Reader | `OPTIONAL` | 시스템 `qemu-img`를 통한 제한된 Read-only 변환 경로 |
+| Partition 분석 | `IMPLEMENTED` | MBR, GPT, Extended Partition, Protective MBR, Superfloppy |
+| Disk Image 내부 탐색 | `IMPLEMENTED` | `pytsk3` 기반 NTFS·FAT·exFAT·ext 계열 File System Tree |
+| 삭제·Unallocated·Slack | `IMPLEMENTED` | 삭제 Node 복구, Unallocated Range, File Slack Read·Export |
 | Windows Registry | `IMPLEMENTED` | `.reg`, Autorun, USBSTOR, TimeZoneInformation, UserAssist |
-| Binary Registry Hive | `OPTIONAL` | `python-registry` 설치 시 Offline Hive Capability |
+| Binary Registry Hive | `OPTIONAL` | `python-registry` 설치 시 Offline Hive Parse |
+| Registry Transaction Replay | `OPTIONAL` | `regipy` 설치 시 Transaction Log Replay |
+| Registry Deleted Candidate | `IMPLEMENTED` | Export Directive·Replay 기반 Candidate와 Provenance |
+| Registry Binary Deleted-cell Carving | `UNSUPPORTED` | Free Cell·Slack 직접 Carving과 관계 복원 미구현 |
 | Event Log | `IMPLEMENTED` | Exported Windows Event XML |
-| Binary EVTX | `OPTIONAL` | `python-evtx` 설치 시 Binary EVTX Capability |
-| Prefetch | `IMPLEMENTED` | Version 17·23·26·30 최소 Metadata, MAM 감지 |
-| Browser | `IMPLEMENTED` | Chromium Visit·Search·Download, Firefox Visit·Download Candidate |
-| Media | `IMPLEMENTED` | Image Header, JPEG EXIF·GPS, MP4 기본 Metadata |
+| Binary EVTX | `OPTIONAL` | `python-evtx` 설치 시 Binary EVTX Parse |
+| Event Message Rendering | `OPTIONAL` | Windows·`pywin32` 환경에서 Host 등록 Provider Metadata 사용 |
+| Prefetch | `IMPLEMENTED` | Version 17·23·26·30 Metadata |
+| Prefetch MAM | `OPTIONAL` | `dissect.util` 기반 압축 해제와 Size Limit |
+| Browser | `IMPLEMENTED` | Chromium·Firefox Visit·Search·Download·Cache·삭제 Candidate |
+| Chromium AES-GCM | `IMPLEMENTED` | 외부 Key가 주어진 경우 인증된 복호화와 Redaction |
+| DPAPI·NSS 자동 복호화 | `UNSUPPORTED` | Offline Master Key·Profile Key 획득 체계 미구현 |
+| Communication | `IMPLEMENTED` | Email·Discord·Telegram Analyzer, KakaoTalk 암호화 저장소 Discovery |
+| KakaoTalk DB 복호화 | `UNSUPPORTED` | OS·버전별 Key 획득·복호화 미구현 |
+| Media | `IMPLEMENTED` | Image Metadata, 실제 Raster Thumbnail, Video·Audio Metadata |
 | Pillow Image Parsing | `OPTIONAL` | `browser-media` Extra 설치 시 |
-| ffprobe Metadata | `OPTIONAL` | 시스템에 `ffprobe`가 있을 때 Video·Audio Metadata 확장 |
-| Search | `IMPLEMENTED` | Metadata·Artifact 기반 SQLite FTS5 Search |
+| ffmpeg·ffprobe | `OPTIONAL` | Video·Audio Metadata와 제한된 Frame Sampling |
+| Search | `IMPLEMENTED` | SQLite FTS5와 NFC·Casefold·Path·한글 자모 정규화 |
 | Timeline | `IMPLEMENTED` | File System·Artifact·Browser·Media Timestamp Projection |
 | GUI Context | `IMPLEMENTED` | Session Context, Revision, TTL, Immutable Snapshot |
 | Simple·Detailed·Raw View | `IMPLEMENTED` | 동일 Resource 기반 Projection과 제한된 Raw Read |
@@ -46,8 +63,6 @@ Frontend GUI, Backend Identity·Billing, MCP Server, LLM Provider, Prompt 및 Ag
 | OCR·STT | `CONTRACT_ONLY` | Provider Port와 Candidate Review Workflow |
 | Report Workflow | `IMPLEMENTED` | Immutable Version, Review, Approval, Custody Snapshot |
 | PDF·HTML Renderer | `CONTRACT_ONLY` | Render Package·Manifest·Renderer Port, 실제 렌더링 없음 |
-| Disk Image 내부 탐색 | `UNSUPPORTED` | E01·RAW·DD·IMG·VHD·VHDX 내부 Parser 없음 |
-| 삭제·Unallocated·Slack | `UNSUPPORTED` | 탐색·검색·복구 미구현 |
 
 Search는 SQLite FTS5가 필요합니다.
 
@@ -63,13 +78,14 @@ FTS5를 사용할 수 없는 환경에서는 다른 검색 방식으로 성공�
 |---|---:|---:|---:|---:|---:|
 | Directory | 지원 | 미지원 | 지원 | 지원되는 파일 대상 | 해당 없음 |
 | 일반 파일 | 지원 | 지원 | 단일 File Node | 파일 형식이 지원될 때 | 미지원 |
-| E01 | 지원 | 지원 | 미지원 | Image 내부는 미지원 | 미지원 |
-| RAW·DD·IMG | 지원 | 지원 | 미지원 | Image 내부는 미지원 | 미지원 |
-| VHD·VHDX | 지원 | 지원 | 미지원 | Image 내부는 미지원 | 미지원 |
+| RAW·DD·IMG | 지원 | 지원 | 지원 | Image 내부 지원 | Provider 범위에서 지원 |
+| E01·EWF | 지원 | 지원 | 선택 지원 | Image 내부 지원 | Provider 범위에서 지원 |
+| VHD | 지원 | 지원 | 선택 지원 | Image 내부 지원 | Provider 범위에서 지원 |
+| VHDX | 지원 | 지원 | 선택 지원 | Image 내부 지원 | Provider 범위에서 지원 |
 
 일반 파일은 Logical File Reader로 단일 Node를 구성합니다.
 
-`.e01`, `.dd`, `.img`, `.vhd`, `.vhdx` 파일은 형식을 식별해 등록하고 Hash를 계산할 수 있지만, 현재 해당 Container 내부를 Mount하거나 File System으로 Parsing하지 않습니다.
+RAW·DD·IMG는 기본 Reader로 처리합니다. E01·EWF는 `libewf-python`, VHD는 `libvhdi-python`, VHDX는 시스템 `qemu-img`가 필요합니다. 내부 Tree와 삭제 복구는 `pytsk3`가 인식하는 File System과 Provider가 제공하는 범위로 제한됩니다.
 
 ---
 
@@ -83,7 +99,7 @@ CLI / Frontend / Backend / MCP Adapter
                   │
                   ▼
           Application Services
-  Case · Evidence · Artifact · Search
+  Case · Evidence · Image · Artifact · Search
   Timeline · Context · AI Contract · Report
                   │
                   ▼
@@ -99,7 +115,7 @@ CLI / Frontend / Backend / MCP Adapter
 | Engine 담당 | 별도 모듈 담당 |
 |---|---|
 | Case·Evidence·Hash·Integrity | Desktop GUI |
-| File System·Artifact·Search·Timeline | Identity·RBAC·Billing |
+| Evidence Reader·Partition·File System·Artifact·Search·Timeline | Identity·RBAC·Billing |
 | Context Snapshot·View·Raw Locator | MCP Server·Tool Registration |
 | Citation·Custody·Audit | LLM·Prompt·Agent Loop |
 | 외부 AI Result 검증·저장·검토 | 실제 AI 생성 |
@@ -130,7 +146,15 @@ Linux/macOS Shell에서는 `source .venv/bin/activate`로 활성화합니다.
 
 최소 Runtime은 `python -m pip install -e .`, 개발 도구만 포함하려면 `python -m pip install -e ".[dev]"`를 사용합니다.
 
-`ffprobe`는 Python Package가 아니라 별도 시스템 실행 파일입니다.
+선택 Reader Extra:
+
+```powershell
+python -m pip install -e ".[filesystem-image]"
+python -m pip install -e ".[expert-witness]"
+python -m pip install -e ".[virtual-disk]"
+```
+
+`qemu-img`, `ffmpeg`, `ffprobe`는 Python Package가 아니라 별도 시스템 실행 파일입니다.
 
 ### 기본 Workflow
 
@@ -171,7 +195,29 @@ apex-forensic --db .\apex.db evidence hash `
   --evidence-id <EVIDENCE_ID> --algorithm sha256 --json
 ```
 
+Disk Image Partition·Tree·복구 예시:
+
+```powershell
+apex-forensic --db .\apex.db evidence volumes `
+  --evidence-id <EVIDENCE_ID> --json
+
+apex-forensic --db .\apex.db fs roots `
+  --evidence-id <EVIDENCE_ID> --json
+
+apex-forensic --db .\apex.db fs recover-deleted `
+  --node-id <NODE_ID> --output-root .\derived --json
+
+apex-forensic --db .\apex.db fs export-slack `
+  --node-id <NODE_ID> --output-root .\derived --json
+```
+
 Directory Evidence는 Manifest Hash를 지원하지 않습니다.
+
+Windows Event Message Renderer 실제 Host 검증:
+
+```powershell
+python .\tools\verify_windows_event_message_renderer.py --require-rendered
+```
 
 ```powershell
 apex-forensic --help
@@ -191,8 +237,8 @@ apex-forensic report --help
 |---|---|
 | `init` | SQLite DB 초기화 |
 | `case` | Case 생성·조회·상태 변경 |
-| `evidence` | Evidence 등록·Hash·Index |
-| `fs` | Indexed File Tree 조회·우선순위 |
+| `evidence` | Evidence 등록·Hash·Partition·Raw Range·Unallocated·Index |
+| `fs` | File Tree 조회·우선순위·삭제 복구·Slack Export |
 | `artifact` | Artifact Discovery·Analysis·Query |
 | `browser` | Browser 전용 분석·조회 |
 | `media` | Media 전용 분석·조회 |
@@ -280,14 +326,17 @@ Raw Locator는 Evidence·Source ID, Locator Type, Byte Range 또는 Logical Refe
 - Evidence Root 밖 Path Traversal 차단
 - Cross-case·Cross-evidence 연결 차단
 - Raw Read Offset·Length·EOF·최대 크기 검증
+- Recovery·Export 실패 시 Partial·Temp Output 정리
 - Export Absolute Path·Drive Prefix·UNC·Reserved Name 차단
 - 외부 Process argv 실행, `shell=True` 금지, Timeout·출력 제한
-- Image Decompression Bomb·손상 입력 보호
+- ffmpeg·ffprobe Error 원문과 Browser 복호화 Backend Exception 노출 차단
+- Image Decompression Bomb·Prefetch MAM Size Limit·손상 입력 보호
+- Evidence DLL 로드·실행 금지
 - Append-only Custody·Review·Approval와 Hash Chain
 - Read Interface에서 Mutation 실행 차단
 - AI Result와 Observed Fact 분리
 
-통합 감사에서 발견된 2 High, 2 Medium, 2 Low Finding은 Regression Test와 함께 수정됐으며 현재 미해결 Finding은 Critical·High·Medium·Low 모두 `0`입니다.
+기존 통합 감사에서 발견된 2 High, 2 Medium, 2 Low Finding과 기능 완료 감사에서 추가 발견된 3 Medium Finding을 Regression Test와 함께 수정했습니다. 현재 Test·감사 범위에서 미해결 Finding은 Critical·High·Medium·Low 모두 `0`입니다.
 
 ---
 
@@ -300,12 +349,19 @@ Raw Locator는 Evidence·Source ID, Locator Type, Byte Range 또는 Logical Refe
 | Database | SQLite |
 | Search | SQLite FTS5 필요 |
 | JSON Schema | Draft 2020-12 |
-| Base Dependency | `jsonschema`, Windows의 `tzdata` |
+| Base Dependency | `jsonschema`, `pytsk3`, Windows의 `tzdata` |
 | Dev Dependency | `pytest`, `ruff`, `mypy` |
 | Binary Registry | `python-registry` 선택 |
 | Binary EVTX | `python-evtx` 선택 |
-| Image Parsing | `Pillow` 선택 |
-| Video·Audio 확장 | 외부 `ffprobe` 선택 |
+| Registry Replay | `regipy` 선택 |
+| Prefetch MAM | `dissect.util` 선택 |
+| Windows Event Message | `pywin32` 선택 |
+| E01·EWF | `libewf-python` 선택 |
+| VHD | `libvhdi-python` 선택 |
+| VHDX | 외부 `qemu-img` 선택 |
+| Image Parsing·Thumbnail | `Pillow` 선택 |
+| Browser AES-GCM | `cryptography` 선택 |
+| Video·Audio 확장 | 외부 `ffmpeg`, `ffprobe` 선택 |
 
 특정 Windows 또는 Linux 배포판 버전을 공식 지원 범위로 선언하지 않았습니다.
 
@@ -315,10 +371,11 @@ Raw Locator는 Evidence·Source ID, Locator Type, Byte Range 또는 Logical Refe
 
 현재 기준:
 
-- Windows·Linux `pytest`: **94 passed**
+- Windows·Linux 전체 `pytest`: **통과** (`123 passed, 4 skipped`; Optional Native Dependency에 따른 명시적 Skip)
+- Windows Event Message Renderer: **실제 Host 검증 통과**
 - Ruff: **All checks passed**
-- mypy: **81 source files, no issues**
-- Python Validator: **1607 checks, 52 schemas**
+- mypy: **91 source files, no issues**
+- Python Validator: **1607 checks, 52 schemas, 103 requirements, 101 endpoints**
 - Node Validator: **3586 checks, 52 schemas**
 
 ```powershell
@@ -327,6 +384,7 @@ python -m ruff check .
 python -m mypy src
 python -X utf8 .\tools\validate_design_basic.py
 node .\tools\validate_design.mjs
+python .\tools\verify_windows_event_message_renderer.py --require-rendered
 ```
 
 Linux·WSL·CI에서는 `bash ./tools/validate_design.sh`를 사용합니다.
@@ -336,14 +394,11 @@ Linux·WSL·CI에서는 `bash ./tools/validate_design.sh`를 사용합니다.
 ## 주요 제한 사항
 
 - Directory Evidence Manifest Hash 미지원
-- E01·RAW·DD·IMG·VHD·VHDX 내부 File System Parsing 미지원
-- NTFS·FAT·exFAT·ext 직접 Parser 미지원
-- 삭제 File·Unallocated·Slack 분석 미지원
-- Registry Transaction Log·삭제 Key 복구 미지원
-- Prefetch MAM 압축 해제 미지원
-- Event Message DLL Rendering 미지원
-- Browser Credential·Cookie 복호화 미지원
-- Browser Cache·Incognito·삭제 Record 복구 미지원
+- DPAPI Offline Master Key 자동 복구 미지원
+- Firefox NSS 자동 복호화 미지원
+- KakaoTalk 암호화 DB 복호화 미지원
+- Registry Binary Deleted-cell Carving 미지원
+- 형태소 기반 한국어 검색 미지원
 - 실제 OCR·STT 실행 미지원
 - 실제 MCP Server·LLM·Prompt·Agent 미지원
 - 실제 AI Keyword·Summary·Report 생성 미지원
@@ -374,14 +429,14 @@ Linux·WSL·CI에서는 `bash ./tools/validate_design.sh`를 사용합니다.
 
 ## 다음 우선순위
 
-1. E01·RAW·DD·IMG·VHD·VHDX 내부 File System Provider
-2. 삭제 File·Unallocated·Slack 분석
-3. Registry Transaction Log, Prefetch MAM, Event Message 확장
-4. Browser Credential·Cache·삭제 Record 분석
-5. 실제 OCR·STT·AI·Renderer Adapter 통합
-6. 동일 조건 Benchmark와 Windows Packaging
+1. DPAPI·NSS Offline Key Recovery와 안전한 Secret Provider
+2. Registry HBIN Free Cell·Slack 기반 Binary Deleted-cell Carving
+3. 지원 OS·앱 버전을 고정한 KakaoTalk 암호화 DB 복호화
+4. 동일 조건 성능·정확성 Benchmark
+5. Windows·Linux Packaging과 CI Matrix
+6. 실제 OCR·STT·AI·Renderer Adapter 통합
 
-Disk Image 내부 탐색과 복구 기능이 구현되기 전까지 현재 Engine 범위는 **Directory·일반 파일 기반 MVP**로 명확히 제한합니다.
+Disk Image 내부 탐색과 제한된 복구 Runtime은 구현됐습니다. Advanced Secret Recovery와 Deleted Artifact Carving은 실제 Fixture·Provenance·오탐 검증 없이 완료로 표시하지 않습니다.
 
 ---
 
@@ -396,7 +451,7 @@ Disk Image 내부 탐색과 복구 기능이 구현되기 전까지 현재 Engin
 | Citation | 결과와 원본 Source를 연결하는 근거 |
 | Raw Locator | 원본의 Byte Range 또는 Logical Record 위치 |
 | Context Snapshot | 분석 시점의 Resource·Revision·Filter를 고정한 불변 기록 |
-| Derived Data | Thumbnail·Report Output 등 원본에서 파생된 데이터 |
+| Derived Data | Recovery·Thumbnail·Report Output 등 원본에서 파생된 데이터 |
 | Contract-only | 외부 Provider를 위한 계약은 있지만 실제 Provider 실행은 없는 상태 |
 
 ---
