@@ -73,6 +73,37 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_verify.add_argument("--chunk-size", type=int, default=1024 * 1024)
     evidence_verify.add_argument("--json", action="store_true")
 
+    evidence_volumes = evidence_commands.add_parser(
+        "volumes", help="Enumerate disk image partitions"
+    )
+    evidence_volumes.add_argument("--evidence-id", required=True)
+    evidence_volumes.add_argument("--json", action="store_true")
+
+    evidence_read_range = evidence_commands.add_parser(
+        "read-range", help="Read a bounded raw evidence byte range"
+    )
+    evidence_read_range.add_argument("--evidence-id", required=True)
+    evidence_read_range.add_argument("--offset", type=int, required=True)
+    evidence_read_range.add_argument("--length", type=int, required=True)
+    evidence_read_range.add_argument("--json", action="store_true")
+
+    evidence_unallocated = evidence_commands.add_parser(
+        "unallocated-ranges", help="List partition-level unallocated ranges"
+    )
+    evidence_unallocated.add_argument("--evidence-id", required=True)
+    evidence_unallocated.add_argument("--json", action="store_true")
+
+    evidence_export_range = evidence_commands.add_parser(
+        "export-range", help="Export a bounded raw evidence byte range"
+    )
+    evidence_export_range.add_argument("--evidence-id", required=True)
+    evidence_export_range.add_argument("--offset", type=int, required=True)
+    evidence_export_range.add_argument("--length", type=int, required=True)
+    evidence_export_range.add_argument("--output-root", type=Path, required=True)
+    evidence_export_range.add_argument("--filename")
+    evidence_export_range.add_argument("--overwrite", action="store_true")
+    evidence_export_range.add_argument("--json", action="store_true")
+
     evidence_index = evidence_commands.add_parser("index", help="Index filesystem metadata")
     evidence_index.add_argument("--case-id", required=True)
     evidence_index.add_argument("--evidence-id", required=True)
@@ -133,6 +164,22 @@ def build_parser() -> argparse.ArgumentParser:
     fs_prioritize.add_argument("--node-id", required=True)
     fs_prioritize.add_argument("--priority", type=int, default=0)
     fs_prioritize.add_argument("--json", action="store_true")
+
+    fs_recover_deleted = fs_commands.add_parser(
+        "recover-deleted", help="Recover one deleted image filesystem file"
+    )
+    fs_recover_deleted.add_argument("--node-id", required=True)
+    fs_recover_deleted.add_argument("--output-root", type=Path, required=True)
+    fs_recover_deleted.add_argument("--filename")
+    fs_recover_deleted.add_argument("--overwrite", action="store_true")
+    fs_recover_deleted.add_argument("--json", action="store_true")
+
+    fs_export_slack = fs_commands.add_parser("export-slack", help="Export one file slack range")
+    fs_export_slack.add_argument("--node-id", required=True)
+    fs_export_slack.add_argument("--output-root", type=Path, required=True)
+    fs_export_slack.add_argument("--filename")
+    fs_export_slack.add_argument("--overwrite", action="store_true")
+    fs_export_slack.add_argument("--json", action="store_true")
 
     artifact_parser = subcommands.add_parser("artifact", help="Windows artifact commands")
     artifact_commands = artifact_parser.add_subparsers(dest="artifact_command", required=True)
@@ -205,7 +252,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     browser_parser = artifact_commands.add_parser("browser", help="Browser artifact helpers")
     browser_commands = browser_parser.add_subparsers(dest="browser_command", required=True)
-    for command_name in ("profiles", "visits", "searches", "downloads"):
+    for command_name in (
+        "profiles",
+        "visits",
+        "searches",
+        "downloads",
+        "cookies",
+        "credentials",
+        "cache",
+        "deleted",
+        "private-mode",
+    ):
         browser_command = browser_commands.add_parser(command_name)
         _add_artifact_query_args(browser_command, artifact_type_required=False)
     browser_show = browser_commands.add_parser("show")
@@ -233,7 +290,17 @@ def build_parser() -> argparse.ArgumentParser:
     browser_cancel = browser_top_commands.add_parser("cancel")
     browser_cancel.add_argument("--job-id", required=True)
     browser_cancel.add_argument("--json", action="store_true")
-    for command_name in ("profiles", "history", "searches", "downloads"):
+    for command_name in (
+        "profiles",
+        "history",
+        "searches",
+        "downloads",
+        "cookies",
+        "credentials",
+        "cache",
+        "deleted",
+        "private-mode",
+    ):
         browser_query = browser_top_commands.add_parser(command_name)
         _add_artifact_query_args(browser_query, artifact_type_required=False)
     browser_show = browser_top_commands.add_parser("show")

@@ -10,6 +10,7 @@ from apex_forensic.application.services.context import (
     ViewProjectionService,
 )
 from apex_forensic.application.services.custody_ledger import CustodyLedger
+from apex_forensic.application.services.evidence_image import EvidenceImageService
 from apex_forensic.application.services.evidence_manager import EvidenceManager
 from apex_forensic.application.services.file_system_index import FileSystemIndexService
 from apex_forensic.application.services.machine_extraction import MachineExtractionService
@@ -24,6 +25,7 @@ __all__ = [
     "ContextService",
     "CustodyLedger",
     "EngineInterfaceService",
+    "EvidenceImageService",
     "EvidenceManager",
     "FileSystemIndexService",
     "MachineExtractionService",

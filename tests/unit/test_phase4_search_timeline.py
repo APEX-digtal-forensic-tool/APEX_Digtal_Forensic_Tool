@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -136,6 +138,103 @@ def test_search_modes_cache_reproduction_and_schema(
     schema_validator.validate("search.schema.json", term.results[0].to_schema_dict())
     schema_validator.validate("search.schema.json", term.query.to_schema_dict())
     schema_validator.validate("search.schema.json", term.execution.to_schema_dict())
+
+
+def test_search_korean_normalization_version_and_tokenizer_strategy(
+    services,
+    tmp_path: Path,
+) -> None:
+    case, evidence = _indexed_case(services, tmp_path / "korean-normalization")
+    services.search.index(
+        case_id=case.case_id,
+        evidence_ids=[evidence.evidence_id],
+        source_types=[SearchSourceType.FILE_SYSTEM_NODE],
+    )
+
+    decomposed = unicodedata.normalize("NFD", "한글")
+    decomposed_result = services.search.query(case_id=case.case_id, query_text=decomposed)
+    composed_result = services.search.query(case_id=case.case_id, query_text="한글")
+    capability = services.search.capability().to_schema_dict()
+
+    assert decomposed != "한글"
+    assert decomposed_result.execution.result_count == 1
+    assert composed_result.execution.cache_key == decomposed_result.execution.cache_key
+    assert decomposed_result.query.query_text == "한글"
+    assert decomposed_result.execution.options["normalization_version"] == (
+        "apex-search-normalization-ko-v1"
+    )
+    assert decomposed_result.execution.options["tokenizer_version"] == (
+        "sqlite-fts5-unicode61-apex-ko-v1"
+    )
+    assert capability["tokenizer"] == "unicode61+apex-search-normalization-ko-v1"
+    assert "MORPHOLOGICAL_ANALYSIS_NOT_CLAIMED" in capability["capabilities"]
+
+    row = services.repository.connection.execute(
+        """
+        SELECT searchable_text, structured_fields_json
+        FROM search_documents
+        WHERE title LIKE ?
+        LIMIT 1
+        """,
+        ("%한글-secret report.txt",),
+    ).fetchone()
+    assert row is not None
+    fields = json.loads(str(row["structured_fields_json"]))
+    assert "한글-secret report.txt" in row["searchable_text"]
+    assert fields["search_normalization"]["version"] == "apex-search-normalization-ko-v1"
+    assert fields["search_normalization"]["morphological_analysis"] is False
+
+
+def test_search_korean_mixed_path_jamo_ascii_digit_fixture(
+    services,
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "mixed-korean-search"
+    nested = root / "케이스-01"
+    nested.mkdir(parents=True)
+    mixed_name = "한글ABC-123_보고서.txt"
+    (nested / mixed_name).write_text("body is not indexed", encoding="utf-8")
+    case = services.cases.create_case(name="Mixed Korean Search")
+    evidence = services.evidence.register_evidence(case_id=case.case_id, source_path=root)
+    services.fs.index_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+    )
+    services.search.index(
+        case_id=case.case_id,
+        evidence_ids=[evidence.evidence_id],
+        source_types=[SearchSourceType.FILE_SYSTEM_NODE],
+    )
+
+    mixed_query = unicodedata.normalize("NFD", r"케이스-01\한글abc-123_보고서.txt")
+    term = services.search.query(case_id=case.case_id, query_text=mixed_query, limit=10)
+    exact = services.search.query(
+        case_id=case.case_id,
+        query_text=mixed_query,
+        query_mode=SearchQueryMode.EXACT,
+        limit=10,
+    )
+
+    assert term.execution.result_count == 1
+    assert exact.execution.result_count == 1
+    assert term.query.query_text == "케이스-01/한글abc-123_보고서.txt"
+    row = services.repository.connection.execute(
+        "SELECT title, normalized_path FROM search_documents WHERE document_id = ?",
+        (term.results[0].document_id,),
+    ).fetchone()
+    assert row is not None
+    assert row["title"].endswith(mixed_name)
+    assert "케이스-01/한글abc-123_보고서.txt" in row["normalized_path"]
+    assert term.execution.options["normalization_version"] == (
+        "apex-search-normalization-ko-v1"
+    )
+    assert term.execution.options["tokenizer_version"] == (
+        "sqlite-fts5-unicode61-apex-ko-v1"
+    )
+    assert "MORPHOLOGICAL_ANALYSIS_NOT_CLAIMED" in (
+        services.search.capability().to_schema_dict()["capabilities"]
+    )
 
 
 def test_search_cache_preserves_paginated_pages(services, tmp_path: Path) -> None:

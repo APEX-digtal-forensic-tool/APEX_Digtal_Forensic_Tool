@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import shutil
 import struct
@@ -11,8 +12,9 @@ import threading
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from apex_forensic._time import to_json_timestamp
 from apex_forensic.adapters.artifacts.windows.common import (
@@ -45,8 +47,11 @@ _AUDIO_EXTENSIONS = {"wav", "mp3", "m4a", "ogg", "flac"}
 _MAX_LOCATOR_LENGTH = 1_048_576
 _MAX_MEDIA_READ_BYTES = 64 * 1024 * 1024
 _MAX_IMAGE_PIXELS = 178_956_970
+_THUMBNAIL_MAX_DIMENSION = 256
 _FFPROBE_TIMEOUT_SECONDS = 10
+_FFMPEG_FRAME_TIMEOUT_SECONDS = 15
 _MAX_FFPROBE_JSON_BYTES = 1_048_576
+_MAX_FFMPEG_OUTPUT_BYTES = 8 * 1024 * 1024
 _MAC_EPOCH = datetime(1904, 1, 1, tzinfo=UTC)
 
 
@@ -137,29 +142,28 @@ class MediaMetadataAnalyzer:
                 "PNG_GIF_TIFF_DIMENSIONS",
                 "MP4_DURATION_CODEC",
                 "FFPROBE_VIDEO_AUDIO_METADATA_PORT",
-                "THUMBNAIL_CACHE_DERIVATIVE_METADATA",
+                "RASTER_THUMBNAIL_RENDERING"
+                if _pillow_available()
+                else "THUMBNAIL_CACHE_DERIVATIVE_METADATA",
+                "VIDEO_FRAME_SAMPLING_FFMPEG"
+                if shutil.which("ffmpeg")
+                else "VIDEO_FRAME_SAMPLING_POLICY",
             ),
             unavailable_capabilities=(
-                "RASTER_THUMBNAIL_RENDERING_WITHOUT_IMAGE_LIBRARY",
                 "OCR",
                 "STT",
+                *_pillow_unavailable_capabilities(),
                 *_ffprobe_unavailable_capabilities(),
+                *_ffmpeg_unavailable_capabilities(),
             ),
-            warnings=(
-                {
-                    "code": "RASTER_THUMBNAIL_RENDERING_UNAVAILABLE",
-                    "message_key": "warning.media.thumbnail_rendering_unavailable",
-                    "developer_message": (
-                        "Phase 5 stores hash-verifiable thumbnail cache derivative metadata; "
-                        "pixel rendering is deferred until an image backend is available."
-                    ),
-                },
-            ),
+            warnings=_thumbnail_capability_warnings(),
             metadata={
                 "image_extensions": sorted(_IMAGE_EXTENSIONS),
                 "video_extensions": sorted(_VIDEO_EXTENSIONS),
                 "audio_extensions": sorted(_AUDIO_EXTENSIONS),
+                "pillow": _pillow_capability(),
                 "ffprobe": _ffprobe_capability(),
+                "ffmpeg": _ffmpeg_capability(),
             },
         )
 
@@ -249,6 +253,7 @@ class MediaMetadataAnalyzer:
             node=node,
             source=source,
             parsed=parsed,
+            file_path=file_path,
         )
         artifact = _build_media_artifact(
             evidence=evidence,
@@ -395,6 +400,204 @@ def _decompression_bomb_warning(metadata: dict[str, Any]) -> dict[str, Any] | No
         "message_key": "warning.media.image_decompression_bomb_limit",
         "developer_message": "Image dimensions exceed the configured safe pixel limit.",
         "details": {"width": width, "height": height, "max_pixels": _MAX_IMAGE_PIXELS},
+    }
+
+
+def _pillow_available() -> bool:
+    try:
+        importlib.import_module("PIL.Image")
+        importlib.import_module("PIL.ImageOps")
+    except ImportError:
+        return False
+    return True
+
+
+def _pillow_unavailable_capabilities() -> tuple[str, ...]:
+    return () if _pillow_available() else ("RASTER_THUMBNAIL_RENDERING",)
+
+
+def _thumbnail_capability_warnings() -> tuple[dict[str, Any], ...]:
+    if _pillow_available():
+        return ()
+    return (
+        {
+            "code": "RASTER_THUMBNAIL_RENDERING_UNAVAILABLE",
+            "message_key": "warning.media.thumbnail_rendering_unavailable",
+            "developer_message": (
+                "Pillow is unavailable; thumbnail cache entries fall back to deterministic "
+                "metadata contracts."
+            ),
+        },
+    )
+
+
+def _pillow_capability() -> dict[str, Any]:
+    if not _pillow_available():
+        return {
+            "is_available": False,
+            "backend_id": "pillow",
+            "backend_version": None,
+            "unavailable_reason": "Pillow is not installed.",
+        }
+    try:
+        version = str(importlib.import_module("PIL").__version__)
+    except (AttributeError, ImportError):
+        version = "unknown"
+    return {
+        "is_available": True,
+        "backend_id": "pillow",
+        "backend_version": version,
+        "max_pixels": _MAX_IMAGE_PIXELS,
+        "max_dimension": _THUMBNAIL_MAX_DIMENSION,
+        "orientation_policy": "EXIF_TRANSPOSE_COPY_ONLY",
+    }
+
+
+def _ffmpeg_unavailable_capabilities() -> tuple[str, ...]:
+    return () if shutil.which("ffmpeg") else ("FFMPEG_FRAME_SAMPLING",)
+
+
+def _ffmpeg_capability() -> dict[str, Any]:
+    executable = shutil.which("ffmpeg")
+    if executable is None:
+        return {
+            "is_available": False,
+            "backend_id": "ffmpeg",
+            "backend_version": None,
+            "unavailable_reason": "ffmpeg executable was not found on PATH.",
+            "timeout_seconds": _FFMPEG_FRAME_TIMEOUT_SECONDS,
+            "max_output_bytes": _MAX_FFMPEG_OUTPUT_BYTES,
+        }
+    return {
+        "is_available": True,
+        "backend_id": "ffmpeg",
+        "backend_version": "available",
+        "timeout_seconds": _FFMPEG_FRAME_TIMEOUT_SECONDS,
+        "max_output_bytes": _MAX_FFMPEG_OUTPUT_BYTES,
+        "argv_only": True,
+        "max_frame_count": 1,
+    }
+
+
+def _render_raster_thumbnail(*, file_path: Path, parsed: dict[str, Any]) -> dict[str, Any]:
+    if parsed["media_kind"] != "IMAGE" or parsed["parse_status"] is ArtifactParseStatus.CORRUPT:
+        return _thumbnail_fallback("UNSUPPORTED_SOURCE_KIND", None)
+    if not _pillow_available():
+        return _thumbnail_fallback("CAPABILITY_UNAVAILABLE", "PILLOW_UNAVAILABLE")
+    metadata = parsed["metadata"]
+    bomb_warning = _decompression_bomb_warning(metadata)
+    if bomb_warning is not None:
+        return _thumbnail_fallback("SKIPPED_DECOMPRESSION_BOMB_LIMIT", bomb_warning)
+    image_module = cast(Any, importlib.import_module("PIL.Image"))
+    image_ops = cast(Any, importlib.import_module("PIL.ImageOps"))
+    image_module.MAX_IMAGE_PIXELS = _MAX_IMAGE_PIXELS
+    try:
+        with image_module.open(file_path) as image:
+            working = image_ops.exif_transpose(image)
+            working.thumbnail((_THUMBNAIL_MAX_DIMENSION, _THUMBNAIL_MAX_DIMENSION))
+            if working.mode not in {"RGB", "RGBA"}:
+                working = working.convert("RGBA" if "A" in working.getbands() else "RGB")
+            output = BytesIO()
+            working.save(output, format="PNG", optimize=True)
+    except Exception as error:
+        return _thumbnail_fallback(
+            "RENDER_FAILED",
+            {
+                "code": "RASTER_THUMBNAIL_RENDER_FAILED",
+                "message_key": "warning.media.thumbnail_render_failed",
+                "developer_message": "Raster thumbnail rendering failed; metadata fallback used.",
+                "details": {"error": str(error)},
+            },
+        )
+    return {
+        "status": "GENERATED",
+        "strategy": "pillow-raster-thumbnail-v1",
+        "content_bytes": output.getvalue(),
+        "width": working.width,
+        "height": working.height,
+        "orientation_policy": "EXIF_TRANSPOSE_COPY_ONLY",
+        "warning": None,
+        "limitations": [
+            "Thumbnail was rendered from a copied Pillow image; original pixels were not modified.",
+            "Only a content-addressed relative path is stored by the core engine cache.",
+        ],
+    }
+
+
+def _thumbnail_fallback(status: str, warning: dict[str, Any] | str | None) -> dict[str, Any]:
+    warning_dict: dict[str, Any] | None
+    if isinstance(warning, str):
+        warning_dict = {
+            "code": warning,
+            "message_key": "warning.media.thumbnail_unavailable",
+            "developer_message": "Raster thumbnail rendering is unavailable.",
+        }
+    else:
+        warning_dict = warning
+    return {
+        "status": status,
+        "strategy": "metadata-thumbnail-reference-v1",
+        "content_bytes": b"",
+        "width": None,
+        "height": None,
+        "orientation_policy": "NOT_APPLIED",
+        "warning": warning_dict,
+        "limitations": [
+            "Thumbnail cache entry stores deterministic derivative metadata only.",
+        ],
+    }
+
+
+def _ffmpeg_sample_frame(
+    *,
+    file_path: Path,
+    timestamp_seconds: float,
+    max_output_bytes: int = _MAX_FFMPEG_OUTPUT_BYTES,
+) -> dict[str, Any]:
+    executable = shutil.which("ffmpeg")
+    if executable is None:
+        return {"status": "CAPABILITY_UNAVAILABLE", "reason": "FFMPEG_UNAVAILABLE"}
+    timestamp = max(0.0, timestamp_seconds)
+    result = _run_bounded_process(
+        [
+            executable,
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            f"{timestamp:.3f}",
+            "-i",
+            str(file_path),
+            "-frames:v",
+            "1",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "png",
+            "-",
+        ],
+        timeout=_FFMPEG_FRAME_TIMEOUT_SECONDS,
+        max_bytes=max_output_bytes,
+    )
+    if result.timed_out:
+        return {"status": "TIMEOUT", "reason": "FFMPEG_TIMEOUT"}
+    if result.limit_stream is not None:
+        return {"status": "OUTPUT_LIMIT_EXCEEDED", "reason": result.limit_stream}
+    if result.returncode != 0 or not result.stdout:
+        stderr = bytes(result.stderr)
+        return {
+            "status": "FAILED",
+            "reason": "FFMPEG_EXECUTION_FAILED",
+            "returncode": result.returncode,
+            "stderr_sha256": sha256_hex(stderr),
+            "stderr_length": len(stderr),
+        }
+    return {
+        "status": "GENERATED",
+        "timestamp_seconds": timestamp,
+        "frame_count": 1,
+        "output_format": "PNG",
+        "size_bytes": len(result.stdout),
+        "sha256": sha256_hex(result.stdout),
     }
 
 
@@ -621,6 +824,7 @@ def _ffprobe_metadata(*, file_path: Path, media_kind: str) -> dict[str, Any]:
             "parse_status": ArtifactParseStatus.PARTIAL,
         }
     if completed.returncode != 0:
+        stderr = bytes(completed.stderr)
         return {
             "metadata": {},
             "warnings": [
@@ -628,7 +832,11 @@ def _ffprobe_metadata(*, file_path: Path, media_kind: str) -> dict[str, Any]:
                     "code": "FFPROBE_CORRUPT_OR_UNSUPPORTED",
                     "message_key": "warning.media.ffprobe_corrupt_or_unsupported",
                     "developer_message": "ffprobe reported unsupported or corrupt media.",
-                    "details": {"stderr": completed.stderr.decode("utf-8", errors="replace")[:500]},
+                    "details": {
+                        "returncode": completed.returncode,
+                        "stderr_sha256": sha256_hex(stderr),
+                        "stderr_length": len(stderr),
+                    },
                 }
             ],
             "parse_status": ArtifactParseStatus.CORRUPT,
@@ -896,7 +1104,7 @@ def _build_media_artifact(
         view_types=["HEX"],
         content_sha256=parsed["content_sha256"],
         limitations=[
-            "Phase 5 uses safe standard-library metadata parsing and does not decode pixels."
+            "Metadata parsing is bounded; optional thumbnail rendering decodes a copied image only."
         ],
         details={
             "media_format": parsed["format"],
@@ -972,9 +1180,11 @@ def _thumbnail_cache_entry(
     node: FileSystemNode,
     source: ArtifactSource,
     parsed: dict[str, Any],
+    file_path: Path,
 ) -> dict[str, Any]:
     content_sha256 = str(parsed["content_sha256"])
     metadata = parsed["metadata"]
+    render = _render_raster_thumbnail(file_path=file_path, parsed=parsed)
     producer = {
         "producer_id": source.analyzer_id,
         "producer_version": source.analyzer_version,
@@ -986,23 +1196,32 @@ def _thumbnail_cache_entry(
         "source_path": node.display_path,
         "source_content_sha256": content_sha256,
         "derivative": "THUMBNAIL",
-        "strategy": "metadata-thumbnail-reference-v1",
+        "strategy": render["strategy"],
     }
-    content_payload = {
-        "source_content_sha256": content_sha256,
-        "media_kind": parsed["media_kind"],
-        "format": parsed["format"],
-        "width": metadata.get("width"),
-        "height": metadata.get("height"),
-    }
-    content_bytes = json.dumps(
-        content_payload,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    if render["status"] == "GENERATED":
+        content_bytes = bytes(render["content_bytes"])
+        output_format = "PNG"
+        relative_extension = "png"
+    else:
+        output_format = "JSON_CONTRACT"
+        relative_extension = "json"
+        content_payload = {
+            "source_content_sha256": content_sha256,
+            "media_kind": parsed["media_kind"],
+            "format": parsed["format"],
+            "width": metadata.get("width"),
+            "height": metadata.get("height"),
+            "thumbnail_status": render["status"],
+            "warning": render.get("warning"),
+        }
+        content_bytes = json.dumps(
+            content_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
     derivative_hash = sha256_hex(content_bytes)
     key = canonical_sha256(producer | {"content_sha256": derivative_hash})
-    relative_path = f"media/thumbnails/{key[:2]}/{key}.json"
+    relative_path = f"media/thumbnails/{key[:2]}/{key}.{relative_extension}"
     now = datetime.now(UTC)
     entry = {
         "key_sha256": key,
@@ -1024,11 +1243,18 @@ def _thumbnail_cache_entry(
         "content_sha256": derivative_hash,
         "source_content_sha256": content_sha256,
         "hash_verifiable": True,
+        "status": render["status"],
+        "pixel_rendered": render["status"] == "GENERATED",
+        "output_format": output_format,
+        "width": render.get("width"),
+        "height": render.get("height"),
+        "orientation_policy": render.get("orientation_policy"),
+        "max_dimension": _THUMBNAIL_MAX_DIMENSION,
+        "max_pixels": _MAX_IMAGE_PIXELS,
+        "output_root_policy": "content_addressed_relative_path_only",
         "producer": producer,
-        "limitations": [
-            "The current Phase 5 adapter stores deterministic thumbnail derivative metadata; "
-            "pixel rendering is deferred."
-        ],
+        "warnings": [] if render.get("warning") is None else [render["warning"]],
+        "limitations": list(render["limitations"]),
     }
     return {"entry": entry, "reference": reference}
 

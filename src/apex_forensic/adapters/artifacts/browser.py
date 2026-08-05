@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import shutil
 import sqlite3
 import tempfile
@@ -55,6 +56,8 @@ _BROWSER_NAMES = {
 }
 _CHROMIUM_PROFILE_NAMES = {"default", "guest profile", "system profile"}
 _BROWSER_SQLITE_BATCH_SIZE = 100
+_BROWSER_CACHE_PREVIEW_MAX_BYTES = 16 * 1024 * 1024
+_CHROMIUM_SECRET_PREFIXES = (b"v10", b"v11", b"v20")
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,24 +110,48 @@ class BrowserHistoryAnalyzer:
             analyzer_version=self.analyzer_version,
             parser_backend=self.parser_backend,
             parser_backend_version=self.parser_backend_version,
-            supported_source_kinds=(ArtifactSourceKind.BROWSER_SQLITE_DB,),
+            supported_source_kinds=(
+                ArtifactSourceKind.BROWSER_SQLITE_DB,
+                ArtifactSourceKind.BROWSER_CACHE_FILE,
+            ),
             supported_artifact_types=(
                 ArtifactType.BROWSER_PROFILE,
                 ArtifactType.BROWSER_VISIT,
                 ArtifactType.BROWSER_SEARCH,
                 ArtifactType.BROWSER_DOWNLOAD,
+                ArtifactType.BROWSER_COOKIE,
+                ArtifactType.BROWSER_CREDENTIAL,
+                ArtifactType.BROWSER_CACHE_ENTRY,
+                ArtifactType.BROWSER_DELETED_SQLITE_ROW,
+                ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE,
             ),
             capabilities=(
                 "BROWSER_PROFILE",
                 "CHROMIUM_HISTORY_VISITS",
                 "CHROMIUM_SEARCH_TERMS",
                 "CHROMIUM_DOWNLOADS",
+                "CHROMIUM_COOKIE_METADATA_REDACTED",
+                "CHROMIUM_LOGIN_METADATA_REDACTED",
+                "FIREFOX_COOKIE_METADATA_REDACTED",
+                "CHROMIUM_CACHE_FILE_CANDIDATE_METADATA",
                 "FIREFOX_PLACES_VISITS",
                 "FIREFOX_URLBAR_INPUT_HISTORY_CANDIDATE",
                 "SQLITE_TABLE_ROW_PROVENANCE",
+                "SQLITE_FREELIST_PRESENCE_CANDIDATE",
+                "SQLITE_WAL_COMPONENT_PRESERVATION",
+                "BROWSER_SECRET_HASH_ONLY",
+                "INCOGNITO_CANDIDATE_ONLY_POLICY",
                 "READ_ONLY_SQLITE_OPEN",
             ),
-            unavailable_capabilities=("EMAIL", "MESSENGER_PLUGINS"),
+            unavailable_capabilities=(
+                "EMAIL",
+                "MESSENGER_PLUGINS",
+                "LIVE_USER_CONTEXT_SECRET_EXTRACTION",
+                "DPAPI_LIVE_USER_UNPROTECT",
+                "FIREFOX_KEY4_DECRYPTION",
+                "SQLITE_DELETED_ROW_CONTENT_RECOVERY",
+                "CHROMIUM_CACHE_HTTP_HEADER_PARSE",
+            ),
             warnings=(
                 {
                     "code": "COMMUNICATION_PLUGINS_DEFERRED",
@@ -134,29 +161,85 @@ class BrowserHistoryAnalyzer:
                         "the Phase 5 MVP."
                     ),
                 },
+                {
+                    "code": "BROWSER_SECRET_VALUES_REDACTED",
+                    "message_key": "warning.browser.secret_values_redacted",
+                    "developer_message": (
+                        "Cookie and credential values are not emitted as plaintext; records "
+                        "store redacted metadata and hashes only unless an explicit protected "
+                        "secret-decryption workflow is used."
+                    ),
+                },
             ),
             metadata={
-                "supported_databases": ["Chromium History", "Firefox places.sqlite"],
+                "supported_databases": [
+                    "Chromium History",
+                    "Chromium Cookies",
+                    "Chromium Login Data",
+                    "Firefox places.sqlite",
+                    "Firefox cookies.sqlite",
+                ],
+                "cache_support": {
+                    "status": "PARTIAL",
+                    "supported": "Chromium opaque cache file candidates",
+                    "body_offset_length": True,
+                    "bounded_preview_max_bytes": _BROWSER_CACHE_PREVIEW_MAX_BYTES,
+                },
+                "secret_handling": _browser_secret_policy(),
+                "decryption": {
+                    "chromium_aes_gcm": {
+                        "status": "AVAILABLE_WITH_EXTERNAL_KEY"
+                        if _aes_gcm_available()
+                        else "CAPABILITY_UNAVAILABLE",
+                        "key_source": "EXPLICIT_EXTERNAL_KEY_ONLY",
+                        "loads_evidence_libraries": False,
+                        "live_user_context": False,
+                    },
+                    "dpapi": {
+                        "status": "CAPABILITY_UNAVAILABLE",
+                        "reason": "No live user-context unprotect operation is performed.",
+                    },
+                },
+                "deleted_sqlite_records": {
+                    "wal_components_preserved": True,
+                    "freelist_presence_candidates": True,
+                    "deleted_row_content_recovery": "CAPABILITY_UNAVAILABLE",
+                    "candidate_records_are_not_confirmed_rows": True,
+                },
+                "incognito": _private_mode_policy(),
             },
         )
 
     def detect_source(self, node: FileSystemNode) -> ArtifactSource | None:
         if node.node_type is not FileSystemNodeType.FILE:
             return None
-        if _profile_info(node) is None:
-            return None
-        return source_shell(
-            node=node,
-            source_kind=ArtifactSourceKind.BROWSER_SQLITE_DB,
-            analyzer_id=self.analyzer_id,
-            analyzer_version=self.analyzer_version,
-            parser_backend=self.parser_backend,
-            parser_backend_version=self.parser_backend_version,
-            priority=55,
-        )
+        if _profile_info(node) is not None:
+            return source_shell(
+                node=node,
+                source_kind=ArtifactSourceKind.BROWSER_SQLITE_DB,
+                analyzer_id=self.analyzer_id,
+                analyzer_version=self.analyzer_version,
+                parser_backend=self.parser_backend,
+                parser_backend_version=self.parser_backend_version,
+                priority=55,
+            )
+        if _cache_file_info(node) is not None:
+            return source_shell(
+                node=node,
+                source_kind=ArtifactSourceKind.BROWSER_CACHE_FILE,
+                analyzer_id=self.analyzer_id,
+                analyzer_version=self.analyzer_version,
+                parser_backend="apex.browser_cache_file",
+                parser_backend_version=self.parser_backend_version,
+                priority=45,
+            )
+        return None
 
     def supports_source(self, source: ArtifactSource) -> bool:
-        return source.source_kind is ArtifactSourceKind.BROWSER_SQLITE_DB
+        return source.source_kind in {
+            ArtifactSourceKind.BROWSER_SQLITE_DB,
+            ArtifactSourceKind.BROWSER_CACHE_FILE,
+        }
 
     def analyze(
         self,
@@ -167,6 +250,13 @@ class BrowserHistoryAnalyzer:
         file_path: Path,
         item_budget: int | None = None,
     ) -> ArtifactAnalysisResult:
+        if source.source_kind is ArtifactSourceKind.BROWSER_CACHE_FILE:
+            return _analyze_cache_file(
+                evidence=evidence,
+                node=node,
+                source=source,
+                file_path=file_path,
+            )
         try:
             content_sha256 = _sha256_file(file_path)
         except OSError as error:
@@ -208,7 +298,7 @@ class BrowserHistoryAnalyzer:
                 with closing(_connect_read_only(snapshot.database_path)) as connection:
                     connection.row_factory = sqlite3.Row
                     tables = _table_columns(connection)
-                    db_kind = _database_kind(tables)
+                    db_kind = _database_kind(tables, profile)
                     if db_kind == "UNKNOWN":
                         artifact = _profile_artifact(
                             evidence=evidence,
@@ -401,6 +491,496 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _sha256_text(value: Any) -> str | None:
+    text = _none_or_str(value)
+    if text is None:
+        return None
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _bytes_or_none(value: Any) -> bytes | None:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    if isinstance(value, str):
+        return value.encode("utf-8", "surrogatepass")
+    try:
+        return bytes(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _none_or_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
+
+
+def _str_or_empty(value: Any) -> str:
+    return _none_or_str(value) or ""
+
+
+def _text_length(value: Any) -> int | None:
+    text = _none_or_str(value)
+    return None if text is None else len(text)
+
+
+def _first_non_empty(*values: Any) -> Any | None:
+    for value in values:
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if value is None:
+        return None
+    try:
+        return bool(int(value))
+    except (TypeError, ValueError):
+        return bool(value)
+
+
+def _sql_column_or_null(tables: dict[str, list[str]], table: str, column: str) -> str:
+    alias = _quote_identifier(column)
+    if _has_columns(tables, table, {column}):
+        return f"{_quote_identifier(table)}.{_quote_identifier(column)} AS {alias}"
+    return f"NULL AS {alias}"
+
+
+def _pragma_int(connection: sqlite3.Connection, name: str) -> int:
+    row = connection.execute(f"PRAGMA {name}").fetchone()
+    if row is None:
+        return 0
+    try:
+        return int(row[0] or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _cookie_secret_metadata(
+    *,
+    plaintext_value: Any,
+    encrypted_value: Any,
+    store_kind: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    encrypted_blob = _bytes_or_none(encrypted_value)
+    plaintext = _none_or_str(plaintext_value)
+    metadata = _secret_value_policy(store_kind)
+    metadata["plaintext_value_present"] = plaintext is not None
+    metadata["plaintext_value_redacted"] = plaintext is not None
+    metadata["encrypted_value_present"] = bool(encrypted_blob)
+    if encrypted_blob:
+        metadata |= _chromium_secret_blob_metadata(encrypted_blob)
+        return metadata, [_secret_warning("BROWSER_SECRET_DECRYPTION_KEY_UNAVAILABLE")]
+    if plaintext is not None:
+        metadata["decryption_status"] = "PLAINTEXT_REDACTED"
+        metadata["decryption_failure_reason"] = None
+        return metadata, [_secret_warning("BROWSER_SECRET_REDACTED")]
+    metadata["decryption_status"] = "NO_SECRET_VALUE"
+    metadata["decryption_failure_reason"] = None
+    return metadata, []
+
+
+def _credential_secret_metadata(
+    *,
+    username_value: Any,
+    password_value: Any,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    password_blob = _bytes_or_none(password_value)
+    username = _none_or_str(username_value)
+    metadata = _secret_value_policy("CHROMIUM_LOGIN")
+    metadata.update(
+        {
+            "username_present": username is not None,
+            "username_sha256": _sha256_text(username),
+            "username_length": _text_length(username),
+            "username_plaintext_redacted": username is not None,
+            "password_value_present": bool(password_blob),
+            "password_plaintext_emitted": False,
+        }
+    )
+    if password_blob:
+        metadata |= _chromium_secret_blob_metadata(password_blob)
+        return metadata, [_secret_warning("BROWSER_SECRET_DECRYPTION_KEY_UNAVAILABLE")]
+    metadata["decryption_status"] = "NO_SECRET_VALUE"
+    metadata["decryption_failure_reason"] = None
+    return metadata, []
+
+
+def _secret_value_policy(store_kind: str) -> dict[str, Any]:
+    return {
+        "secret_store_kind": store_kind,
+        "secret_redaction": {
+            "plaintext_emitted": False,
+            "search_index_default_exclude": True,
+            "log_safe": True,
+        },
+        "auth_context": {
+            "mode": "OFFLINE_ANALYSIS",
+            "live_user_context_used": False,
+            "evidence_libraries_loaded": False,
+        },
+        "key_provider": {
+            "id": None,
+            "version": None,
+            "status": "KEY_UNAVAILABLE",
+        },
+    }
+
+
+def _chromium_secret_blob_metadata(encrypted_blob: bytes) -> dict[str, Any]:
+    encrypted = encrypted_blob.startswith(_CHROMIUM_SECRET_PREFIXES)
+    return {
+        "encrypted_value_sha256": _sha256_bytes(encrypted_blob),
+        "encrypted_value_length": len(encrypted_blob),
+        "encrypted_value_format": _chromium_secret_format(encrypted_blob),
+        "encrypted_blob_policy": {
+            "raw_blob_emitted": False,
+            "hash_algorithm": "SHA256",
+            "hash_only": True,
+        },
+        "decryption_status": "KEY_UNAVAILABLE" if encrypted else "UNSUPPORTED_SECRET_FORMAT",
+        "decryption_failure_reason": "EXTERNAL_KEY_REQUIRED"
+        if encrypted
+        else "UNSUPPORTED_OR_LEGACY_SECRET_FORMAT",
+    }
+
+
+def _chromium_secret_format(value: bytes) -> str:
+    for prefix in _CHROMIUM_SECRET_PREFIXES:
+        if value.startswith(prefix):
+            return f"CHROMIUM_AES_GCM_{prefix.decode('ascii').upper()}"
+    return "UNKNOWN_OR_LEGACY"
+
+
+def _secret_warning(code: str) -> dict[str, Any]:
+    if code == "BROWSER_SECRET_DECRYPTION_KEY_UNAVAILABLE":
+        return {
+            "code": code,
+            "message_key": "warning.browser.secret_key_unavailable",
+            "developer_message": (
+                "Encrypted browser secret value was not decrypted because no explicit external "
+                "key provider was supplied."
+            ),
+        }
+    return {
+        "code": code,
+        "message_key": "warning.browser.secret_redacted",
+        "developer_message": "Browser secret plaintext exists in the source but was redacted.",
+    }
+
+
+def decrypt_chromium_aes_gcm_secret(
+    encrypted_value: bytes,
+    *,
+    key: bytes | None,
+    key_provider_id: str | None,
+    key_provider_version: str | None,
+    include_plaintext: bool = False,
+) -> dict[str, Any]:
+    """Decrypt a Chromium AES-GCM secret only when an explicit external key is supplied."""
+
+    if key is None:
+        return {
+            "status": "KEY_UNAVAILABLE",
+            "failure_reason": "EXTERNAL_KEY_REQUIRED",
+            "key_provider": {"id": key_provider_id, "version": key_provider_version},
+            "plaintext_emitted": False,
+        }
+    if not encrypted_value.startswith(_CHROMIUM_SECRET_PREFIXES) or len(encrypted_value) < 16:
+        return {
+            "status": "UNSUPPORTED_SECRET_FORMAT",
+            "failure_reason": "EXPECTED_CHROMIUM_AES_GCM_V10_OR_NEWER",
+            "plaintext_emitted": False,
+        }
+    if not _aes_gcm_available():
+        return {
+            "status": "CAPABILITY_UNAVAILABLE",
+            "failure_reason": "CRYPTOGRAPHY_AESGCM_UNAVAILABLE",
+            "plaintext_emitted": False,
+        }
+    aesgcm_type = importlib.import_module("cryptography.hazmat.primitives.ciphers.aead").AESGCM
+    nonce = encrypted_value[3:15]
+    ciphertext_and_tag = encrypted_value[15:]
+    try:
+        plaintext = aesgcm_type(key).decrypt(nonce, ciphertext_and_tag, None)
+    except Exception as error:  # pragma: no cover - depends on crypto backend exception type.
+        return {
+            "status": "DECRYPTION_FAILED",
+            "failure_reason": "AES_GCM_AUTHENTICATION_FAILED",
+            "failure_type": type(error).__name__,
+            "plaintext_emitted": False,
+        }
+    result: dict[str, Any] = {
+        "status": "DECRYPTED",
+        "failure_reason": None,
+        "key_provider": {"id": key_provider_id, "version": key_provider_version},
+        "plaintext_sha256": _sha256_bytes(plaintext),
+        "plaintext_length": len(plaintext),
+        "plaintext_emitted": include_plaintext,
+    }
+    if include_plaintext:
+        result["plaintext"] = plaintext
+    return result
+
+
+def _aes_gcm_available() -> bool:
+    try:
+        importlib.import_module("cryptography.hazmat.primitives.ciphers.aead")
+    except ImportError:
+        return False
+    return True
+
+
+def _browser_secret_policy() -> dict[str, Any]:
+    return {
+        "plaintext_default": "REDACTED",
+        "encrypted_blob_default": "HASH_ONLY",
+        "search_index_default_exclude": True,
+        "live_user_context_used": False,
+        "loads_evidence_libraries": False,
+        "plaintext_requires_explicit_protected_workflow": True,
+    }
+
+
+def _private_mode_policy() -> dict[str, Any]:
+    return {
+        "candidate_only": True,
+        "auto_assert_private_use": False,
+        "auto_assert_no_private_use": False,
+        "absence_of_evidence_semantics": "NOT_EVIDENCE_OF_ABSENCE",
+    }
+
+
+def _private_mode_indicators(node: FileSystemNode, profile: dict[str, Any]) -> list[str]:
+    path = node.original_relative_path.casefold()
+    profile_name = str(profile.get("name") or "").casefold()
+    indicators: list[str] = []
+    if profile_name == "guest profile":
+        indicators.append("PROFILE_NAME_GUEST_PROFILE")
+    for needle, label in (
+        ("incognito", "PATH_CONTAINS_INCOGNITO"),
+        ("off the record", "PATH_CONTAINS_OFF_THE_RECORD"),
+        ("offtherecord", "PATH_CONTAINS_OFFTHERECORD"),
+        ("private browsing", "PATH_CONTAINS_PRIVATE_BROWSING"),
+    ):
+        if needle in path:
+            indicators.append(label)
+    return indicators
+
+
+def _cache_file_info(node: FileSystemNode) -> dict[str, Any] | None:
+    parts = PurePosixPath(node.original_relative_path).parts
+    if len(parts) < 4:
+        return None
+    normalized_parts = [part.casefold() for part in parts]
+    normalized_path = "/".join(normalized_parts)
+    cache_markers = {"cache", "cache_data", "code cache", "gpu cache"}
+    if not any(part in cache_markers for part in normalized_parts):
+        return None
+    browser_family, browser_name = _chromium_identity(normalized_path)
+    synthetic_fixture = any(
+        part in {"chrome", "chromium", "edge", "brave"} for part in normalized_parts
+    )
+    if browser_family == "UNKNOWN" and not synthetic_fixture:
+        return None
+    if browser_family == "UNKNOWN":
+        browser_family, browser_name = "CHROMIUM", "GOOGLE_CHROME"
+    profile_name = _cache_profile_name(parts, normalized_parts)
+    profile_path = str(PurePosixPath(*parts[:-1]))
+    operating_system = _operating_system(normalized_parts)
+    profile_id = canonical_sha256(
+        {
+            "case_id": node.case_id,
+            "evidence_id": node.evidence_id,
+            "browser_family": browser_family,
+            "browser_name": browser_name,
+            "profile_path": profile_path,
+        }
+    )
+    return {
+        "profile_id": profile_id,
+        "name": profile_name,
+        "profile_name": profile_name,
+        "path": profile_path,
+        "profile_path": profile_path,
+        "browser": browser_name,
+        "browser_family": browser_family,
+        "browser_name": browser_name,
+        "operating_system": operating_system,
+        "user_candidate": _user_candidate(parts, normalized_parts, operating_system),
+        "discovery_method": "FS_NODE_BROWSER_CACHE_PATH_CANDIDATE",
+        "source_revision": node.index_revision,
+        "usage_confirmed": False,
+        "source_role": "CACHE",
+        "database_name": None,
+    }
+
+
+def _cache_profile_name(parts: tuple[str, ...], normalized_parts: list[str]) -> str:
+    for index, part in enumerate(normalized_parts):
+        if part in {"default", "guest profile", "system profile"} or part.startswith("profile "):
+            return parts[index]
+    return "UNKNOWN"
+
+
+def _analyze_cache_file(
+    *,
+    evidence: Evidence,
+    node: FileSystemNode,
+    source: ArtifactSource,
+    file_path: Path,
+) -> ArtifactAnalysisResult:
+    profile = _cache_file_info(node)
+    if profile is None:
+        return ArtifactAnalysisResult(parse_status=ArtifactParseStatus.UNSUPPORTED)
+    try:
+        content_sha256 = _sha256_file(file_path)
+        size = file_path.stat().st_size
+    except OSError as error:
+        return ArtifactAnalysisResult(
+            errors=(
+                issue(
+                    severity="ERROR",
+                    code="BROWSER_CACHE_READ_FAILED",
+                    message_key="error.browser.cache_read_failed",
+                    developer_message="Browser cache file could not be read.",
+                    node=node,
+                    details={"error": str(error)},
+                ),
+            ),
+            parse_status=ArtifactParseStatus.FAILED,
+        )
+    artifact = _cache_file_artifact(
+        evidence=evidence,
+        node=node,
+        source=source,
+        profile=profile,
+        content_sha256=content_sha256,
+        size=size,
+    )
+    warnings = tuple(_artifact_warnings(artifact, node))
+    return ArtifactAnalysisResult(
+        artifacts=(artifact,),
+        warnings=warnings,
+        coverage={
+            "source_kind": ArtifactSourceKind.BROWSER_CACHE_FILE.value,
+            "artifact_count": 1,
+            "cache_parser_status": "OPAQUE_FILE_CANDIDATE",
+        },
+        parse_status=ArtifactParseStatus.PARTIAL,
+        source_complete=True,
+        inspected_count=1,
+        source_fingerprint=canonical_sha256(
+            {
+                "source_path": str(file_path),
+                "content_sha256": content_sha256,
+                "size": size,
+            }
+        ),
+    )
+
+
+def _cache_file_artifact(
+    *,
+    evidence: Evidence,
+    node: FileSystemNode,
+    source: ArtifactSource,
+    profile: dict[str, Any],
+    content_sha256: str,
+    size: int,
+) -> ArtifactRecord:
+    observed = _file_modified_observed(node)
+    preview_length = min(size, _BROWSER_CACHE_PREVIEW_MAX_BYTES)
+    fields = _base_browser_fields(
+        node=node,
+        content_sha256=content_sha256,
+        profile=profile,
+        db_kind="CHROMIUM_CACHE",
+        table="cache_file",
+        row_id=None,
+        joined_tables=[],
+    ) | {
+        "cache_entry_candidate": True,
+        "entry_confirmed": False,
+        "cache_format": "CHROMIUM_DISK_CACHE_OPAQUE_FILE_CANDIDATE",
+        "cache_key_sha256": _sha256_text(node.original_relative_path),
+        "cache_url": None,
+        "body_offset": 0,
+        "body_length": size,
+        "body_sha256": content_sha256,
+        "bounded_extraction": {
+            "max_bytes": _BROWSER_CACHE_PREVIEW_MAX_BYTES,
+            "preview_length": preview_length,
+            "truncated": size > _BROWSER_CACHE_PREVIEW_MAX_BYTES,
+        },
+        "timeline_integration": "FILESYSTEM_MODIFIED_TIME",
+        "search_index_default_exclude": False,
+    }
+    raw_locator = make_raw_locator(
+        evidence_id=evidence.evidence_id,
+        source_file_node_id=node.node_id,
+        source_path=node.display_path,
+        source_reference="browser-cache:file-bytes",
+        locator_type="BYTE_RANGE",
+        offset=0,
+        length=max(1, preview_length) if size > 0 else None,
+        encoding="binary",
+        view_types=["HEX"],
+        content_sha256=content_sha256,
+        limitations=[
+            "Cache parser treats this object as an opaque file candidate.",
+            "Raw locator length is bounded for safe preview.",
+        ],
+        details={
+            "body_offset": 0,
+            "body_length": size,
+            "body_sha256": content_sha256,
+        },
+    )
+    return make_artifact(
+        evidence=evidence,
+        node=node,
+        source=source,
+        artifact_type=ArtifactType.BROWSER_CACHE_ENTRY,
+        artifact_subtype="CHROMIUM_CACHE_FILE_CANDIDATE",
+        fields=fields,
+        raw_locator=raw_locator,
+        title=f"Browser cache file candidate: {node.original_name}",
+        summary=(
+            "Chromium cache file candidate observed with bounded byte-range provenance; HTTP "
+            "cache header parsing is unavailable."
+        ),
+        parse_status=ArtifactParseStatus.PARTIAL,
+        confidence=0.55,
+        observed_at_raw=observed["raw"],
+        observed_at_utc=observed["utc"],
+        timezone_source=observed["timezone_source"],
+        timezone_confidence=observed["timezone_confidence"],
+        warnings=[
+            {
+                "code": "BROWSER_CACHE_FORMAT_PARTIAL",
+                "message_key": "warning.browser.cache_format_partial",
+                "developer_message": (
+                    "Browser cache object was recorded as an opaque file candidate; HTTP "
+                    "cache headers and URL keys were not decoded."
+                ),
+            }
+        ],
+    )
+
+
 def _fetchmany(
     cursor: sqlite3.Cursor, batch_size: int = _BROWSER_SQLITE_BATCH_SIZE
 ) -> Iterator[sqlite3.Row]:
@@ -430,7 +1010,17 @@ def _table_columns(connection: sqlite3.Connection) -> dict[str, list[str]]:
     return tables
 
 
-def _database_kind(tables: dict[str, list[str]]) -> str:
+def _database_kind(tables: dict[str, list[str]], profile: dict[str, Any]) -> str:
+    source_role = str(profile.get("source_role") or "")
+    if source_role == "COOKIE_STORE":
+        if _has_columns(tables, "cookies", {"host_key", "name"}):
+            return "CHROMIUM_COOKIES"
+        if _has_columns(tables, "moz_cookies", {"host", "name"}):
+            return "FIREFOX_COOKIES"
+    if source_role == "CREDENTIAL_STORE" and _has_columns(
+        tables, "logins", {"origin_url", "password_value"}
+    ):
+        return "CHROMIUM_LOGIN_DATA"
     if {"urls", "visits"}.issubset(tables):
         return "CHROMIUM"
     if {"moz_places", "moz_historyvisits"}.issubset(tables):
@@ -443,11 +1033,11 @@ def _profile_info(node: FileSystemNode) -> dict[str, Any] | None:
     if len(parts) < 2:
         return None
     name = node.original_name.casefold()
-    if name not in {"history", "places.sqlite"}:
+    if name not in {"history", "places.sqlite", "cookies", "cookies.sqlite", "login data"}:
         return None
     normalized_parts = [part.casefold() for part in parts]
     normalized_path = "/".join(normalized_parts)
-    if name == "history":
+    if name in {"history", "cookies", "login data"}:
         profile_index = len(parts) - 2
         profile_name = parts[profile_index]
         synthetic_fixture = _is_synthetic_chromium_fixture(parts)
@@ -458,12 +1048,18 @@ def _profile_info(node: FileSystemNode) -> dict[str, Any] | None:
             return None
         if browser_family == "UNKNOWN":
             browser_family, browser_name = "CHROMIUM", "GOOGLE_CHROME"
+        source_role = {
+            "history": "HISTORY",
+            "cookies": "COOKIE_STORE",
+            "login data": "CREDENTIAL_STORE",
+        }[name]
     else:
         profile_index = len(parts) - 2
         profile_name = parts[profile_index]
         if not _is_firefox_profile_path(normalized_parts):
             return None
         browser_family, browser_name = "FIREFOX", "FIREFOX"
+        source_role = "HISTORY" if name == "places.sqlite" else "COOKIE_STORE"
     profile_path = str(PurePosixPath(*parts[:-1]))
     operating_system = _operating_system(normalized_parts)
     user_candidate = _user_candidate(parts, normalized_parts, operating_system)
@@ -490,6 +1086,8 @@ def _profile_info(node: FileSystemNode) -> dict[str, Any] | None:
         "discovery_method": "FS_NODE_BROWSER_PROFILE_ALLOWLIST",
         "source_revision": node.index_revision,
         "usage_confirmed": False,
+        "source_role": source_role,
+        "database_name": node.original_name,
     }
 
 
@@ -600,15 +1198,37 @@ def _profile_artifact(
 _BROWSER_STREAMS = {
     "CHROMIUM": (
         "profile",
+        "private_mode_candidates",
         "chromium_visits",
         "chromium_search_terms",
         "chromium_downloads",
+        "sqlite_deleted_candidates",
+    ),
+    "CHROMIUM_COOKIES": (
+        "profile",
+        "private_mode_candidates",
+        "chromium_cookies",
+        "sqlite_deleted_candidates",
+    ),
+    "CHROMIUM_LOGIN_DATA": (
+        "profile",
+        "private_mode_candidates",
+        "chromium_credentials",
+        "sqlite_deleted_candidates",
     ),
     "FIREFOX": (
         "profile",
+        "private_mode_candidates",
         "firefox_visits",
         "firefox_download_annotations",
         "firefox_input_history",
+        "sqlite_deleted_candidates",
+    ),
+    "FIREFOX_COOKIES": (
+        "profile",
+        "private_mode_candidates",
+        "firefox_cookies",
+        "sqlite_deleted_candidates",
     ),
 }
 
@@ -793,6 +1413,40 @@ def _browser_stream_page(
             after_row_id=after_row_id,
             limit=limit,
         )
+    if stream == "private_mode_candidates":
+        return _private_mode_candidates_page(
+            evidence=evidence,
+            node=node,
+            source=source,
+            content_sha256=content_sha256,
+            profile=profile,
+            tables=tables,
+            after_row_id=after_row_id,
+        )
+    if stream == "chromium_cookies":
+        return _chromium_cookies_page(
+            connection=connection,
+            evidence=evidence,
+            node=node,
+            source=source,
+            content_sha256=content_sha256,
+            profile=profile,
+            tables=tables,
+            after_row_id=after_row_id,
+            limit=limit,
+        )
+    if stream == "chromium_credentials":
+        return _chromium_credentials_page(
+            connection=connection,
+            evidence=evidence,
+            node=node,
+            source=source,
+            content_sha256=content_sha256,
+            profile=profile,
+            tables=tables,
+            after_row_id=after_row_id,
+            limit=limit,
+        )
     if stream == "firefox_visits":
         return _firefox_visits_page(
             connection=connection,
@@ -827,6 +1481,29 @@ def _browser_stream_page(
             tables=tables,
             after_row_id=after_row_id,
             limit=limit,
+        )
+    if stream == "firefox_cookies":
+        return _firefox_cookies_page(
+            connection=connection,
+            evidence=evidence,
+            node=node,
+            source=source,
+            content_sha256=content_sha256,
+            profile=profile,
+            tables=tables,
+            after_row_id=after_row_id,
+            limit=limit,
+        )
+    if stream == "sqlite_deleted_candidates":
+        return _sqlite_deleted_candidates_page(
+            connection=connection,
+            evidence=evidence,
+            node=node,
+            source=source,
+            content_sha256=content_sha256,
+            profile=profile,
+            tables=tables,
+            after_row_id=after_row_id,
         )
     return _BrowserStreamPage((), None, False)
 
@@ -1293,6 +1970,404 @@ def _firefox_input_history_page(
     return _stream_result(rows, has_more, artifacts)
 
 
+def _chromium_cookies_page(
+    *,
+    connection: sqlite3.Connection,
+    evidence: Evidence,
+    node: FileSystemNode,
+    source: ArtifactSource,
+    content_sha256: str,
+    profile: dict[str, Any],
+    tables: dict[str, list[str]],
+    after_row_id: int | None,
+    limit: int | None,
+) -> _BrowserStreamPage:
+    if not _has_columns(tables, "cookies", {"host_key", "name"}):
+        return _BrowserStreamPage((), None, False)
+    where = "WHERE cookies.rowid > ?" if after_row_id is not None else ""
+    params = [] if after_row_id is None else [after_row_id]
+    rows, has_more = _rows_with_limit(
+        connection,
+        f"""
+        SELECT
+            cookies.rowid AS row_id,
+            {_sql_column_or_null(tables, "cookies", "host_key")},
+            {_sql_column_or_null(tables, "cookies", "name")},
+            {_sql_column_or_null(tables, "cookies", "path")},
+            {_sql_column_or_null(tables, "cookies", "creation_utc")},
+            {_sql_column_or_null(tables, "cookies", "expires_utc")},
+            {_sql_column_or_null(tables, "cookies", "last_access_utc")},
+            {_sql_column_or_null(tables, "cookies", "is_secure")},
+            {_sql_column_or_null(tables, "cookies", "is_httponly")},
+            {_sql_column_or_null(tables, "cookies", "has_expires")},
+            {_sql_column_or_null(tables, "cookies", "is_persistent")},
+            {_sql_column_or_null(tables, "cookies", "samesite")},
+            {_sql_column_or_null(tables, "cookies", "source_scheme")},
+            {_sql_column_or_null(tables, "cookies", "source_port")},
+            {_sql_column_or_null(tables, "cookies", "value")},
+            {_sql_column_or_null(tables, "cookies", "encrypted_value")}
+        FROM cookies
+        {where}
+        ORDER BY cookies.rowid
+        """,
+        params,
+        limit,
+    )
+    artifacts: list[ArtifactRecord] = []
+    for row in rows:
+        secret_fields, secret_warnings = _cookie_secret_metadata(
+            plaintext_value=row["value"],
+            encrypted_value=row["encrypted_value"],
+            store_kind="CHROMIUM_COOKIE",
+        )
+        host = _str_or_empty(row["host_key"])
+        observed_raw = _first_non_empty(row["last_access_utc"], row["creation_utc"])
+        artifacts.append(
+            _browser_row_artifact(
+                evidence=evidence,
+                node=node,
+                source=source,
+                content_sha256=content_sha256,
+                profile=profile,
+                db_kind="CHROMIUM_COOKIES",
+                artifact_type=ArtifactType.BROWSER_COOKIE,
+                subtype="CHROMIUM_COOKIE_METADATA_REDACTED",
+                table="cookies",
+                row_id=int(row["row_id"]),
+                joined_tables=[],
+                observed_raw=None if observed_raw is None else str(observed_raw),
+                observed_utc=_webkit_timestamp(observed_raw),
+                title=f"Chromium cookie metadata: {host or 'unknown domain'}",
+                summary="Chromium cookie row metadata observed; secret value is redacted.",
+                extra_fields={
+                    "cookie_domain": host or None,
+                    "cookie_name_sha256": _sha256_text(row["name"]),
+                    "cookie_name_length": _text_length(row["name"]),
+                    "cookie_path": row["path"],
+                    "creation_time_raw": _none_or_str(row["creation_utc"]),
+                    "expires_time_raw": _none_or_str(row["expires_utc"]),
+                    "last_access_time_raw": _none_or_str(row["last_access_utc"]),
+                    "expires_time_utc": _timestamp_string(_webkit_timestamp(row["expires_utc"])),
+                    "is_secure": _bool_or_none(row["is_secure"]),
+                    "is_httponly": _bool_or_none(row["is_httponly"]),
+                    "has_expires": _bool_or_none(row["has_expires"]),
+                    "is_persistent": _bool_or_none(row["is_persistent"]),
+                    "samesite": row["samesite"],
+                    "source_scheme": row["source_scheme"],
+                    "source_port": row["source_port"],
+                    **secret_fields,
+                },
+                parse_status=ArtifactParseStatus.PARTIAL,
+                warnings=secret_warnings,
+            )
+        )
+    return _stream_result(rows, has_more, artifacts)
+
+
+def _firefox_cookies_page(
+    *,
+    connection: sqlite3.Connection,
+    evidence: Evidence,
+    node: FileSystemNode,
+    source: ArtifactSource,
+    content_sha256: str,
+    profile: dict[str, Any],
+    tables: dict[str, list[str]],
+    after_row_id: int | None,
+    limit: int | None,
+) -> _BrowserStreamPage:
+    if not _has_columns(tables, "moz_cookies", {"host", "name"}):
+        return _BrowserStreamPage((), None, False)
+    where = "WHERE moz_cookies.rowid > ?" if after_row_id is not None else ""
+    params = [] if after_row_id is None else [after_row_id]
+    rows, has_more = _rows_with_limit(
+        connection,
+        f"""
+        SELECT
+            moz_cookies.rowid AS row_id,
+            {_sql_column_or_null(tables, "moz_cookies", "host")},
+            {_sql_column_or_null(tables, "moz_cookies", "name")},
+            {_sql_column_or_null(tables, "moz_cookies", "value")},
+            {_sql_column_or_null(tables, "moz_cookies", "path")},
+            {_sql_column_or_null(tables, "moz_cookies", "expiry")},
+            {_sql_column_or_null(tables, "moz_cookies", "lastAccessed")},
+            {_sql_column_or_null(tables, "moz_cookies", "creationTime")},
+            {_sql_column_or_null(tables, "moz_cookies", "isSecure")},
+            {_sql_column_or_null(tables, "moz_cookies", "isHttpOnly")}
+        FROM moz_cookies
+        {where}
+        ORDER BY moz_cookies.rowid
+        """,
+        params,
+        limit,
+    )
+    artifacts: list[ArtifactRecord] = []
+    for row in rows:
+        secret_fields, secret_warnings = _cookie_secret_metadata(
+            plaintext_value=row["value"],
+            encrypted_value=None,
+            store_kind="FIREFOX_COOKIE",
+        )
+        host = _str_or_empty(row["host"])
+        observed_raw = _first_non_empty(row["lastAccessed"], row["creationTime"])
+        artifacts.append(
+            _browser_row_artifact(
+                evidence=evidence,
+                node=node,
+                source=source,
+                content_sha256=content_sha256,
+                profile=profile,
+                db_kind="FIREFOX_COOKIES",
+                artifact_type=ArtifactType.BROWSER_COOKIE,
+                subtype="FIREFOX_COOKIE_METADATA_REDACTED",
+                table="moz_cookies",
+                row_id=int(row["row_id"]),
+                joined_tables=[],
+                observed_raw=None if observed_raw is None else str(observed_raw),
+                observed_utc=_unix_microseconds(observed_raw),
+                title=f"Firefox cookie metadata: {host or 'unknown domain'}",
+                summary="Firefox cookie row metadata observed; secret value is redacted.",
+                extra_fields={
+                    "cookie_domain": host or None,
+                    "cookie_name_sha256": _sha256_text(row["name"]),
+                    "cookie_name_length": _text_length(row["name"]),
+                    "cookie_path": row["path"],
+                    "expiry_raw": _none_or_str(row["expiry"]),
+                    "expiry_utc": _timestamp_string(_unix_seconds(row["expiry"])),
+                    "last_access_time_raw": _none_or_str(row["lastAccessed"]),
+                    "creation_time_raw": _none_or_str(row["creationTime"]),
+                    "is_secure": _bool_or_none(row["isSecure"]),
+                    "is_httponly": _bool_or_none(row["isHttpOnly"]),
+                    **secret_fields,
+                },
+                parse_status=ArtifactParseStatus.PARTIAL,
+                warnings=secret_warnings,
+            )
+        )
+    return _stream_result(rows, has_more, artifacts)
+
+
+def _chromium_credentials_page(
+    *,
+    connection: sqlite3.Connection,
+    evidence: Evidence,
+    node: FileSystemNode,
+    source: ArtifactSource,
+    content_sha256: str,
+    profile: dict[str, Any],
+    tables: dict[str, list[str]],
+    after_row_id: int | None,
+    limit: int | None,
+) -> _BrowserStreamPage:
+    if not _has_columns(tables, "logins", {"origin_url", "password_value"}):
+        return _BrowserStreamPage((), None, False)
+    where = "WHERE logins.rowid > ?" if after_row_id is not None else ""
+    params = [] if after_row_id is None else [after_row_id]
+    rows, has_more = _rows_with_limit(
+        connection,
+        f"""
+        SELECT
+            logins.rowid AS row_id,
+            {_sql_column_or_null(tables, "logins", "origin_url")},
+            {_sql_column_or_null(tables, "logins", "action_url")},
+            {_sql_column_or_null(tables, "logins", "signon_realm")},
+            {_sql_column_or_null(tables, "logins", "username_value")},
+            {_sql_column_or_null(tables, "logins", "password_value")},
+            {_sql_column_or_null(tables, "logins", "date_created")},
+            {_sql_column_or_null(tables, "logins", "date_last_used")},
+            {_sql_column_or_null(tables, "logins", "date_password_modified")},
+            {_sql_column_or_null(tables, "logins", "times_used")},
+            {_sql_column_or_null(tables, "logins", "scheme")}
+        FROM logins
+        {where}
+        ORDER BY logins.rowid
+        """,
+        params,
+        limit,
+    )
+    artifacts: list[ArtifactRecord] = []
+    for row in rows:
+        secret_fields, secret_warnings = _credential_secret_metadata(
+            username_value=row["username_value"],
+            password_value=row["password_value"],
+        )
+        origin_url = _none_or_str(row["origin_url"])
+        domain = _safe_domain(origin_url) if origin_url else None
+        observed_raw = _first_non_empty(row["date_last_used"], row["date_created"])
+        artifacts.append(
+            _browser_row_artifact(
+                evidence=evidence,
+                node=node,
+                source=source,
+                content_sha256=content_sha256,
+                profile=profile,
+                db_kind="CHROMIUM_LOGIN_DATA",
+                artifact_type=ArtifactType.BROWSER_CREDENTIAL,
+                subtype="CHROMIUM_LOGIN_METADATA_REDACTED",
+                table="logins",
+                row_id=int(row["row_id"]),
+                joined_tables=[],
+                observed_raw=None if observed_raw is None else str(observed_raw),
+                observed_utc=_webkit_timestamp(observed_raw),
+                title=f"Chromium credential metadata: {domain or 'unknown origin'}",
+                summary="Chromium login row metadata observed; credential values are redacted.",
+                extra_fields={
+                    "origin_url": origin_url,
+                    "action_url": row["action_url"],
+                    "signon_realm_sha256": _sha256_text(row["signon_realm"]),
+                    "credential_origin_domain": domain,
+                    "date_created_raw": _none_or_str(row["date_created"]),
+                    "date_last_used_raw": _none_or_str(row["date_last_used"]),
+                    "date_password_modified_raw": _none_or_str(
+                        row["date_password_modified"]
+                    ),
+                    "times_used": row["times_used"],
+                    "scheme": row["scheme"],
+                    **secret_fields,
+                },
+                parse_status=ArtifactParseStatus.PARTIAL,
+                warnings=secret_warnings,
+            )
+        )
+    return _stream_result(rows, has_more, artifacts)
+
+
+def _sqlite_deleted_candidates_page(
+    *,
+    connection: sqlite3.Connection,
+    evidence: Evidence,
+    node: FileSystemNode,
+    source: ArtifactSource,
+    content_sha256: str,
+    profile: dict[str, Any],
+    tables: dict[str, list[str]],
+    after_row_id: int | None,
+) -> _BrowserStreamPage:
+    if after_row_id is not None:
+        return _BrowserStreamPage((), None, False)
+    freelist_count = _pragma_int(connection, "freelist_count")
+    page_count = _pragma_int(connection, "page_count")
+    page_size = _pragma_int(connection, "page_size")
+    snapshot_value = profile.get("snapshot")
+    snapshot: dict[str, Any] = snapshot_value if isinstance(snapshot_value, dict) else {}
+    wal_preserved = bool(snapshot.get("wal_preserved"))
+    if freelist_count <= 0:
+        return _BrowserStreamPage((), None, False)
+    observed = _file_modified_observed(node)
+    candidate_basis: list[str] = []
+    if freelist_count > 0:
+        candidate_basis.append("SQLITE_FREELIST_PAGES_PRESENT")
+    if wal_preserved:
+        candidate_basis.append("SQLITE_WAL_COMPONENT_PRESERVED")
+    db_kind = _database_kind(tables, profile)
+    artifact = _browser_row_artifact(
+        evidence=evidence,
+        node=node,
+        source=source,
+        content_sha256=content_sha256,
+        profile=profile,
+        db_kind=db_kind,
+        artifact_type=ArtifactType.BROWSER_DELETED_SQLITE_ROW,
+        subtype="SQLITE_DELETED_ROW_CANDIDATE",
+        table="sqlite_freelist",
+        row_id=1,
+        joined_tables=[],
+        observed_raw=observed["raw"],
+        observed_utc=observed["utc"],
+        title=f"SQLite deleted-row candidate evidence: {node.original_name}",
+        summary=(
+            "SQLite freelist/WAL evidence indicates possible deleted or unapplied rows; "
+            "no deleted row content was recovered."
+        ),
+        extra_fields={
+            "candidate_semantics": "DELETED_OR_UNAPPLIED_ROW_CANDIDATE_NOT_CONFIRMED_ROW",
+            "candidate_basis": candidate_basis,
+            "freelist_page_count": freelist_count,
+            "page_count": page_count,
+            "page_size": page_size,
+            "wal_preserved": wal_preserved,
+            "deleted_record_content_recovered": False,
+            "confirmed_row": False,
+            "page_cell_provenance": {
+                "page_numbers": "UNKNOWN_FREELIST_CHAIN_NOT_PARSED",
+                "cell_offsets": "UNKNOWN",
+                "recovery_method": "SQLITE_PRAGMA_AND_WAL_COMPONENT_PRESENCE",
+                "confidence": "LOW",
+            },
+            "search_index_default_exclude": False,
+        },
+        parse_status=ArtifactParseStatus.PARTIAL,
+        warnings=[
+            {
+                "code": "SQLITE_DELETED_ROW_CONTENT_NOT_RECOVERED",
+                "message_key": "warning.browser.sqlite_deleted_row_content_not_recovered",
+                "developer_message": (
+                    "SQLite deleted-row content recovery is unavailable; this artifact is a "
+                    "low-confidence presence candidate only."
+                ),
+            }
+        ],
+    )
+    return _BrowserStreamPage((artifact,), 1, False)
+
+
+def _private_mode_candidates_page(
+    *,
+    evidence: Evidence,
+    node: FileSystemNode,
+    source: ArtifactSource,
+    content_sha256: str,
+    profile: dict[str, Any],
+    tables: dict[str, list[str]],
+    after_row_id: int | None,
+) -> _BrowserStreamPage:
+    if after_row_id is not None:
+        return _BrowserStreamPage((), None, False)
+    indicators = _private_mode_indicators(node, profile)
+    if not indicators:
+        return _BrowserStreamPage((), None, False)
+    observed = _file_modified_observed(node)
+    artifact = _browser_row_artifact(
+        evidence=evidence,
+        node=node,
+        source=source,
+        content_sha256=content_sha256,
+        profile=profile,
+        db_kind=_database_kind(tables, profile),
+        artifact_type=ArtifactType.BROWSER_PRIVATE_MODE_CANDIDATE,
+        subtype="PRIVATE_MODE_PROFILE_PATH_CANDIDATE",
+        table="browser_profile_path",
+        row_id=1,
+        joined_tables=[],
+        observed_raw=observed["raw"],
+        observed_utc=observed["utc"],
+        title=f"Private-mode profile candidate: {profile['name']}",
+        summary=(
+            "Browser profile path contains private-mode candidate indicators; this does not "
+            "confirm private browsing use."
+        ),
+        extra_fields={
+            "private_mode_candidate": True,
+            "private_mode_confirmed": False,
+            "candidate_basis": indicators,
+            "absence_of_evidence_not_private_mode_evidence": True,
+            "policy": _private_mode_policy(),
+        },
+        parse_status=ArtifactParseStatus.PARTIAL,
+        warnings=[
+            {
+                "code": "PRIVATE_MODE_CANDIDATE_ONLY",
+                "message_key": "warning.browser.private_mode_candidate_only",
+                "developer_message": (
+                    "Private/incognito use is recorded only as a candidate when explicit "
+                    "path evidence exists; absence of artifacts is never asserted as no use."
+                ),
+            }
+        ],
+    )
+    return _BrowserStreamPage((artifact,), 1, False)
+
+
 def _chromium_artifacts(
     *,
     connection: sqlite3.Connection,
@@ -1689,9 +2764,13 @@ def _browser_row_artifact(
         )
         | extra_fields
     )
-    primary_url = fields.get("url") or fields.get("download_url")
+    primary_url = fields.get("url") or fields.get("download_url") or fields.get("origin_url")
     if isinstance(primary_url, str):
         fields["domain"] = _safe_domain(primary_url)
+    if fields.get("cookie_domain") and "domain" not in fields:
+        fields["domain"] = fields["cookie_domain"]
+    if fields.get("credential_origin_domain") and "domain" not in fields:
+        fields["domain"] = fields["credential_origin_domain"]
     fields.setdefault("timestamp_semantics", _browser_timestamp_semantics(db_kind, table))
     raw_locator = _browser_locator(
         evidence=evidence,
@@ -1744,6 +2823,11 @@ def _base_browser_fields(
         "discovery_method": profile.get("discovery_method"),
         "source_revision": profile.get("source_revision"),
         "usage_confirmed": False,
+        "source_role": profile.get("source_role"),
+        "secret_handling_policy": _browser_secret_policy(),
+        "private_mode_policy": _private_mode_policy(),
+        "incognito_candidate": False,
+        "absence_of_private_mode_evidence_means": "UNKNOWN_NOT_NOT_USED",
         "database": {
             "type": db_kind,
             "path": node.display_path,
@@ -1919,9 +3003,9 @@ def _safe_domain(url: str) -> str | None:
 
 
 def _browser_timestamp_semantics(db_kind: str, table: str) -> str:
-    if db_kind == "CHROMIUM":
+    if db_kind.startswith("CHROMIUM"):
         return f"CHROMIUM_WEBKIT_MICROSECONDS_UTC:{table}"
-    if db_kind == "FIREFOX":
+    if db_kind.startswith("FIREFOX"):
         return f"FIREFOX_UNIX_MICROSECONDS_UTC:{table}"
     return f"BROWSER_TIMESTAMP_UNKNOWN:{table}"
 
@@ -1966,6 +3050,16 @@ def _unix_microseconds(value: Any) -> datetime | None:
     if micros <= 0:
         return None
     return _UNIX_EPOCH + timedelta(microseconds=micros)
+
+
+def _unix_seconds(value: Any) -> datetime | None:
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    return _UNIX_EPOCH + timedelta(seconds=seconds)
 
 
 def _timestamp_string(value: datetime | None) -> str | None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import platform
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from datetime import datetime
@@ -50,6 +51,189 @@ _SYSMON_SUBTYPES = {
 }
 
 
+class WindowsEventMessageRenderer:
+    """Windows-only message renderer using installed provider metadata."""
+
+    renderer_id = "pywin32.win32evtlog"
+    renderer_version = ENGINE_VERSION
+
+    @classmethod
+    def is_available(cls) -> bool:
+        if platform.system() != "Windows":
+            return False
+        try:
+            importlib.import_module("win32evtlog")
+        except ImportError:
+            return False
+        return True
+
+    def render(
+        self,
+        *,
+        provider_name: str | None,
+        event_id: int | None,
+        locale: str | None,
+        event_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        if not provider_name or event_id is None:
+            return self._result(
+                status="WINDOWS_ADAPTER_NOT_ENOUGH_CONTEXT",
+                provider_name=provider_name,
+                event_id=event_id,
+                locale=locale,
+                rendered_message=None,
+            )
+        if not self.is_available():
+            return self._result(
+                status="WINDOWS_ADAPTER_UNAVAILABLE",
+                provider_name=provider_name,
+                event_id=event_id,
+                locale=locale,
+                rendered_message=None,
+            )
+        metadata = None
+        win32evtlog_module: Any | None = None
+        try:
+            win32evtlog_module = importlib.import_module("win32evtlog")
+            metadata = _open_publisher_metadata(
+                win32evtlog=win32evtlog_module,
+                provider_name=provider_name,
+            )
+            message = _evt_format_message_id(
+                win32evtlog=win32evtlog_module,
+                publisher_metadata=metadata,
+                message_id=event_id,
+            )
+        except Exception as error:
+            return self._result(
+                status="WINDOWS_ADAPTER_RENDER_FAILED",
+                provider_name=provider_name,
+                event_id=event_id,
+                locale=locale,
+                rendered_message=None,
+                error_type=type(error).__name__,
+                error_message=str(error),
+                diagnostics=_evt_format_message_diagnostics(win32evtlog_module),
+            )
+        finally:
+            if metadata is not None:
+                _evt_close(metadata)
+        return self._result(
+            status="WINDOWS_ADAPTER_RENDERED",
+            provider_name=provider_name,
+            event_id=event_id,
+            locale=locale,
+            rendered_message=message,
+            render_mode="MESSAGE_ID",
+        )
+
+    def render_event_handle(
+        self,
+        *,
+        provider_name: str | None,
+        event_handle: Any,
+        locale: str | None,
+    ) -> dict[str, Any]:
+        if not provider_name:
+            return self._result(
+                status="WINDOWS_ADAPTER_NOT_ENOUGH_CONTEXT",
+                provider_name=provider_name,
+                event_id=None,
+                locale=locale,
+                rendered_message=None,
+                render_mode="EVENT_HANDLE",
+            )
+        if not self.is_available():
+            return self._result(
+                status="WINDOWS_ADAPTER_UNAVAILABLE",
+                provider_name=provider_name,
+                event_id=None,
+                locale=locale,
+                rendered_message=None,
+                render_mode="EVENT_HANDLE",
+            )
+        metadata = None
+        win32evtlog_module: Any | None = None
+        try:
+            win32evtlog_module = importlib.import_module("win32evtlog")
+            metadata = _open_publisher_metadata(
+                win32evtlog=win32evtlog_module,
+                provider_name=provider_name,
+            )
+            message = _evt_format_event_message(
+                win32evtlog=win32evtlog_module,
+                publisher_metadata=metadata,
+                event_handle=event_handle,
+            )
+        except Exception as error:
+            return self._result(
+                status="WINDOWS_ADAPTER_RENDER_FAILED",
+                provider_name=provider_name,
+                event_id=None,
+                locale=locale,
+                rendered_message=None,
+                render_mode="EVENT_HANDLE",
+                error_type=type(error).__name__,
+                error_message=str(error),
+                diagnostics=_evt_format_message_diagnostics(
+                    win32evtlog_module,
+                    metadata=metadata,
+                    event_handle=event_handle,
+                ),
+            )
+        finally:
+            if metadata is not None:
+                _evt_close(metadata)
+        return self._result(
+            status="WINDOWS_ADAPTER_RENDERED",
+            provider_name=provider_name,
+            event_id=None,
+            locale=locale,
+            rendered_message=message,
+            render_mode="EVENT_HANDLE",
+            diagnostics=_handle_object_diagnostics(
+                metadata=metadata,
+                event_handle=event_handle,
+            ),
+        )
+
+    def _result(
+        self,
+        *,
+        status: str,
+        provider_name: str | None,
+        event_id: int | None,
+        locale: str | None,
+        rendered_message: str | None,
+        render_mode: str = "MESSAGE_ID",
+        error_type: str | None = None,
+        error_message: str | None = None,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "message_rendered": rendered_message is not None,
+            "rendered_message": rendered_message,
+            "message_rendering": {
+                "status": status,
+                "renderer": self.renderer_id,
+                "renderer_version": _pywin32_version() or self.renderer_version,
+                "provider_name": provider_name,
+                "event_id": event_id,
+                "locale": locale,
+                "render_mode": render_mode,
+                "message_dll_loaded": False,
+                "evidence_dll_loaded": False,
+                "trust_boundary": (
+                    "Only provider metadata registered on the Windows host is used; evidence "
+                    "DLLs are never loaded or executed."
+                ),
+                "error_type": error_type,
+                "error_message": error_message,
+                "diagnostics": diagnostics or {},
+            },
+        }
+
+
 class WindowsEventLogAnalyzer:
     """Read-only analyzer for exported Event XML and optional EVTX files."""
 
@@ -78,6 +262,17 @@ class WindowsEventLogAnalyzer:
                     ),
                 }
             )
+        windows_message_available = _windows_message_renderer_available()
+        message_capabilities = (
+            ("EVENT_MESSAGE_RENDERING_WINDOWS_ADAPTER",)
+            if windows_message_available
+            else ()
+        )
+        message_unavailable = (
+            ()
+            if windows_message_available
+            else ("EVENT_MESSAGE_RENDERING_WINDOWS_ADAPTER",)
+        )
         return ArtifactCapability(
             analyzer_id=self.analyzer_id,
             analyzer_version=self.analyzer_version,
@@ -88,10 +283,31 @@ class WindowsEventLogAnalyzer:
                 ArtifactSourceKind.EVENT_LOG_EVTX,
             ),
             supported_artifact_types=(ArtifactType.EVENT_LOG_RECORD,),
-            capabilities=("EVENT_XML", "EVENT_FIELD_EXTRACTION", "EVENT_SUBTYPE_CANDIDATES"),
-            unavailable_capabilities=tuple(unavailable),
+            capabilities=(
+                "EVENT_XML",
+                "EVENT_FIELD_EXTRACTION",
+                "EVENT_SUBTYPE_CANDIDATES",
+                "EVENT_SOURCE_RENDERING_INFO_MESSAGE",
+                *message_capabilities,
+            ),
+            unavailable_capabilities=(
+                *tuple(unavailable),
+                *message_unavailable,
+            ),
             warnings=tuple(warnings),
-            metadata={"message_dll_rendering": False, "streaming": True},
+            metadata={
+                "message_dll_rendering": {
+                    "status": "OPTIONAL_RUNTIME"
+                    if windows_message_available
+                    else "CAPABILITY_UNAVAILABLE",
+                    "trust_boundary": "Evidence DLLs are never loaded or executed.",
+                    "raw_event_preserved_on_failure": True,
+                    "derived_field": "rendered_message",
+                    "adapter": WindowsEventMessageRenderer.renderer_id,
+                    "platform": platform.system(),
+                },
+                "streaming": True,
+            },
         )
 
     def detect_source(self, node: FileSystemNode) -> ArtifactSource | None:
@@ -390,6 +606,12 @@ def _artifact_from_event_xml(
     correlation = _first_child(system, "Correlation")
     event_data = _event_data(element)
     user_data = _user_data(element)
+    rendered = _rendering_info_message(
+        element,
+        provider_name=provider_name,
+        event_id=event_id,
+        event_data=event_data,
+    )
     subtype, title_prefix = _event_subtype(channel, event_id)
     raw_locator = make_raw_locator(
         evidence_id=evidence.evidence_id,
@@ -442,7 +664,9 @@ def _artifact_from_event_xml(
         "raw_xml": event_xml,
         "source_file_path": node.display_path,
         "record_locator": raw_locator["source_reference"],
-        "message_rendered": False,
+        "message_rendered": rendered["message_rendered"],
+        "rendered_message": rendered["rendered_message"],
+        "message_rendering": rendered["message_rendering"],
         "maliciousness_asserted": False,
     }
     title_value = f"{title_prefix} ({event_id})" if event_id is not None else "Windows event record"
@@ -456,7 +680,8 @@ def _artifact_from_event_xml(
         raw_locator=raw_locator,
         title=title_value,
         summary=(
-            "Windows event record observed from exported XML/EVTX without message DLL rendering."
+            "Windows event record observed from exported XML/EVTX; rendered message is "
+            "source-provided or optional-adapter derived when available."
         ),
         parse_status=ArtifactParseStatus.SUCCESS,
         confidence=0.9,
@@ -544,6 +769,167 @@ def _user_data(element: ET.Element) -> dict[str, Any]:
         f"{_local_name(child.tag)}#{index}": _element_to_data(child)
         for index, child in enumerate(user_data)
     }
+
+
+def _rendering_info_message(
+    element: ET.Element,
+    *,
+    provider_name: str | None,
+    event_id: int | None,
+    event_data: dict[str, Any],
+) -> dict[str, Any]:
+    rendering = _first_child(element, "RenderingInfo")
+    message = _text(_first_child(rendering, "Message")) if rendering is not None else None
+    locale = _attr(rendering, "Culture") if rendering is not None else None
+    if message:
+        return {
+            "message_rendered": True,
+            "rendered_message": message,
+            "message_rendering": {
+                "status": "SOURCE_RENDERING_INFO",
+                "renderer": "exported-event-rendering-info",
+                "renderer_version": ENGINE_VERSION,
+                "provider_name": provider_name,
+                "event_id": event_id,
+                "locale": locale,
+                "message_dll_loaded": False,
+                "evidence_dll_loaded": False,
+                "trust_boundary": "Message text was already present in the exported event XML.",
+            },
+        }
+    return WindowsEventMessageRenderer().render(
+        provider_name=provider_name,
+        event_id=event_id,
+        locale=locale,
+        event_data=event_data,
+    )
+
+
+def _windows_message_renderer_available() -> bool:
+    return WindowsEventMessageRenderer.is_available()
+
+
+def _locale_to_lcid(locale: str | None) -> int:
+    # pywin32 accepts zero to select the system/default message language.
+    return 0
+
+
+def _event_message_inserts(event_data: dict[str, Any]) -> list[str]:
+    inserts: list[str] = []
+    for value in event_data.values():
+        if isinstance(value, str):
+            inserts.append(value)
+        elif value is not None:
+            inserts.append(str(value))
+    return inserts
+
+
+def _evt_format_message_id(
+    *,
+    win32evtlog: Any,
+    publisher_metadata: Any,
+    message_id: int,
+) -> str:
+    flags = getattr(win32evtlog, "EvtFormatMessageId", 8)
+    message = win32evtlog.EvtFormatMessage(
+        publisher_metadata,
+        None,
+        flags,
+        message_id,
+    )
+    if not isinstance(message, str) or not message:
+        raise ValueError("Windows event message renderer returned no text")
+    return message
+
+
+def _open_publisher_metadata(*, win32evtlog: Any, provider_name: str) -> Any:
+    return win32evtlog.EvtOpenPublisherMetadata(provider_name)
+
+
+def _evt_format_event_message(
+    *,
+    win32evtlog: Any,
+    publisher_metadata: Any,
+    event_handle: Any,
+) -> str:
+    flags = getattr(win32evtlog, "EvtFormatMessageEvent", 1)
+    message = win32evtlog.EvtFormatMessage(
+        publisher_metadata,
+        event_handle,
+        flags,
+    )
+    if not isinstance(message, str) or not message:
+        raise ValueError("Windows event message renderer returned no text")
+    return message
+
+
+def _evt_format_message_diagnostics(
+    win32evtlog: Any | None,
+    *,
+    metadata: Any | None = None,
+    event_handle: Any | None = None,
+) -> dict[str, Any]:
+    if win32evtlog is None:
+        return _handle_object_diagnostics(metadata=metadata, event_handle=event_handle)
+    evt_format_message = getattr(win32evtlog, "EvtFormatMessage", None)
+    doc = getattr(evt_format_message, "__doc__", None)
+    return {
+        "expected_pywin32_contract": "EvtFormatMessage(Metadata, Event, Flags, ResourceId=0)",
+        "event_handle_call": (
+            "EvtFormatMessage(publisher_metadata_handle, event_handle, "
+            "EvtFormatMessageEvent)"
+        ),
+        "message_id_call": (
+            "EvtFormatMessage(publisher_metadata_handle, None, EvtFormatMessageId, event_id)"
+        ),
+        "evt_format_message_doc": _bounded_text(doc, limit=1200),
+        **_handle_object_diagnostics(metadata=metadata, event_handle=event_handle),
+    }
+
+
+def _evt_close(handle: Any) -> None:
+    try:
+        win32evtlog = importlib.import_module("win32evtlog")
+        close = getattr(win32evtlog, "EvtClose", None)
+        if close is not None:
+            close(handle)
+    except Exception:
+        return
+
+
+def _bounded_text(value: object, *, limit: int) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
+def _safe_handle_type(value: object | None) -> str | None:
+    return None if value is None else type(value).__name__
+
+
+def _safe_has_close(value: object | None) -> bool:
+    return False if value is None else hasattr(value, "Close")
+
+
+def _handle_object_diagnostics(
+    *,
+    metadata: object | None = None,
+    event_handle: object | None = None,
+) -> dict[str, object]:
+    return {
+        "metadata_handle_type": _safe_handle_type(metadata),
+        "metadata_has_close": _safe_has_close(metadata),
+        "event_handle_type": _safe_handle_type(event_handle),
+        "event_handle_has_close": _safe_has_close(event_handle),
+    }
+
+
+def _pywin32_version() -> str | None:
+    try:
+        return importlib.metadata.version("pywin32")
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 def _element_to_data(element: ET.Element) -> Any:

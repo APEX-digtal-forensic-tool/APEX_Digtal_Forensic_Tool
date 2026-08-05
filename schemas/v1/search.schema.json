@@ -42,6 +42,7 @@
         "PREFETCH",
         "MEDIA",
         "BROWSER",
+        "COMMUNICATION",
         "TIMELINE",
         "OTHER"
       ]

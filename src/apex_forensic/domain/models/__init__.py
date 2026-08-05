@@ -41,7 +41,12 @@ from apex_forensic.domain.models.context import (
     ViewProjection,
 )
 from apex_forensic.domain.models.custody import CustodyEvent, HashVerification
-from apex_forensic.domain.models.evidence import Evidence, EvidenceFingerprint, HashRecord
+from apex_forensic.domain.models.evidence import (
+    Evidence,
+    EvidenceFingerprint,
+    EvidenceVolume,
+    HashRecord,
+)
 from apex_forensic.domain.models.filesystem import (
     CursorPage,
     FileSystemNode,
@@ -111,6 +116,7 @@ __all__ = [
     "EngineToolDescriptor",
     "Evidence",
     "EvidenceFingerprint",
+    "EvidenceVolume",
     "FileSystemNode",
     "FileTreePage",
     "GuiSessionContext",

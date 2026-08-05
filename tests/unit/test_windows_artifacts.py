@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import codecs
+import hashlib
 import importlib.metadata
+import importlib.util
 import json
+import lzma
+import platform
+import shutil
 import struct
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+import apex_forensic.adapters.artifacts.windows.eventlog as eventlog_module
 from apex_forensic.adapters.artifacts import (
     WindowsEventLogAnalyzer,
+    WindowsEventMessageRenderer,
     WindowsPrefetchAnalyzer,
     WindowsRegistryAnalyzer,
 )
@@ -23,6 +31,8 @@ from apex_forensic.domain.enums import (
 from apex_forensic.domain.errors import ValidationError
 from apex_forensic.domain.models import ArtifactQuery
 from apex_forensic.jobs import CancellationToken, PauseToken
+
+_REGISTRY_FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "registry"
 
 
 def _case_evidence_and_index(services, root: Path):
@@ -43,7 +53,7 @@ def _filetime(value: datetime) -> int:
 
 def _prefetch_bytes(*, version: int = 30, mam: bool = False) -> bytes:
     if mam:
-        return b"MAM\x04compressed-prefetch"
+        return b"MAM\x04" + struct.pack("<I", 128 * 1024 * 1024) + b"compressed-prefetch"
     data = bytearray(0xD8)
     struct.pack_into("<I", data, 0x00, version)
     data[0x04:0x08] = b"SCCA"
@@ -53,6 +63,27 @@ def _prefetch_bytes(*, version: int = 30, mam: bool = False) -> bytes:
     struct.pack_into("<Q", data, 0x80, _filetime(datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)))
     struct.pack_into("<I", data, 0xD0, 7)
     return bytes(data)
+
+
+def _literal_lzxpress_huffman(data: bytes) -> bytes:
+    """Build a valid LZXPRESS-Huffman stream containing only literal symbols."""
+
+    tree = bytes([0x88] * 128 + [0x00] * 128)
+    bits = "".join(f"{byte:08b}" for byte in data)
+    while len(bits) % 16:
+        bits += "0"
+    payload = bytearray()
+    for offset in range(0, len(bits), 16):
+        word = int(bits[offset : offset + 16], 2)
+        payload.extend([word & 0xFF, (word >> 8) & 0xFF])
+    return tree + bytes(payload) + b"\x00\x00"
+
+
+def _mam_prefetch_bytes() -> bytes:
+    decompressed = _prefetch_bytes() + b"\x00"
+    return b"MAM\x04" + struct.pack("<I", len(decompressed)) + _literal_lzxpress_huffman(
+        decompressed
+    )
 
 
 def _event_xml() -> str:
@@ -79,6 +110,9 @@ def _event_xml() -> str:
       <Data Name="TargetUserName">홍길동</Data>
       <Data Name="IpAddress">127.0.0.1</Data>
     </EventData>
+    <RenderingInfo Culture="en-US">
+      <Message>An account was successfully logged on.</Message>
+    </RenderingInfo>
   </Event>
 </Events>
 """
@@ -103,6 +137,9 @@ def _registry_text() -> str:
 "TimeZoneKeyName"="Korea Standard Time"
 "StandardName"="대한민국 표준시"
 "Bias"=dword:fffffde4
+"StandardBias"=dword:00000000
+"DaylightBias"=dword:ffffffc4
+"DynamicDaylightTimeDisabled"=dword:00000000
 
 [HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Enum\\USBSTOR\\Disk&Ven_SanDisk&Prod_Ultra&Rev_1.00\\SERIAL123]
 "FriendlyName"="SanDisk Ultra USB Device"
@@ -110,6 +147,11 @@ def _registry_text() -> str:
 
 [HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\UserAssist\\{{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}}\\Count]
 "{userassist_name}"=hex:{userassist_hex}
+
+[-HKEY_CURRENT_USER\\Software\\DeletedApp]
+
+[HKEY_CURRENT_USER\\Software\\DeletedValue]
+"Obsolete"=-
 """
 
 
@@ -119,6 +161,21 @@ def _distribution_available(distribution_name: str) -> bool:
     except importlib.metadata.PackageNotFoundError:
         return False
     return True
+
+
+def _decompress_fixture(name: str, destination: Path) -> None:
+    with lzma.open(_REGISTRY_FIXTURE_DIR / name, "rb") as source, destination.open(
+        "wb"
+    ) as output:
+        shutil.copyfileobj(source, output)
+
+
+def _fixture_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def test_analyzer_capabilities_are_provider_neutral() -> None:
@@ -147,7 +204,255 @@ def test_analyzer_capabilities_are_provider_neutral() -> None:
     else:
         assert "EVTX_BINARY_PARSE" in eventlog_unavailable
 
-    assert "PREFETCH_MAM_DECOMPRESSION" in prefetch_unavailable
+    if _distribution_available("regipy"):
+        assert "REGISTRY_TRANSACTION_LOG_REPLAY" not in registry_unavailable
+        assert "REGISTRY_TRANSACTION_LOG_REPLAY" in capabilities[0]["capabilities"]
+        assert capabilities[0]["metadata"]["transaction_log_recovery"]["status"] == (
+            "OPTIONAL_RUNTIME"
+        )
+    else:
+        assert "REGISTRY_TRANSACTION_LOG_REPLAY" in registry_unavailable
+        assert capabilities[0]["metadata"]["transaction_log_recovery"]["status"] == (
+            "CAPABILITY_UNAVAILABLE"
+        )
+
+    if _distribution_available("dissect.util"):
+        assert "PREFETCH_MAM_DECOMPRESSION" not in prefetch_unavailable
+        assert "PREFETCH_MAM_DECOMPRESSION" in capabilities[2]["capabilities"]
+        assert capabilities[2]["metadata"]["mam"]["decompression"] == "OPTIONAL_RUNTIME"
+    else:
+        assert "PREFETCH_MAM_DECOMPRESSION" in prefetch_unavailable
+        assert capabilities[2]["metadata"]["mam"]["decompression"] == "CAPABILITY_UNAVAILABLE"
+    assert "REGISTRY_BINARY_DELETED_CELL_RECOVERY" in registry_unavailable
+    assert "REGISTRY_EXPORT_DELETED_DIRECTIVE_CANDIDATES" in capabilities[0]["capabilities"]
+    event_message_capability = "EVENT_MESSAGE_RENDERING_WINDOWS_ADAPTER"
+
+    if sys.platform == "win32" and _distribution_available("pywin32"):
+        assert event_message_capability not in eventlog_unavailable
+        assert event_message_capability in capabilities[1]["capabilities"]
+    else:
+        assert event_message_capability in eventlog_unavailable
+    assert capabilities[1]["metadata"]["message_dll_rendering"]["trust_boundary"] == (
+        "Evidence DLLs are never loaded or executed."
+    )
+    assert capabilities[2]["metadata"]["mam"]["compression_bomb_defense"] is True
+
+
+def test_event_message_renderer_non_windows_boundary() -> None:
+    rendered = WindowsEventMessageRenderer().render(
+        provider_name="Microsoft-Windows-Security-Auditing",
+        event_id=4624,
+        locale="en-US",
+        event_data={"TargetUserName": "tester"},
+    )
+
+    if WindowsEventMessageRenderer.is_available():
+        assert rendered["message_rendering"]["status"] in {
+            "WINDOWS_ADAPTER_RENDERED",
+            "WINDOWS_ADAPTER_RENDER_FAILED",
+        }
+    else:
+        assert rendered["message_rendering"]["status"] == "WINDOWS_ADAPTER_UNAVAILABLE"
+    assert rendered["message_rendering"]["evidence_dll_loaded"] is False
+    assert rendered["message_rendering"]["message_dll_loaded"] is False
+
+
+def test_event_message_renderer_pywin32_call_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeHandle:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def Close(self) -> None:  # noqa: N802
+            return
+
+    class _FakeWin32Evtlog:
+        EvtFormatMessageEvent = 1
+        EvtFormatMessageId = 8
+
+        def __init__(self) -> None:
+            self.metadata_handle = _FakeHandle("metadata")
+            self.event_handle = _FakeHandle("event")
+            self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+        def EvtOpenPublisherMetadata(self, provider_name: str) -> object:  # noqa: N802
+            self.calls.append(("open", (provider_name,)))
+            return self.metadata_handle
+
+        def EvtFormatMessage(self, *args: object) -> str:  # noqa: N802
+            self.calls.append(("format", args))
+            metadata = args[0]
+            event = args[1]
+            flags = args[2]
+            assert metadata is self.metadata_handle
+            if flags == self.EvtFormatMessageId:
+                assert event is None
+                assert len(args) == 4
+                resource_id = args[3]
+                assert resource_id == 4624
+                return "Rendered by message id"
+            assert flags == self.EvtFormatMessageEvent
+            assert len(args) == 3
+            assert event is self.event_handle
+            return "Rendered by event handle"
+
+        def EvtClose(self, handle: object) -> None:  # noqa: N802
+            self.calls.append(("close", (handle,)))
+
+    fake_win32evtlog = _FakeWin32Evtlog()
+    real_import_module = eventlog_module.importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "win32evtlog":
+            return fake_win32evtlog
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(eventlog_module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(eventlog_module.importlib, "import_module", _import_module)
+
+    message_id_rendered = WindowsEventMessageRenderer().render(
+        provider_name="Microsoft-Windows-Security-Auditing",
+        event_id=4624,
+        locale="en-US",
+        event_data={"TargetUserName": "tester"},
+    )
+    event_handle_rendered = WindowsEventMessageRenderer().render_event_handle(
+        provider_name="Microsoft-Windows-Security-Auditing",
+        event_handle=fake_win32evtlog.event_handle,
+        locale="en-US",
+    )
+
+    assert message_id_rendered["message_rendered"] is True
+    assert message_id_rendered["message_rendering"]["render_mode"] == "MESSAGE_ID"
+    assert event_handle_rendered["message_rendered"] is True
+    assert event_handle_rendered["message_rendering"]["render_mode"] == "EVENT_HANDLE"
+    assert ("format", (fake_win32evtlog.metadata_handle, None, 8, 4624)) in (
+        fake_win32evtlog.calls
+    )
+    assert ("format", (fake_win32evtlog.metadata_handle, fake_win32evtlog.event_handle, 1)) in (
+        fake_win32evtlog.calls
+    )
+    assert ("close", (fake_win32evtlog.metadata_handle,)) in fake_win32evtlog.calls
+
+
+def test_windows_event_message_verification_tool_non_windows_boundary() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "verify_windows_event_message_renderer",
+        Path("tools/verify_windows_event_message_renderer.py"),
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    result = module.verify_latest_matching_event(
+        channel="System",
+        provider_name="Microsoft-Windows-Kernel-General",
+        event_id=12,
+        locale="en-US",
+        max_events=1,
+    )
+
+    if platform.system() == "Windows" and WindowsEventMessageRenderer.is_available():
+        assert result["message_rendering"]["status"] in {
+            "WINDOWS_ADAPTER_RENDERED",
+            "WINDOWS_ADAPTER_RENDER_FAILED",
+            "NO_MATCHING_EVENTS",
+            "WINDOWS_EVENT_QUERY_FAILED",
+        }
+    else:
+        assert result["message_rendering"]["status"] in {
+            "WINDOWS_HOST_REQUIRED",
+            "PYWIN32_UNAVAILABLE",
+        }
+    assert result["message_rendering"]["render_mode"] == "EVENT_HANDLE"
+
+
+def test_windows_event_message_verification_tool_preserves_evt_next_handle_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "verify_windows_event_message_renderer",
+        Path("tools/verify_windows_event_message_renderer.py"),
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class _FakeHandle:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def Close(self) -> None:  # noqa: N802
+            return
+
+    class _FakeWin32Evtlog:
+        EvtQueryChannelPath = 1
+        EvtQueryReverseDirection = 2
+        EvtFormatMessageEvent = 4
+
+        def __init__(self) -> None:
+            self.query_handle = _FakeHandle("query")
+            self.event_handle = _FakeHandle("event")
+            self.metadata_handle = _FakeHandle("metadata")
+            self.format_args: tuple[object, ...] | None = None
+            self.closed: list[object] = []
+
+        def EvtQuery(self, channel: str, flags: int, query: str) -> object:  # noqa: N802
+            assert channel == "System"
+            assert flags == self.EvtQueryChannelPath | self.EvtQueryReverseDirection
+            assert "Microsoft-Windows-Kernel-General" in query
+            assert "EventID=12" in query
+            return self.query_handle
+
+        def EvtNext(self, query_handle: object, count: int) -> list[object]:  # noqa: N802
+            assert query_handle is self.query_handle
+            assert count == 1
+            return [self.event_handle]
+
+        def EvtOpenPublisherMetadata(self, provider_name: str) -> object:  # noqa: N802
+            assert provider_name == "Microsoft-Windows-Kernel-General"
+            return self.metadata_handle
+
+        def EvtFormatMessage(self, *args: object) -> str:  # noqa: N802
+            self.format_args = args
+            assert args == (
+                self.metadata_handle,
+                self.event_handle,
+                self.EvtFormatMessageEvent,
+            )
+            return "Rendered event message"
+
+        def EvtClose(self, handle: object) -> None:  # noqa: N802
+            self.closed.append(handle)
+
+    fake_win32evtlog = _FakeWin32Evtlog()
+    monkeypatch.setattr(module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(eventlog_module.platform, "system", lambda: "Windows")
+    monkeypatch.setitem(sys.modules, "win32evtlog", fake_win32evtlog)
+
+    result = module.verify_latest_matching_event(
+        channel="System",
+        provider_name="Microsoft-Windows-Kernel-General",
+        event_id=12,
+        locale="en-US",
+        max_events=1,
+    )
+
+    assert result["message_rendered"] is True
+    assert result["rendered_message"] == "Rendered event message"
+    assert fake_win32evtlog.format_args == (
+        fake_win32evtlog.metadata_handle,
+        fake_win32evtlog.event_handle,
+        fake_win32evtlog.EvtFormatMessageEvent,
+    )
+    assert fake_win32evtlog.metadata_handle in fake_win32evtlog.closed
+    assert fake_win32evtlog.event_handle in fake_win32evtlog.closed
+    assert fake_win32evtlog.query_handle in fake_win32evtlog.closed
+    assert result["message_rendering"]["handle_diagnostics"]["event_handle"] == {
+        "type": "_FakeHandle",
+        "has_close": True,
+    }
 
 
 def test_windows_artifact_analysis_discovery_query_and_schema(
@@ -197,10 +502,47 @@ def test_windows_artifact_analysis_discovery_query_and_schema(
         artifact.fields.get("event_data", {}).get("TargetUserName") == "홍길동"
         for artifact in page.items
     )
+    rendered_event = next(
+        artifact
+        for artifact in page.items
+        if artifact.artifact_type is ArtifactType.EVENT_LOG_RECORD
+    )
+    assert rendered_event.fields["message_rendered"] is True
+    assert rendered_event.fields["rendered_message"] == "An account was successfully logged on."
+    assert rendered_event.fields["message_rendering"]["status"] == "SOURCE_RENDERING_INFO"
+    assert rendered_event.fields["message_rendering"]["evidence_dll_loaded"] is False
+    timezone_artifact = next(
+        artifact
+        for artifact in page.items
+        if artifact.artifact_type is ArtifactType.REGISTRY_TIMEZONE
+    )
+    assert timezone_artifact.fields["timezone_resolver"]["source"] == (
+        "WINDOWS_TIMEZONE_CANDIDATE"
+    )
+    assert timezone_artifact.fields["timezone_resolver"]["iana_candidate"] == "Asia/Seoul"
+    assert timezone_artifact.fields["timezone_resolver"]["dynamic_dst"][
+        "dynamic_daylight_time_disabled"
+    ] is False
+    assert timezone_artifact.fields["timezone_resolver"]["analyst_override"]["applied"] is False
     assert all(
         artifact.raw_locator.get("offset") is None
         for artifact in page.items
         if artifact.artifact_type is not ArtifactType.PREFETCH_EXECUTION
+    )
+    deleted_registry = [
+        artifact
+        for artifact in page.items
+        if artifact.artifact_subtype.startswith("REGISTRY_EXPORT_DELETED_")
+    ]
+    assert {artifact.artifact_subtype for artifact in deleted_registry} == {
+        "REGISTRY_EXPORT_DELETED_KEY_CANDIDATE",
+        "REGISTRY_EXPORT_DELETED_VALUE_CANDIDATE",
+    }
+    assert all(artifact.fields["deleted_candidate"] is True for artifact in deleted_registry)
+    assert all(
+        artifact.fields["deleted_candidate_provenance"]["basis"]
+        == "REG_EXPORT_DELETE_DIRECTIVE"
+        for artifact in deleted_registry
     )
     for artifact in page.items:
         schema_validator.validate_artifact(artifact.to_schema_dict())
@@ -258,6 +600,85 @@ def test_artifact_cursor_rejects_filter_mismatch(services, tmp_path: Path) -> No
                 limit=2,
             )
         )
+
+
+@pytest.mark.skipif(
+    not (
+        _distribution_available("python-registry")
+        and _distribution_available("regipy")
+    ),
+    reason="python-registry and regipy are required for binary hive replay.",
+)
+def test_registry_transaction_log_replay_runtime_fixture(
+    services,
+    tmp_path: Path,
+    schema_validator,
+) -> None:
+    evidence_dir = tmp_path / "registry-replay"
+    evidence_dir.mkdir()
+    hive_path = evidence_dir / "NTUSER.DAT"
+    primary_log = evidence_dir / "NTUSER.DAT.LOG1"
+    secondary_log = evidence_dir / "NTUSER.DAT.LOG2"
+    _decompress_fixture("transactions_NTUSER.DAT.xz", hive_path)
+    _decompress_fixture("transactions_ntuser.dat.log1.xz", primary_log)
+    _decompress_fixture("transactions_ntuser.dat.log2.xz", secondary_log)
+    original_hive_sha256 = _fixture_sha256(hive_path)
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    discovery = services.artifacts.discover_sources(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+    )
+    assert {
+        source["source_kind"]
+        for source in discovery["sources"]
+    } == {ArtifactSourceKind.REGISTRY_HIVE.value}
+
+    job, coverage = services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+    )
+    assert job.status == "SUCCEEDED"
+    assert coverage.warning_count == 0
+    assert _fixture_sha256(hive_path) == original_hive_sha256
+
+    page = services.artifacts.list_artifacts(
+        ArtifactQuery(case_id=case.case_id, evidence_id=evidence.evidence_id, limit=100)
+    )
+    original_artifacts = [
+        artifact
+        for artifact in page.items
+        if artifact.fields.get("registry_hive_view") == "ORIGINAL_HIVE"
+    ]
+    replayed_artifacts = [
+        artifact
+        for artifact in page.items
+        if artifact.fields.get("registry_hive_view") == "REPLAYED_TRANSACTION_LOG"
+    ]
+    assert original_artifacts
+    assert replayed_artifacts
+    assert {artifact.fields["registry_path"] for artifact in replayed_artifacts}
+    for artifact in replayed_artifacts:
+        provenance = artifact.fields["transaction_replay_provenance"]
+        assert provenance["status"] == "APPLIED"
+        assert provenance["adapter"] == "regipy.recovery.apply_transaction_logs"
+        assert provenance["base_hive_sha256"] == original_hive_sha256
+        assert provenance["primary_log"]["path"] == "NTUSER.DAT.LOG1"
+        assert provenance["primary_log"]["sha256"] == _fixture_sha256(primary_log)
+        assert provenance["secondary_log"]["path"] == "NTUSER.DAT.LOG2"
+        assert provenance["secondary_log"]["sha256"] == _fixture_sha256(secondary_log)
+        assert provenance["recovered_dirty_pages"] > 0
+        assert provenance["original_hive_mutated"] is False
+        assert provenance["replayed_view_separated"] is True
+        assert artifact.fields["recovered_candidate_provenance"][
+            "binary_deleted_cell_recovery"
+        ] is False
+        assert artifact.raw_locator["details"]["registry_hive_view"] == (
+            "REPLAYED_TRANSACTION_LOG"
+        )
+        schema_validator.validate_artifact(artifact.to_schema_dict())
 
 
 def test_artifact_resume_pause_cancel_and_duplicate_prevention(services, tmp_path: Path) -> None:
@@ -334,6 +755,10 @@ def test_prefetch_unsupported_version_and_mam_are_not_success(
     evidence_dir.mkdir()
     (evidence_dir / "UNKNOWN.pf").write_bytes(_prefetch_bytes(version=99))
     (evidence_dir / "COMPRESSED.pf").write_bytes(_prefetch_bytes(mam=True))
+    (evidence_dir / "VALID-MAM.pf").write_bytes(_mam_prefetch_bytes())
+    (evidence_dir / "CORRUPT-MAM.pf").write_bytes(
+        b"MAM\x04" + struct.pack("<I", 64) + b"not-a-valid-lzxpress-huffman-stream"
+    )
     case, evidence = _case_evidence_and_index(services, evidence_dir)
 
     services.artifacts.analyze_evidence(
@@ -347,7 +772,38 @@ def test_prefetch_unsupported_version_and_mam_are_not_success(
     statuses = {artifact.artifact_subtype: artifact.parse_status for artifact in page.items}
 
     assert statuses["PREFETCH_UNSUPPORTED_VERSION"] is ArtifactParseStatus.UNSUPPORTED
-    assert statuses["PREFETCH_MAM_COMPRESSED"] is ArtifactParseStatus.UNSUPPORTED
+    mam = next(
+        artifact
+        for artifact in page.items
+        if artifact.artifact_subtype == "PREFETCH_MAM_COMPRESSED"
+        and artifact.fields["mam_header"]["declared_decompressed_size"] == 128 * 1024 * 1024
+    )
+    assert mam.parse_status is ArtifactParseStatus.UNSUPPORTED
+    assert mam.fields["mam_header"]["warning_code"] == "MAM_DECLARED_SIZE_LIMIT_EXCEEDED"
+    assert mam.fields["decompressed_buffer_hash"] is None
+    valid_mam = next(
+        artifact
+        for artifact in page.items
+        if artifact.artifact_subtype == "PREFETCH_V30"
+        and artifact.fields.get("compression") == "MAM"
+    )
+    assert valid_mam.parse_status is ArtifactParseStatus.SUCCESS
+    assert valid_mam.fields["decompression_status"] == "DECOMPRESSED"
+    assert len(valid_mam.fields["decompressed_buffer_hash"]) == 64
+    assert valid_mam.fields["run_count"] == 7
+    assert valid_mam.fields["mam_header"]["supported_algorithm"] is True
+    corrupt_mam = next(
+        artifact
+        for artifact in page.items
+        if artifact.artifact_subtype == "PREFETCH_MAM_COMPRESSED"
+        and artifact.fields["mam_header"]["declared_decompressed_size"] == 64
+    )
+    expected_status = "CORRUPT" if _distribution_available("dissect.util") else (
+        "CAPABILITY_UNAVAILABLE"
+    )
+    assert corrupt_mam.fields["mam_header"]["decompression_status"] == expected_status
+    if _distribution_available("dissect.util"):
+        assert corrupt_mam.parse_status is ArtifactParseStatus.CORRUPT
 
 
 def test_cli_artifact_analyze_list_show_and_warnings(
