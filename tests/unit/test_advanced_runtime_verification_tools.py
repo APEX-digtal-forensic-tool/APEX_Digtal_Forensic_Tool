@@ -12,6 +12,19 @@ from pathlib import Path
 import pytest
 
 
+def _load_windows_host_module(project_root: Path):
+    spec = importlib.util.spec_from_file_location(
+        "verify_windows_host_runtime_test",
+        project_root / "tools" / "verify_windows_host_runtime.py",
+    )
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_windows_host_runtime_verifier_dry_run_reports_probe_matrix(project_root) -> None:
     completed = subprocess.run(
         [
@@ -39,6 +52,301 @@ def test_windows_host_runtime_verifier_dry_run_reports_probe_matrix(project_root
     assert {item["status"] for item in payload["probes"]} == {"SKIPPED_BY_REQUEST"}
     assert payload["windows_runtime_success_claimed"] is False
     assert payload["windows_host_dpapi_nss_verified"] is False
+
+
+def test_windows_host_semantic_dpapi_rejects_key_unavailable_and_passes_decrypted(
+    project_root: Path,
+) -> None:
+    module = _load_windows_host_module(project_root)
+    key_unavailable = {
+        "capability": {"runtime_status": "IMPLEMENTED_RUNTIME"},
+        "verification": {"secret_values_emitted": False},
+        "decrypt": {"status": "KEY_UNAVAILABLE", "metadata": {"plaintext_emitted": False}},
+        "local_state_decrypt": {
+            "status": "KEY_UNAVAILABLE",
+            "metadata": {"plaintext_emitted": False},
+        },
+        "chromium_decrypt": {"status": "KEY_UNAVAILABLE", "key_value_emitted": False},
+    }
+
+    status, checks = module._classify_probe_status(
+        "dpapi",
+        returncode=0,
+        child_json=key_unavailable,
+        json_error=None,
+    )
+
+    assert status == "FAILED"
+    assert "KEY_UNAVAILABLE" in checks["failure_statuses"]
+    assert module._probe_passed([{"name": "dpapi", "status": status}], "dpapi") is False
+
+    decrypted = {
+        "capability": {"runtime_status": "IMPLEMENTED_RUNTIME"},
+        "verification": {"secret_values_emitted": False},
+        "decrypt": {"status": "DECRYPTED", "metadata": {"plaintext_emitted": False}},
+        "local_state_decrypt": {
+            "status": "DECRYPTED",
+            "metadata": {"plaintext_emitted": False},
+        },
+        "chromium_decrypt": {
+            "status": "DECRYPTED",
+            "metadata": {
+                "plaintext_emitted": False,
+                "key_reference": {"raw_locator": {"value_emitted": False}},
+            },
+        },
+    }
+
+    passed, passed_checks = module._classify_probe_status(
+        "dpapi",
+        returncode=0,
+        child_json=decrypted,
+        json_error=None,
+    )
+
+    assert passed == "PASSED"
+    assert passed_checks["emitted_value_violations"] == []
+
+
+def test_windows_host_semantic_nss_rejects_unavailable_and_passes_decrypted(
+    project_root: Path,
+) -> None:
+    module = _load_windows_host_module(project_root)
+    unavailable = {
+        "capability": {"runtime_status": "CAPABILITY_UNAVAILABLE"},
+        "decrypt": [
+            {
+                "status": "CAPABILITY_UNAVAILABLE",
+                "metadata": {"secret_fields_emitted": False},
+            }
+        ],
+    }
+
+    status, checks = module._classify_probe_status(
+        "nss",
+        returncode=0,
+        child_json=unavailable,
+        json_error=None,
+    )
+
+    assert status == "CAPABILITY_UNAVAILABLE"
+    assert checks["decrypt_statuses"] == ["CAPABILITY_UNAVAILABLE"]
+
+    decrypted = {
+        "capability": {"runtime_status": "IMPLEMENTED_RUNTIME"},
+        "decrypt": [
+            {"status": "NSS_DECRYPTED", "metadata": {"secret_fields_emitted": False}},
+            {"status": "NSS_DECRYPTED", "metadata": {"secret_fields_emitted": False}},
+        ],
+    }
+
+    passed, passed_checks = module._classify_probe_status(
+        "nss",
+        returncode=0,
+        child_json=decrypted,
+        json_error=None,
+    )
+
+    assert passed == "PASSED"
+    assert passed_checks["decrypt_count"] == 2
+
+
+def test_windows_host_semantic_report_renderer_requires_html_and_pdf_completed(
+    project_root: Path,
+) -> None:
+    module = _load_windows_host_module(project_root)
+
+    passed, _ = module._classify_probe_status(
+        "report-renderers",
+        returncode=0,
+        child_json={"html": {"status": "COMPLETED"}, "pdf": {"status": "COMPLETED"}},
+        json_error=None,
+    )
+    failed, checks = module._classify_probe_status(
+        "report-renderers",
+        returncode=0,
+        child_json={
+            "html": {"status": "COMPLETED"},
+            "pdf": {"status": "CAPABILITY_UNAVAILABLE"},
+        },
+        json_error=None,
+    )
+
+    assert passed == "PASSED"
+    assert failed == "FAILED"
+    assert checks["pdf_status"] == "CAPABILITY_UNAVAILABLE"
+
+
+def test_windows_host_semantic_ocr_and_stt_do_not_pass_without_real_fixture(
+    project_root: Path,
+) -> None:
+    module = _load_windows_host_module(project_root)
+
+    ocr_unavailable, _ = module._classify_probe_status(
+        "ocr",
+        returncode=0,
+        child_json={"is_available": False, "unavailable_reason": "CAPABILITY_UNAVAILABLE"},
+        json_error=None,
+    )
+    ocr_no_fixture, _ = module._classify_probe_status(
+        "ocr",
+        returncode=0,
+        child_json={"is_available": True, "unavailable_reason": None},
+        json_error=None,
+    )
+    ocr_passed, _ = module._classify_probe_status(
+        "ocr",
+        returncode=0,
+        child_json={
+            "is_available": True,
+            "unavailable_reason": None,
+            "analysis": {
+                "status": "COMPLETED",
+                "candidate_count": 1,
+                "required_candidate_present": True,
+                "expected_text_present": True,
+            },
+        },
+        json_error=None,
+    )
+
+    stt_unavailable, _ = module._classify_probe_status(
+        "stt",
+        returncode=0,
+        child_json={
+            "capability": {
+                "is_available": False,
+                "unavailable_reason": "CAPABILITY_UNAVAILABLE",
+            },
+            "segments": None,
+            "verification": {"audio_path_supplied": False},
+        },
+        json_error=None,
+    )
+    stt_no_fixture, _ = module._classify_probe_status(
+        "stt",
+        returncode=0,
+        child_json={
+            "capability": {"is_available": True, "unavailable_reason": None},
+            "segments": None,
+            "verification": {"audio_path_supplied": False},
+        },
+        json_error=None,
+    )
+    stt_passed, _ = module._classify_probe_status(
+        "stt",
+        returncode=0,
+        child_json={
+            "capability": {"is_available": True, "unavailable_reason": None},
+            "segments": [{"text": "hello"}],
+            "verification": {
+                "audio_path_supplied": True,
+                "segment_count": 1,
+                "required_segment_present": True,
+                "expected_text_present": True,
+            },
+        },
+        json_error=None,
+    )
+
+    assert ocr_unavailable == "CAPABILITY_UNAVAILABLE"
+    assert ocr_no_fixture == "NOT_CONFIGURED"
+    assert ocr_passed == "PASSED"
+    assert stt_unavailable == "CAPABILITY_UNAVAILABLE"
+    assert stt_no_fixture == "NOT_CONFIGURED"
+    assert stt_passed == "PASSED"
+
+
+def test_windows_host_semantic_kakaotalk_and_ai_preserve_non_pass_statuses(
+    project_root: Path,
+) -> None:
+    module = _load_windows_host_module(project_root)
+
+    blocked, _ = module._classify_probe_status(
+        "kakaotalk",
+        returncode=0,
+        child_json={
+            "key_acquisition": {"status": "BLOCKED_EXTERNAL_FIXTURE"},
+            "capability": {"runtime_status": "AVAILABLE_WITH_EXTERNAL_KEY"},
+        },
+        json_error=None,
+    )
+    partial, _ = module._classify_probe_status(
+        "kakaotalk",
+        returncode=0,
+        child_json={
+            "key_acquisition": {"status": "CONFIGURED"},
+            "decrypt": {"status": "PARTIAL", "partial": True},
+            "verification": {"real_kakaotalk_fixture_verified": True},
+        },
+        json_error=None,
+    )
+    ai_not_configured, _ = module._classify_probe_status(
+        "ai-provider",
+        returncode=0,
+        child_json={
+            "verification_status": "EXTERNAL_PROVIDER_NOT_CONFIGURED",
+            "capability": {"is_available": False, "unavailable_reason": "KEY_UNAVAILABLE"},
+            "execution": {"status": "KEY_UNAVAILABLE"},
+        },
+        json_error=None,
+    )
+
+    assert blocked == "BLOCKED_EXTERNAL_FIXTURE"
+    assert partial == "PARTIAL"
+    assert ai_not_configured == "EXTERNAL_PROVIDER_NOT_CONFIGURED"
+
+
+def test_windows_host_redacts_env_names_but_child_receives_real_env(
+    project_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_windows_host_module(project_root)
+    child = tmp_path / "child_dpapi.py"
+    child.write_text(
+        """
+import json
+import os
+import sys
+
+env_name = sys.argv[sys.argv.index("--password-env") + 1]
+print(json.dumps({
+    "env_name": env_name,
+    "env_seen": os.environ.get(env_name) == "synthetic fixture password",
+    "capability": {"runtime_status": "IMPLEMENTED_RUNTIME"},
+    "verification": {"secret_values_emitted": False},
+    "decrypt": {"status": "DECRYPTED", "metadata": {"plaintext_emitted": False}},
+    "local_state_decrypt": {"status": "DECRYPTED", "metadata": {"plaintext_emitted": False}},
+    "chromium_decrypt": {
+        "status": "DECRYPTED",
+        "metadata": {
+            "plaintext_emitted": False,
+            "key_reference": {"raw_locator": {"env_name": env_name, "value_emitted": False}},
+        },
+    },
+}, ensure_ascii=False))
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APEX_TEST_DPAPI_PASSWORD", "synthetic fixture password")
+
+    result = module._run_probe(
+        module.Probe(
+            "dpapi",
+            [sys.executable, str(child), "--password-env", "APEX_TEST_DPAPI_PASSWORD"],
+        ),
+        timeout=5.0,
+        cwd=project_root,
+    )
+
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert result["status"] == "PASSED"
+    assert result["child_json"]["env_seen"] is True
+    assert result["child_json"]["env_name"] == "<env-name>"
+    assert "<env-name>" in result["command"]
+    assert "APEX_TEST_DPAPI_PASSWORD" not in serialized
+    assert "synthetic fixture password" not in serialized
 
 
 def test_windows_host_runtime_help_documents_fixture_contract(project_root) -> None:

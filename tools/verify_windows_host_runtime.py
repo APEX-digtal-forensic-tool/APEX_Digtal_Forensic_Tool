@@ -7,7 +7,7 @@ import argparse
 import json
 import os
 import platform
-import subprocess
+import subprocess  # nosec B404
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -169,7 +169,7 @@ def main() -> int:
         "host_platform": platform.platform(),
         "host_platform_status": "WINDOWS" if is_windows else "WINDOWS_HOST_REQUIRED",
         "python": args.python,
-        "secret_values_emitted": False,
+        "secret_values_emitted": False,  # nosec
         "windows_runtime_success_claimed": is_windows
         and all(_probe_passed(results, name) for name in ("dpapi", "nss")),
         "windows_host_dpapi_nss_verified": is_windows
@@ -199,11 +199,13 @@ def _probes(root: Path, python_executable: str, args: argparse.Namespace) -> lis
     _append_option(dpapi_command, "--masterkey-b64-env", args.dpapi_masterkey_b64_env)
     _append_option(dpapi_command, "--key-hex-env", args.dpapi_key_hex_env)
     _append_option(dpapi_command, "--key-b64-env", args.dpapi_key_b64_env)
+    dpapi_command.append("--require-available")
 
     nss_command = [python_executable, script("verify_nss_runtime.py")]
     _append_option(nss_command, "--root-path", args.nss_root_path)
     _append_option(nss_command, "--profile-path", args.nss_profile_path)
     _append_option(nss_command, "--primary-password-env", args.nss_primary_password_env)
+    nss_command.append("--require-available")
 
     kakaotalk_command = [python_executable, script("verify_kakaotalk_runtime.py")]
     _append_option(kakaotalk_command, "--store-path", args.kakaotalk_store_path)
@@ -229,7 +231,10 @@ def _probes(root: Path, python_executable: str, args: argparse.Namespace) -> lis
         Probe("kakaotalk", kakaotalk_command),
         Probe("ocr", [python_executable, script("verify_ocr_runtime.py")]),
         Probe("stt", [python_executable, script("verify_stt_runtime.py")]),
-        Probe("report-renderers", [python_executable, script("verify_report_renderers.py")]),
+        Probe(
+            "report-renderers",
+            [python_executable, script("verify_report_renderers.py"), "--require-pdf"],
+        ),
     ]
     ai_command = [
         python_executable,
@@ -354,8 +359,9 @@ def _skipped_probe(probe: Probe, reason: str) -> dict[str, Any]:
 
 
 def _run_probe(probe: Probe, *, timeout: float, cwd: Path) -> dict[str, Any]:
+    env_names = _secret_env_names_from_command(probe.command)
     try:
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603
             probe.command,
             cwd=cwd,
             check=False,
@@ -369,18 +375,369 @@ def _run_probe(probe: Probe, *, timeout: float, cwd: Path) -> dict[str, Any]:
             "status": "FAILED",
             "command": _redacted_command(probe.command),
             "returncode": None,
-            "stdout": _truncate(error.stdout),
-            "stderr": _truncate(error.stderr),
+            "stdout": _redact_env_names_in_text(_truncate(error.stdout), env_names),
+            "stderr": _redact_env_names_in_text(_truncate(error.stderr), env_names),
             "error_code": "TIMEOUT",
         }
-    return {
+    child_json, json_error = _parse_child_json(completed.stdout)
+    if child_json is not None:
+        child_json = _redact_env_names_in_json(child_json, env_names)
+    status, semantic_checks = _classify_probe_status(
+        probe.name,
+        returncode=completed.returncode,
+        child_json=child_json,
+        json_error=json_error,
+    )
+    result: dict[str, Any] = {
         "name": probe.name,
-        "status": "PASSED" if completed.returncode == 0 else "FAILED",
+        "status": status,
         "command": _redacted_command(probe.command),
         "returncode": completed.returncode,
-        "stdout": _truncate(completed.stdout),
-        "stderr": _truncate(completed.stderr),
+        "stdout": _redact_env_names_in_text(_truncate(completed.stdout), env_names),
+        "stderr": _redact_env_names_in_text(_truncate(completed.stderr), env_names),
+        "semantic_checks": semantic_checks,
     }
+    if child_json is not None:
+        result["child_json"] = child_json
+    if json_error is not None:
+        result["json_parse_error"] = json_error
+    return result
+
+
+def _parse_child_json(stdout: str) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        parsed = json.loads(stdout)
+    except json.JSONDecodeError as error:
+        return None, f"{error.msg} at line {error.lineno} column {error.colno}"
+    if not isinstance(parsed, dict):
+        return None, "child JSON stdout root must be an object"
+    return parsed, None
+
+
+def _classify_probe_status(
+    name: str,
+    *,
+    returncode: int,
+    child_json: dict[str, Any] | None,
+    json_error: str | None,
+) -> tuple[str, dict[str, Any]]:
+    if child_json is None:
+        return "FAILED", {
+            "json_stdout_parsed": False,
+            "json_error": json_error or "missing child JSON stdout",
+        }
+    if name == "dpapi":
+        status, checks = _classify_dpapi_probe(child_json)
+    elif name == "nss":
+        status, checks = _classify_nss_probe(child_json)
+    elif name == "report-renderers":
+        status, checks = _classify_report_renderer_probe(child_json)
+    elif name == "ocr":
+        status, checks = _classify_ocr_probe(child_json)
+    elif name == "stt":
+        status, checks = _classify_stt_probe(child_json)
+    elif name == "kakaotalk":
+        status, checks = _classify_kakaotalk_probe(child_json)
+    elif name == "ai-provider":
+        status, checks = _classify_ai_provider_probe(child_json)
+    else:
+        status = "PASSED" if returncode == 0 else "FAILED"
+        checks = {"returncode_zero": returncode == 0}
+    if status == "PASSED" and returncode != 0:
+        checks = checks | {"returncode_zero": False}
+        return "FAILED", {"json_stdout_parsed": True} | checks
+    return status, {"json_stdout_parsed": True} | checks
+
+
+def _classify_dpapi_probe(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    runtime_status = _nested_str(payload, "capability", "runtime_status")
+    decrypt_status = _nested_str(payload, "decrypt", "status")
+    local_state_status = _nested_str(payload, "local_state_decrypt", "status")
+    chromium_status = _nested_str(payload, "chromium_decrypt", "status")
+    emitted_violations = _emitted_value_violations(payload)
+    checks = {
+        "runtime_status": runtime_status,
+        "decrypt_status": decrypt_status,
+        "local_state_decrypt_status": local_state_status,
+        "chromium_decrypt_status": chromium_status,
+        "emitted_value_violations": emitted_violations,
+    }
+    if (
+        runtime_status == "IMPLEMENTED_RUNTIME"
+        and decrypt_status == "DECRYPTED"
+        and local_state_status == "DECRYPTED"
+        and chromium_status == "DECRYPTED"
+        and not emitted_violations
+    ):
+        return "PASSED", checks
+    failure_statuses = [
+        status
+        for status in (runtime_status, decrypt_status, local_state_status, chromium_status)
+        if status and status != "DECRYPTED" and status != "IMPLEMENTED_RUNTIME"
+    ]
+    checks = checks | {"failure_statuses": failure_statuses}
+    if runtime_status == "CAPABILITY_UNAVAILABLE" or "CAPABILITY_UNAVAILABLE" in failure_statuses:
+        return "CAPABILITY_UNAVAILABLE", checks
+    return "FAILED", checks
+
+
+def _classify_nss_probe(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    runtime_status = _nested_str(payload, "capability", "runtime_status")
+    decrypt = payload.get("decrypt")
+    decrypt_items = decrypt if isinstance(decrypt, list) else []
+    decrypt_statuses = [
+        str(item.get("status"))
+        for item in decrypt_items
+        if isinstance(item, dict) and item.get("status") is not None
+    ]
+    secret_field_violations = _flag_violations(payload, names={"secret_fields_emitted"})
+    plaintext_violations = _plaintext_field_violations(payload)
+    checks = {
+        "runtime_status": runtime_status,
+        "decrypt_count": len(decrypt_items),
+        "decrypt_statuses": decrypt_statuses,
+        "secret_field_violations": secret_field_violations,
+        "plaintext_field_violations": plaintext_violations,
+    }
+    if (
+        runtime_status == "IMPLEMENTED_RUNTIME"
+        and decrypt_items
+        and decrypt_statuses
+        and len(decrypt_statuses) == len(decrypt_items)
+        and all(status == "NSS_DECRYPTED" for status in decrypt_statuses)
+        and not secret_field_violations
+        and not plaintext_violations
+    ):
+        return "PASSED", checks
+    if runtime_status == "CAPABILITY_UNAVAILABLE" or any(
+        status in {"CAPABILITY_UNAVAILABLE", "NSS_CAPABILITY_UNAVAILABLE"}
+        for status in decrypt_statuses
+    ):
+        return "CAPABILITY_UNAVAILABLE", checks
+    return "FAILED", checks
+
+
+def _classify_report_renderer_probe(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    html_status = _nested_str(payload, "html", "status")
+    pdf_status = _nested_str(payload, "pdf", "status")
+    checks = {
+        "html_status": html_status,
+        "pdf_status": pdf_status,
+    }
+    if html_status == "COMPLETED" and pdf_status == "COMPLETED":
+        return "PASSED", checks
+    return "FAILED", checks
+
+
+def _classify_ocr_probe(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    analysis = payload.get("analysis")
+    analysis_status = _nested_str(payload, "analysis", "status")
+    is_available = payload.get("is_available") is True
+    unavailable_reason = str(payload.get("unavailable_reason") or "CAPABILITY_UNAVAILABLE")
+    candidate_count = _nested_int(payload, "analysis", "candidate_count")
+    required_candidate_present = _nested_bool(payload, "analysis", "required_candidate_present")
+    expected_text_present = _nested_bool(payload, "analysis", "expected_text_present")
+    checks = {
+        "is_available": is_available,
+        "unavailable_reason": None if is_available else unavailable_reason,
+        "analysis_status": analysis_status,
+        "candidate_count": candidate_count,
+        "required_candidate_present": required_candidate_present,
+        "expected_text_present": expected_text_present,
+    }
+    if not is_available:
+        return unavailable_reason, checks
+    if not isinstance(analysis, dict):
+        return "NOT_CONFIGURED", checks
+    if (
+        analysis_status == "COMPLETED"
+        and candidate_count is not None
+        and candidate_count > 0
+        and required_candidate_present is not False
+        and expected_text_present is not False
+    ):
+        return "PASSED", checks
+    if analysis_status in {"CAPABILITY_UNAVAILABLE", "NOT_CONFIGURED"}:
+        return str(analysis_status), checks
+    return "FAILED", checks
+
+
+def _classify_stt_probe(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    capability = payload.get("capability") if isinstance(payload.get("capability"), dict) else {}
+    verification = (
+        payload.get("verification") if isinstance(payload.get("verification"), dict) else {}
+    )
+    segments = payload.get("segments")
+    is_available = capability.get("is_available") is True
+    unavailable_reason = str(capability.get("unavailable_reason") or "CAPABILITY_UNAVAILABLE")
+    audio_path_supplied = verification.get("audio_path_supplied") is True
+    required_segment_present = verification.get("required_segment_present")
+    expected_text_present = verification.get("expected_text_present")
+    segment_count = verification.get("segment_count")
+    analysis_error = payload.get("analysis_error")
+    checks = {
+        "is_available": is_available,
+        "unavailable_reason": None if is_available else unavailable_reason,
+        "audio_path_supplied": audio_path_supplied,
+        "segment_count": segment_count if isinstance(segment_count, int) else None,
+        "required_segment_present": required_segment_present
+        if isinstance(required_segment_present, bool)
+        else None,
+        "expected_text_present": expected_text_present
+        if isinstance(expected_text_present, bool)
+        else None,
+    }
+    if not is_available:
+        return unavailable_reason, checks
+    if not audio_path_supplied:
+        return "NOT_CONFIGURED", checks
+    if isinstance(analysis_error, dict):
+        return str(analysis_error.get("code") or "FAILED"), checks
+    if (
+        isinstance(segments, list)
+        and segments
+        and required_segment_present is not False
+        and expected_text_present is not False
+    ):
+        return "PASSED", checks
+    return "FAILED", checks
+
+
+def _classify_kakaotalk_probe(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    key_acquisition_status = _nested_str(payload, "key_acquisition", "status")
+    decrypt_status = _nested_str(payload, "decrypt", "status")
+    decrypt_partial = _nested_bool(payload, "decrypt", "partial")
+    real_fixture_verified = _nested_bool(
+        payload,
+        "verification",
+        "real_kakaotalk_fixture_verified",
+    )
+    external_key_decrypted = _nested_bool(
+        payload,
+        "verification",
+        "external_key_contract_decrypted",
+    )
+    emitted_violations = _emitted_value_violations(payload)
+    checks = {
+        "key_acquisition_status": key_acquisition_status,
+        "decrypt_status": decrypt_status,
+        "decrypt_partial": decrypt_partial,
+        "real_kakaotalk_fixture_verified": real_fixture_verified,
+        "external_key_contract_decrypted": external_key_decrypted,
+        "emitted_value_violations": emitted_violations,
+    }
+    if (
+        decrypt_status == "KAKAOTALK_DECRYPTED"
+        and decrypt_partial is not True
+        and real_fixture_verified is True
+        and external_key_decrypted is True
+        and not emitted_violations
+    ):
+        return "PASSED", checks
+    if decrypt_status == "PARTIAL" or decrypt_partial is True:
+        return "PARTIAL", checks
+    if key_acquisition_status == "BLOCKED_EXTERNAL_FIXTURE" or real_fixture_verified is not True:
+        return "BLOCKED_EXTERNAL_FIXTURE", checks
+    return decrypt_status or "FAILED", checks
+
+
+def _classify_ai_provider_probe(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    verification_status = payload.get("verification_status")
+    capability = payload.get("capability") if isinstance(payload.get("capability"), dict) else {}
+    execution = payload.get("execution") if isinstance(payload.get("execution"), dict) else {}
+    is_available = capability.get("is_available") is True
+    unavailable_reason = capability.get("unavailable_reason")
+    execution_status = execution.get("status")
+    safe_verification_status = (
+        verification_status if isinstance(verification_status, str) else None
+    )
+    checks = {
+        "verification_status": safe_verification_status,
+        "is_available": is_available,
+        "unavailable_reason": unavailable_reason if isinstance(unavailable_reason, str) else None,
+        "execution_status": execution_status if isinstance(execution_status, str) else None,
+    }
+    if verification_status == "EXTERNAL_PROVIDER_NOT_CONFIGURED":
+        return "EXTERNAL_PROVIDER_NOT_CONFIGURED", checks
+    if not is_available:
+        return str(unavailable_reason or verification_status or "CAPABILITY_UNAVAILABLE"), checks
+    if execution_status:
+        return ("PASSED" if execution_status == "COMPLETED" else str(execution_status)), checks
+    return "PASSED", checks
+
+
+def _nested_str(payload: dict[str, Any], *path: str) -> str | None:
+    value = _nested_value(payload, *path)
+    return value if isinstance(value, str) else None
+
+
+def _nested_int(payload: dict[str, Any], *path: str) -> int | None:
+    value = _nested_value(payload, *path)
+    return value if isinstance(value, int) else None
+
+
+def _nested_bool(payload: dict[str, Any], *path: str) -> bool | None:
+    value = _nested_value(payload, *path)
+    return value if isinstance(value, bool) else None
+
+
+def _nested_value(payload: dict[str, Any], *path: str) -> Any:
+    value: Any = payload
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
+
+
+def _emitted_value_violations(payload: Any) -> list[str]:
+    return _flag_violations(payload, suffix="_emitted") + _plaintext_field_violations(payload)
+
+
+def _flag_violations(
+    payload: Any,
+    *,
+    names: set[str] | None = None,
+    suffix: str | None = None,
+) -> list[str]:
+    violations: list[str] = []
+
+    def visit(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                key_text = str(key)
+                child_path = f"{path}.{key_text}" if path else key_text
+                is_tracked_flag = (names is not None and key_text in names) or (
+                    suffix is not None and key_text.endswith(suffix)
+                )
+                if is_tracked_flag and item is not False:
+                    violations.append(child_path)
+                visit(item, child_path)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, f"{path}[{index}]")
+
+    visit(payload, "")
+    return violations
+
+
+def _plaintext_field_violations(payload: Any) -> list[str]:
+    violations: list[str] = []
+
+    def visit(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                key_text = str(key)
+                child_path = f"{path}.{key_text}" if path else key_text
+                if key_text in {"plaintext_b64", "secret_b64"}:
+                    violations.append(child_path)
+                visit(item, child_path)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, f"{path}[{index}]")
+
+    visit(payload, "")
+    return violations
 
 
 def _redacted_command(command: list[str]) -> list[str]:
@@ -395,6 +752,39 @@ def _redacted_command(command: list[str]) -> list[str]:
         if item in _SECRET_ENV_FLAGS:
             redact_next = True
     return redacted
+
+
+def _secret_env_names_from_command(command: list[str]) -> set[str]:
+    env_names: set[str] = set()
+    capture_next = False
+    for item in command:
+        if capture_next:
+            if item:
+                env_names.add(item)
+            capture_next = False
+            continue
+        if item in _SECRET_ENV_FLAGS:
+            capture_next = True
+    return env_names
+
+
+def _redact_env_names_in_text(text: str, env_names: set[str]) -> str:
+    redacted = text
+    for env_name in sorted(env_names, key=len, reverse=True):
+        redacted = redacted.replace(env_name, "<env-name>")
+    return redacted
+
+
+def _redact_env_names_in_json(value: Any, env_names: set[str]) -> Any:
+    if isinstance(value, str):
+        return _redact_env_names_in_text(value, env_names)
+    if isinstance(value, dict):
+        return {
+            str(key): _redact_env_names_in_json(item, env_names) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_env_names_in_json(item, env_names) for item in value]
+    return value
 
 
 def _truncate(value: str | bytes | None) -> str:
