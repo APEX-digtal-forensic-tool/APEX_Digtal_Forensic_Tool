@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402, I001
+
 import argparse
 import json
 from pathlib import Path
+
+from verification_common import ensure_source_tree_importable
+
+ensure_source_tree_importable(__file__)
 
 from apex_forensic.adapters.machine_extraction import (
     FasterWhisperSttProvider,

@@ -14,6 +14,57 @@ from pathlib import Path
 from typing import Any
 
 MAX_CAPTURE_CHARS = 20_000
+_SECRET_ENV_FLAGS = {
+    "--api-key-env",
+    "--dpapi-password-env",
+    "--dpapi-nt-hash-hex-env",
+    "--dpapi-nt-hash-b64-env",
+    "--dpapi-masterkey-hex-env",
+    "--dpapi-masterkey-b64-env",
+    "--dpapi-key-hex-env",
+    "--dpapi-key-b64-env",
+    "--nss-primary-password-env",
+    "--kakaotalk-pragma-key-env",
+    "--kakaotalk-user-nonce-env",
+    "--kakaotalk-db-key-hex-env",
+    "--kakaotalk-db-iv-hex-env",
+}
+
+_EPILOG = """
+Windows fixture policy:
+  Use synthetic or legally redistributable fixtures only. Do not pass paths from the
+  current user's live DPAPI, browser, Firefox, or KakaoTalk profile. Child verifiers
+  reject known live profile roots before reading fixture contents.
+
+PowerShell setup outside the repository:
+  py -3.11 -m venv "$env:TEMP\\apex-advanced-runtime-venv"
+  & "$env:TEMP\\apex-advanced-runtime-venv\\Scripts\\python.exe" -m pip install -e `
+    ".[advanced-secrets,browser-media,machine-extraction,report-renderer]"
+
+PowerShell DPAPI/NSS host smoke:
+  $py = "$env:TEMP\\apex-advanced-runtime-venv\\Scripts\\python.exe"
+  $env:APEX_DPAPI_FIXTURE_PASSWORD = "<synthetic-fixture-password>"
+  $env:APEX_NSS_PRIMARY_PASSWORD = "<synthetic-fixture-primary-password>"
+  & $py tools\\verify_windows_host_runtime.py `
+    --python $py `
+    --dpapi-input-file C:\\apex-fixtures\\dpapi\\blob.bin `
+    --dpapi-local-state-path "C:\\apex-fixtures\\dpapi\\Local State" `
+    --dpapi-decrypt-local-state-key `
+    --dpapi-sid S-1-5-21-1111111111-2222222222-3333333333-1001 `
+    --dpapi-masterkey-path C:\\apex-fixtures\\dpapi\\Protect\\masterkey.bin `
+    --dpapi-password-env APEX_DPAPI_FIXTURE_PASSWORD `
+    --nss-root-path C:\\apex-fixtures\\firefox `
+    --nss-profile-path C:\\apex-fixtures\\firefox\\Profiles\\verify.default `
+    --nss-primary-password-env APEX_NSS_PRIMARY_PASSWORD
+
+DPAPI fixture manifest fields:
+  fixture_id, source, license, sid, masterkey_path, input_file, local_state_path,
+  algorithm, expected_plaintext_sha256, expected_key_source, version.
+
+NSS fixture manifest fields:
+  fixture_id, source, license, profile_path, key4_db_path, logins_json_path,
+  primary_password_required, expected_login_count, expected_plaintext_sha256, version.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +78,9 @@ class Probe:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Verify advanced APEX runtimes on a Windows forensic host."
+        description="Verify advanced APEX runtimes on a Windows forensic host.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_EPILOG,
     )
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--timeout", type=float, default=120.0)
@@ -86,7 +139,9 @@ def main() -> int:
         "python": args.python,
         "secret_values_emitted": False,
         "windows_runtime_success_claimed": is_windows
-        and any(item["name"] == "dpapi" and item["status"] == "PASSED" for item in results),
+        and all(_probe_passed(results, name) for name in ("dpapi", "nss")),
+        "windows_host_dpapi_nss_verified": is_windows
+        and all(_probe_passed(results, name) for name in ("dpapi", "nss")),
         "probes": results,
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -133,7 +188,12 @@ def _probes(root: Path, python_executable: str, args: argparse.Namespace) -> lis
             requires_windows=True,
             fixture_configured=_dpapi_fixture_configured(args),
         ),
-        Probe("nss", nss_command, fixture_configured=_nss_fixture_configured(args)),
+        Probe(
+            "nss",
+            nss_command,
+            requires_windows=True,
+            fixture_configured=_nss_fixture_configured(args),
+        ),
         Probe("kakaotalk", kakaotalk_command),
         Probe("ocr", [python_executable, script("verify_ocr_runtime.py")]),
         Probe("stt", [python_executable, script("verify_stt_runtime.py")]),
@@ -183,6 +243,10 @@ def _ai_env_ready() -> bool:
     )
 
 
+def _probe_passed(results: list[dict[str, Any]], name: str) -> bool:
+    return any(item["name"] == name and item["status"] == "PASSED" for item in results)
+
+
 def _skipped_probe(probe: Probe, reason: str) -> dict[str, Any]:
     return {
         "name": probe.name,
@@ -229,11 +293,11 @@ def _redacted_command(command: list[str]) -> list[str]:
     redact_next = False
     for item in command:
         if redact_next:
-            redacted.append("<env-name>" if item.startswith("APEX_") else item)
+            redacted.append("<env-name>")
             redact_next = False
             continue
         redacted.append(item)
-        if item == "--api-key-env":
+        if item in _SECRET_ENV_FLAGS:
             redact_next = True
     return redacted
 

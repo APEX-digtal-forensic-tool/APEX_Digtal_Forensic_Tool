@@ -2,19 +2,63 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402, I001
+
 import argparse
 import base64
 import binascii
 import hashlib
 import json
 import os
+from pathlib import Path
+
+from verification_common import (
+    dpapi_live_profile_roots,
+    ensure_source_tree_importable,
+    fixture_path_policy,
+)
+
+ensure_source_tree_importable(__file__)
 
 from apex_forensic.adapters.decryption import DpapiExternalKeyProvider, DpapiOfflineProvider
 from apex_forensic.domain.models import SecretDerivationInput, SecretMaterial, SecretReference
 
 
+_EPILOG = """
+Fixture input contract:
+  Use a synthetic or legally redistributable offline DPAPI fixture only. Do not point
+  --masterkey-path, --local-state-path, --input-file, or --chromium-input-file at the
+  current Windows user's live profile, browser profile, cookies, credentials, or secrets.
+
+Required offline blob fixture fields:
+  --case-id, --evidence-id, --input-file, --sid, --masterkey-path, and exactly one
+  fixture credential source such as --password-env, --nt-hash-hex-env, or
+  --masterkey-hex-env. Environment variables must contain fixture secrets only.
+
+Chromium fixture fields:
+  --local-state-path may be inspected without decrypting. Add --decrypt-local-state-key
+  plus offline DPAPI key material to unwrap the Local State key. Use --chromium-input-file
+  with --key-hex-env or --key-b64-env for explicit AES-GCM secret fixtures.
+
+Windows PowerShell example:
+  $env:APEX_DPAPI_FIXTURE_PASSWORD = "<synthetic-fixture-password>"
+  py -3.11 tools\\verify_dpapi_runtime.py `
+    --input-file C:\\apex-fixtures\\dpapi\\blob.bin `
+    --local-state-path "C:\\apex-fixtures\\dpapi\\Local State" `
+    --decrypt-local-state-key `
+    --sid S-1-5-21-1111111111-2222222222-3333333333-1001 `
+    --masterkey-path C:\\apex-fixtures\\dpapi\\Protect\\masterkey.bin `
+    --password-env APEX_DPAPI_FIXTURE_PASSWORD `
+    --require-available
+"""
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify APEX offline DPAPI provider boundary.")
+    parser = argparse.ArgumentParser(
+        description="Verify APEX offline DPAPI provider boundary.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_EPILOG,
+    )
     parser.add_argument("--case-id", default="verification-case")
     parser.add_argument("--evidence-id", default="verification-evidence")
     parser.add_argument("--input-file")
@@ -40,17 +84,29 @@ def main() -> int:
     external_provider = DpapiExternalKeyProvider()
     capability = provider.capabilities().to_schema_dict()
     external_capability = external_provider.capabilities().to_schema_dict()
+    policy = fixture_path_policy(
+        {
+            "input_file": args.input_file,
+            "local_state_path": args.local_state_path,
+            "chromium_input_file": args.chromium_input_file,
+            "masterkey_path": args.masterkey_path,
+        },
+        forbidden_roots=dpapi_live_profile_roots(),
+    )
     output: dict[str, object] = {
         "capability": capability,
         "external_key_capability": external_capability,
         "verification": {
             "status": (
-                "CONFIGURED"
+                policy["status"]
+                if policy["status"] != "ACCEPTED"
+                else "CONFIGURED"
                 if _dpapi_fixture_configured(args)
                 else "EXTERNAL_FIXTURE_NOT_CONFIGURED"
             ),
             "uses_live_user_context": False,
             "requires_windows_host": False,
+            "fixture_policy": policy,
             "fixture_inputs": {
                 "input_file": bool(args.input_file),
                 "local_state_path": bool(args.local_state_path),
@@ -61,9 +117,12 @@ def main() -> int:
             "secret_values_emitted": False,
         },
     }
+    if policy["status"] != "ACCEPTED":
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+        return 1
     derivation = _dpapi_derivation(args)
     if args.input_file:
-        with open(args.input_file, "rb") as handle:
+        with Path(args.input_file).open("rb") as handle:
             blob = handle.read(64 * 1024 * 1024 + 1)
         if len(blob) > 64 * 1024 * 1024:
             output["decrypt"] = {"status": "INPUT_TOO_LARGE", "max_bytes": 64 * 1024 * 1024}
@@ -95,7 +154,7 @@ def main() -> int:
             )
             if result.status == "DECRYPTED":
                 local_state_key = result.plaintext
-        with open(args.chromium_input_file, "rb") as handle:
+        with Path(args.chromium_input_file).open("rb") as handle:
             blob = handle.read(64 * 1024 * 1024 + 1)
         if len(blob) > 64 * 1024 * 1024:
             output["chromium_decrypt"] = {

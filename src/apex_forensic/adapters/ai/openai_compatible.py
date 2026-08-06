@@ -204,6 +204,7 @@ class OpenAICompatibleProvider:
                         "developer_message": "Provider runtime metadata was captured.",
                         "latency_ms": latency_ms,
                         "usage_count": _usage_count(response.get("usage")),
+                        "token_usage": _token_usage(response.get("usage")),
                         "template_version": PROMPT_TEMPLATE_VERSION,
                     }
                 )
@@ -530,7 +531,17 @@ def _looks_sensitive(value: str) -> bool:
 
 
 def _usage_count(value: Any) -> int | None:
+    return _token_usage(value)["total_tokens"]
+
+
+def _token_usage(value: Any) -> dict[str, int | None]:
     if not isinstance(value, dict):
-        return None
+        return {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+    prompt = value.get("prompt_tokens")
+    completion = value.get("completion_tokens")
     total = value.get("total_tokens")
-    return total if isinstance(total, int) else None
+    return {
+        "prompt_tokens": prompt if isinstance(prompt, int) else None,
+        "completion_tokens": completion if isinstance(completion, int) else None,
+        "total_tokens": total if isinstance(total, int) else None,
+    }

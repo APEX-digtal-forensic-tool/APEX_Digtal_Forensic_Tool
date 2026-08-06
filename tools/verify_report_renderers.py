@@ -6,11 +6,17 @@ prints secrets or reads user evidence. PDF returns CAPABILITY_UNAVAILABLE when R
 
 from __future__ import annotations
 
+# ruff: noqa: E402, I001
+
 import argparse
 import json
 import tempfile
 from pathlib import Path
 from typing import Any
+
+from verification_common import ensure_source_tree_importable
+
+ensure_source_tree_importable(__file__)
 
 from apex_forensic.adapters.report import RuntimeReportRenderer
 from apex_forensic.config import build_services
