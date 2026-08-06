@@ -323,6 +323,27 @@ def _manifest_path(value: object, base: Path) -> str | None:
     text = _string_or_none(value)
     if text is None:
         return None
+
+    normalized = text.replace("\\", "/")
+    lowered = normalized.casefold()
+
+    relative_text: str | None = None
+    for prefix in ("/fixtures/", "c:/fixtures/"):
+        if lowered.startswith(prefix):
+            relative_text = normalized[len(prefix):]
+            break
+
+    if relative_text is not None:
+        fixture_root = base.resolve(strict=False)
+        candidate = (fixture_root / Path(relative_text)).resolve(strict=False)
+        try:
+            candidate.relative_to(fixture_root)
+        except ValueError as error:
+            raise ValueError(
+                "fixture manifest path escapes fixture root"
+            ) from error
+        return str(candidate)
+
     path = Path(text)
     if not path.is_absolute():
         path = base / path
@@ -710,7 +731,9 @@ def _flag_violations(
                 is_tracked_flag = (names is not None and key_text in names) or (
                     suffix is not None and key_text.endswith(suffix)
                 )
-                if is_tracked_flag and item is not False:
+                if is_tracked_flag and not (
+                    item is False or item == "<redacted>"
+                ):
                     violations.append(child_path)
                 visit(item, child_path)
         elif isinstance(value, list):

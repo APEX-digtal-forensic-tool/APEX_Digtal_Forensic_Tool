@@ -26,12 +26,24 @@ def _write_ocr_fixture(path: Path, text: str = "HELLO 123") -> None:
     image_font_module = pytest.importorskip("PIL.ImageFont")
     image = image_module.new("RGB", (640, 180), "white")
     draw = image_draw_module.Draw(image)
-    font = image_font_module.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 54)
+    font_candidates = (
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "arial.ttf",
+    )
+    font_path = next(
+        (candidate for candidate in font_candidates if candidate.is_file()),
+        None,
+    )
+    if font_path is None:
+        pytest.skip("a redistributable test font is unavailable on this host")
+    font = image_font_module.truetype(str(font_path), 54)
     draw.text((30, 55), text, fill="black", font=font)
     image.save(path)
 
 
 def _write_fake_whisper_cli(path: Path) -> None:
+    if os.name == "nt":
+        pytest.skip("POSIX shebang Whisper fixture is not executable on Windows")
     path.write_text(
         """#!/usr/bin/env python3
 import json
@@ -70,6 +82,8 @@ output.with_suffix(".json").write_text(
 
 
 def _write_fake_tesseract_cli(path: Path) -> None:
+    if os.name == "nt":
+        pytest.skip("POSIX shebang Tesseract fixture is not executable on Windows")
     path.write_text(
         """#!/usr/bin/env python3
 import sys

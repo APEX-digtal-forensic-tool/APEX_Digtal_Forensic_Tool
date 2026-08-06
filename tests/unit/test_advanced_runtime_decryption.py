@@ -153,8 +153,13 @@ def _write_real_nss_profile(
     library_path = ctypes.util.find_library("nss3")
     if library_path is None:
         pytest.skip("libnss3 is required for NSS runtime fixture generation")
-    profile.mkdir(parents=True, exist_ok=True)
     lib = ctypes.CDLL(library_path)
+    if not hasattr(lib, "PK11SDR_Encrypt"):
+        pytest.skip(
+            "installed NSS runtime does not export PK11SDR_Encrypt; "
+            "use a pre-generated NSS profile for decryption verification"
+        )
+    profile.mkdir(parents=True, exist_ok=True)
     _configure_test_nss_library(lib)
     config = f"sql:{profile}".encode()
     assert lib.NSS_InitReadWrite(config) == 0

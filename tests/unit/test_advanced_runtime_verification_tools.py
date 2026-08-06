@@ -642,9 +642,19 @@ def test_windows_runtime_fixture_generator_creates_nss_fixture_when_nss_is_avail
         text=True,
     )
 
-    assert generated.returncode == 0, generated.stderr
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["nss"]["status"] == "GENERATED"
+    nss_status = manifest["nss"]["status"]
+
+    if nss_status == "NSS_ENCRYPT_SYMBOL_UNAVAILABLE":
+        assert generated.returncode == 1
+        generated_payload = json.loads(generated.stdout)
+        assert generated_payload["nss_status"] == "NSS_ENCRYPT_SYMBOL_UNAVAILABLE"
+        assert generated_payload["secret_values_emitted"] is False
+        assert manifest["secret_values_emitted"] is False
+        return
+
+    assert generated.returncode == 0, generated.stderr
+    assert nss_status == "GENERATED"
     assert manifest["nss"]["primary_password_env"] == "APEX_NSS_PRIMARY_PASSWORD"
     assert manifest["nss"]["generation_method"] == "NSS_PK11SDR_ENCRYPT_SYMBOL"
     assert manifest["nss"]["profile_path_relative"] == "firefox/Profiles/verify.default"

@@ -7,6 +7,7 @@ import hashlib
 import os
 import sqlite3
 import tempfile
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -477,7 +478,9 @@ def _extract_chatlogs(plaintext: bytes, *, source_path: str) -> dict[str, Any]:
         descriptor = os.open(sqlite_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(plaintext)
-        with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True) as connection:
+        with closing(
+            sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True)
+        ) as connection:
             connection.row_factory = sqlite3.Row
             try:
                 integrity = str(connection.execute("PRAGMA integrity_check").fetchone()[0])
