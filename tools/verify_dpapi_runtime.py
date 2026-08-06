@@ -1,14 +1,15 @@
-"""Verify DPAPI provider boundary without live user-context access."""
+"""Verify offline DPAPI runtime without live user-context access."""
 
 from __future__ import annotations
 
 import argparse
 import base64
 import binascii
+import hashlib
 import json
 import os
 
-from apex_forensic.adapters.decryption import DpapiExternalKeyProvider, DpapiUnavailableProvider
+from apex_forensic.adapters.decryption import DpapiExternalKeyProvider, DpapiOfflineProvider
 from apex_forensic.domain.models import SecretDerivationInput, SecretMaterial, SecretReference
 
 
@@ -18,14 +19,24 @@ def main() -> int:
     parser.add_argument("--evidence-id", default="verification-evidence")
     parser.add_argument("--input-file")
     parser.add_argument("--local-state-path")
+    parser.add_argument("--decrypt-local-state-key", action="store_true")
     parser.add_argument("--chromium-input-file")
+    parser.add_argument("--sid")
+    parser.add_argument("--masterkey-path")
+    parser.add_argument("--password-env")
+    parser.add_argument("--nt-hash-hex-env")
+    parser.add_argument("--nt-hash-b64-env")
+    parser.add_argument("--masterkey-hex-env")
+    parser.add_argument("--masterkey-b64-env")
+    parser.add_argument("--entropy-hex-env")
+    parser.add_argument("--entropy-b64-env")
     key_group = parser.add_mutually_exclusive_group()
     key_group.add_argument("--key-hex-env")
     key_group.add_argument("--key-b64-env")
     parser.add_argument("--require-available", action="store_true")
     args = parser.parse_args()
 
-    provider = DpapiUnavailableProvider()
+    provider = DpapiOfflineProvider()
     external_provider = DpapiExternalKeyProvider()
     capability = provider.capabilities().to_schema_dict()
     external_capability = external_provider.capabilities().to_schema_dict()
@@ -33,6 +44,7 @@ def main() -> int:
         "capability": capability,
         "external_key_capability": external_capability,
     }
+    derivation = _dpapi_derivation(args)
     if args.input_file:
         with open(args.input_file, "rb") as handle:
             blob = handle.read(64 * 1024 * 1024 + 1)
@@ -40,11 +52,7 @@ def main() -> int:
             output["decrypt"] = {"status": "INPUT_TOO_LARGE", "max_bytes": 64 * 1024 * 1024}
         else:
             result = provider.decrypt_blob(
-                SecretDerivationInput(
-                    case_id=args.case_id,
-                    evidence_id=args.evidence_id,
-                    key_source_kind="EXTERNAL_OFFLINE_KEY_MATERIAL",
-                ),
+                derivation,
                 blob,
             )
             output["decrypt"] = result.to_schema_dict()
@@ -54,8 +62,22 @@ def main() -> int:
             evidence_id=args.evidence_id,
             local_state_path=args.local_state_path,
         )
+        if args.decrypt_local_state_key:
+            local_state_result = provider.decrypt_chromium_local_state_key(
+                derivation,
+                local_state_path=args.local_state_path,
+            )
+            output["local_state_decrypt"] = local_state_result.to_schema_dict()
     if args.chromium_input_file:
         key = _key_from_env(args.key_hex_env, args.key_b64_env)
+        local_state_key: bytes | None = None
+        if key is None and args.local_state_path and args.decrypt_local_state_key:
+            result = provider.decrypt_chromium_local_state_key(
+                derivation,
+                local_state_path=args.local_state_path,
+            )
+            if result.status == "DECRYPTED":
+                local_state_key = result.plaintext
         with open(args.chromium_input_file, "rb") as handle:
             blob = handle.read(64 * 1024 * 1024 + 1)
         if len(blob) > 64 * 1024 * 1024:
@@ -63,20 +85,23 @@ def main() -> int:
                 "status": "INPUT_TOO_LARGE",
                 "max_bytes": 64 * 1024 * 1024,
             }
-        elif key is None:
+        elif key is None and local_state_key is None:
             output["chromium_decrypt"] = {
                 "status": "KEY_UNAVAILABLE",
                 "key_value_emitted": False,
             }
         else:
-            derivation = SecretDerivationInput(
-                case_id=args.case_id,
-                evidence_id=args.evidence_id,
-                key_source_kind="EXTERNAL_OFFLINE_KEY_MATERIAL",
-            )
+            effective_key = key if key is not None else local_state_key
+            if effective_key is None:
+                output["chromium_decrypt"] = {
+                    "status": "KEY_UNAVAILABLE",
+                    "key_value_emitted": False,
+                }
+                print(json.dumps(output, ensure_ascii=False, indent=2))
+                return 0
             key_material = SecretMaterial(
                 reference=SecretReference(
-                    secret_id="verification-chromium-key",
+                    secret_id=f"verification-chromium-{hashlib.sha256(effective_key).hexdigest()[:16]}",
                     case_id=args.case_id,
                     evidence_id=args.evidence_id,
                     key_source_kind="EXTERNAL_OFFLINE_KEY_MATERIAL",
@@ -87,7 +112,7 @@ def main() -> int:
                         "value_emitted": False,
                     },
                 ),
-                value=key,
+                value=effective_key,
                 algorithm="AES-GCM",
             )
             output["chromium_decrypt"] = external_provider.decrypt_chromium_secret(
@@ -96,12 +121,54 @@ def main() -> int:
                 key_material,
             ).to_schema_dict()
     print(json.dumps(output, ensure_ascii=False, indent=2))
-    if args.require_available and external_capability["runtime_status"] not in {
+    if args.require_available and capability["runtime_status"] not in {
         "AVAILABLE",
         "AVAILABLE_WITH_EXTERNAL_KEY",
+        "IMPLEMENTED_RUNTIME",
+    }:
+        return 1
+    if args.chromium_input_file and external_capability["runtime_status"] not in {
+        "AVAILABLE",
+        "AVAILABLE_WITH_EXTERNAL_KEY",
+        "IMPLEMENTED_RUNTIME",
     }:
         return 1
     return 0
+
+
+def _dpapi_derivation(args: argparse.Namespace) -> SecretDerivationInput:
+    parameters: dict[str, object] = {}
+    if args.sid:
+        parameters["sid"] = args.sid
+    if args.masterkey_path:
+        parameters["masterkey_path"] = args.masterkey_path
+    for attr, parameter_name in (
+        ("password_env", "password"),
+        ("nt_hash_hex_env", "nt_hash_hex"),
+        ("nt_hash_b64_env", "nt_hash_b64"),
+        ("masterkey_hex_env", "masterkey_hex"),
+        ("masterkey_b64_env", "masterkey_b64"),
+        ("entropy_hex_env", "entropy_hex"),
+        ("entropy_b64_env", "entropy_b64"),
+    ):
+        env_name = getattr(args, attr)
+        if env_name:
+            value = os.environ.get(env_name)
+            if value is not None:
+                parameters[parameter_name] = value
+    key_source_kind = "EXTERNAL_OFFLINE_KEY_MATERIAL"
+    if args.password_env:
+        key_source_kind = "WINDOWS_USER_PASSWORD"
+    elif args.nt_hash_hex_env or args.nt_hash_b64_env:
+        key_source_kind = "WINDOWS_NT_HASH"
+    elif args.masterkey_hex_env or args.masterkey_b64_env:
+        key_source_kind = "EXTERNAL_MASTERKEY"
+    return SecretDerivationInput(
+        case_id=args.case_id,
+        evidence_id=args.evidence_id,
+        key_source_kind=key_source_kind,
+        parameters=parameters,
+    )
 
 
 def _key_from_env(hex_env: str | None, b64_env: str | None) -> bytes | None:

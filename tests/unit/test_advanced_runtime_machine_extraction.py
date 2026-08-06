@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -58,6 +61,26 @@ output.with_suffix(".json").write_text(
     ),
     encoding="utf-8",
 )
+""",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+
+
+def _write_fake_tesseract_cli(path: Path) -> None:
+    path.write_text(
+        """#!/usr/bin/env python3
+import sys
+
+if "--list-langs" in sys.argv:
+    print("List of available languages (2):")
+    print("eng")
+    print("kor")
+    raise SystemExit(0)
+
+print("level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext")
+print("5\t1\t1\t1\t1\t1\t10\t20\t100\t30\t95.0\tHELLO")
+print("5\t1\t1\t1\t1\t2\t120\t20\t100\t30\t93.0\t한글")
 """,
         encoding="utf-8",
     )
@@ -151,6 +174,92 @@ def test_whisper_adapter_timeout_and_cancellation_are_structured(
 
     assert cancelled.value.code == "OPERATION_CANCELLED"
     assert timed_out.value.code == "CAPABILITY_UNAVAILABLE"
+
+
+def test_stt_verifier_runs_configured_audio_path_with_segments(
+    tmp_path: Path,
+    project_root: Path,
+    cli_env: dict[str, str],
+) -> None:
+    executable = tmp_path / "whisper-cli"
+    model = tmp_path / "ggml-synthetic.bin"
+    audio = tmp_path / "synthetic.wav"
+    _write_fake_whisper_cli(executable)
+    model.write_bytes(b"synthetic model metadata only")
+    audio.write_bytes(b"RIFFsynthetic")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(project_root / "tools" / "verify_stt_runtime.py"),
+            "--whisper",
+            str(executable),
+            "--model-path",
+            str(model),
+            "--audio-path",
+            str(audio),
+            "--language",
+            "en",
+            "--expect-text",
+            "hello",
+            "--require-segment",
+            "--require-available",
+        ],
+        check=False,
+        capture_output=True,
+        env=cli_env,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["capability"]["is_available"] is True
+    assert payload["verification"]["segment_count"] == 1
+    assert payload["verification"]["expected_text_present"] is True
+    assert payload["segments"][0]["text"] == "hello world"
+
+
+def test_ocr_verifier_enforces_candidate_and_expected_text(
+    tmp_path: Path,
+    project_root: Path,
+    cli_env: dict[str, str],
+) -> None:
+    executable = tmp_path / "tesseract"
+    image = tmp_path / "mixed.png"
+    _write_fake_tesseract_cli(executable)
+    image.write_bytes(b"synthetic image placeholder")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(project_root / "tools" / "verify_ocr_runtime.py"),
+            "--provider",
+            "tesseract",
+            "--tesseract",
+            str(executable),
+            "--image",
+            str(image),
+            "--language",
+            "eng",
+            "--language",
+            "kor",
+            "--expect-text",
+            "한글",
+            "--require-candidate",
+            "--require-available",
+        ],
+        check=False,
+        capture_output=True,
+        env=cli_env,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["is_available"] is True
+    assert payload["analysis"]["candidate_count"] == 2
+    assert payload["analysis"]["expected_text_present"] is True
+    assert payload["analysis"]["required_candidate_present"] is True
 
 
 def test_rapidocr_provider_runs_actual_english_ocr(tmp_path: Path) -> None:

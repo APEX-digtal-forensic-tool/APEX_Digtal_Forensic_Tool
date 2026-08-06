@@ -391,11 +391,20 @@ def build_parser() -> argparse.ArgumentParser:
     secret_capability.add_argument(
         "--provider",
         default="all",
-        choices=["all", "dpapi", "dpapi-external", "nss", "kakaotalk"],
+        choices=[
+            "all",
+            "dpapi",
+            "dpapi-external",
+            "dpapi-unavailable",
+            "nss",
+            "nss-unavailable",
+            "kakaotalk",
+        ],
     )
     secret_capability.add_argument("--json", action="store_true")
     secret_decrypt_dpapi = secret_commands.add_parser("decrypt-dpapi")
     _add_secret_derivation_args(secret_decrypt_dpapi)
+    _add_dpapi_offline_key_args(secret_decrypt_dpapi)
     secret_decrypt_dpapi.add_argument("--input-file", type=Path, required=True)
     secret_decrypt_dpapi.add_argument("--json", action="store_true")
     secret_decrypt_nss = secret_commands.add_parser("decrypt-nss")
@@ -417,8 +426,15 @@ def build_parser() -> argparse.ArgumentParser:
     secret_dpapi_local_state.add_argument("--json", action="store_true")
     secret_dpapi_decrypt = secret_dpapi_commands.add_parser("decrypt-blob")
     _add_secret_derivation_args(secret_dpapi_decrypt)
+    _add_dpapi_offline_key_args(secret_dpapi_decrypt)
     secret_dpapi_decrypt.add_argument("--input-file", type=Path, required=True)
     secret_dpapi_decrypt.add_argument("--json", action="store_true")
+    secret_dpapi_local_state_decrypt = secret_dpapi_commands.add_parser("decrypt-local-state-key")
+    _add_secret_derivation_args(secret_dpapi_local_state_decrypt)
+    _add_dpapi_offline_key_args(secret_dpapi_local_state_decrypt)
+    secret_dpapi_local_state_decrypt.add_argument("--local-state-path", type=Path, required=True)
+    secret_dpapi_local_state_decrypt.add_argument("--source-revision", type=int)
+    secret_dpapi_local_state_decrypt.add_argument("--json", action="store_true")
     secret_dpapi_chromium = secret_dpapi_commands.add_parser("decrypt-chromium-secret")
     _add_secret_derivation_args(secret_dpapi_chromium)
     secret_dpapi_chromium.add_argument("--input-file", type=Path, required=True)
@@ -1322,6 +1338,19 @@ def _add_secret_derivation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--case-id", required=True)
     parser.add_argument("--evidence-id", required=True)
     parser.add_argument("--key-source-kind", default="EXTERNAL_OFFLINE_KEY_MATERIAL")
+
+
+def _add_dpapi_offline_key_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--sid")
+    parser.add_argument("--masterkey-path", type=Path)
+    parser.add_argument("--masterkey-guid")
+    parser.add_argument("--password-env")
+    parser.add_argument("--nt-hash-hex-env")
+    parser.add_argument("--nt-hash-b64-env")
+    parser.add_argument("--masterkey-hex-env")
+    parser.add_argument("--masterkey-b64-env")
+    parser.add_argument("--entropy-hex-env")
+    parser.add_argument("--entropy-b64-env")
 
 
 def _add_artifact_scope_args(parser: argparse.ArgumentParser, *, include_case: bool) -> None:

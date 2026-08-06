@@ -15,8 +15,10 @@ from typing import Any
 from apex_forensic.adapters.ai import OpenAICompatibleConfig, OpenAICompatibleProvider
 from apex_forensic.adapters.decryption import (
     DpapiExternalKeyProvider,
+    DpapiOfflineProvider,
     DpapiUnavailableProvider,
     KakaoTalkEncryptedStoreProvider,
+    NssLibProvider,
     NssUnavailableProvider,
 )
 from apex_forensic.adapters.machine_extraction import (
@@ -634,8 +636,8 @@ def _secret(args: Namespace, services: Any) -> Any:
             providers[args.provider].capabilities(),
         )
     if args.secret_command == "decrypt-dpapi":
-        derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
-        result = DpapiUnavailableProvider().decrypt_blob(
+        derivation = _dpapi_derivation_input(args, key_source_kind=args.key_source_kind)
+        result = DpapiOfflineProvider().decrypt_blob(
             derivation,
             _read_secret_runtime_file(args.input_file),
         )
@@ -649,16 +651,16 @@ def _secret(args: Namespace, services: Any) -> Any:
         derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
         return _record_decryption_results(
             services,
-            NssUnavailableProvider().decrypt_logins(
+            NssLibProvider().decrypt_logins(
                 derivation,
                 profile_path=str(args.profile_path),
                 primary_password=primary_password,
             ),
         )
     if args.secret_command == "dpapi":
-        dpapi_provider = DpapiUnavailableProvider()
+        dpapi_provider = DpapiOfflineProvider()
         if args.dpapi_command == "decrypt-blob":
-            derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+            derivation = _dpapi_derivation_input(args, key_source_kind=args.key_source_kind)
             result = dpapi_provider.decrypt_blob(
                 derivation,
                 _read_secret_runtime_file(args.input_file),
@@ -671,6 +673,14 @@ def _secret(args: Namespace, services: Any) -> Any:
                 local_state_path=str(args.local_state_path),
                 source_revision=args.source_revision,
             )
+        if args.dpapi_command == "decrypt-local-state-key":
+            derivation = _dpapi_derivation_input(args, key_source_kind=args.key_source_kind)
+            result = dpapi_provider.decrypt_chromium_local_state_key(
+                derivation,
+                local_state_path=str(args.local_state_path),
+                source_revision=args.source_revision,
+            )
+            return _record_decryption_result(services, result)
         if args.dpapi_command == "decrypt-chromium-secret":
             derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
             key_material = _secret_material_from_env(args, derivation)
@@ -689,7 +699,7 @@ def _secret(args: Namespace, services: Any) -> Any:
             )
         raise ValidationError("Unknown DPAPI command.", target="dpapi_command")
     if args.secret_command == "nss":
-        nss_provider = NssUnavailableProvider()
+        nss_provider = NssLibProvider()
         if args.nss_command == "discover-profiles":
             return nss_provider.discover_profiles(
                 case_id=args.case_id,
@@ -1489,9 +1499,11 @@ def _ai_runtime_provider(args: Namespace) -> OpenAICompatibleProvider:
 
 def _secret_runtime_providers() -> dict[str, Any]:
     return {
-        "dpapi": DpapiUnavailableProvider(),
+        "dpapi": DpapiOfflineProvider(),
         "dpapi-external": DpapiExternalKeyProvider(),
-        "nss": NssUnavailableProvider(),
+        "dpapi-unavailable": DpapiUnavailableProvider(),
+        "nss": NssLibProvider(),
+        "nss-unavailable": NssUnavailableProvider(),
         "kakaotalk": KakaoTalkEncryptedStoreProvider(),
     }
 
@@ -1504,6 +1516,51 @@ def _secret_derivation_input(args: Namespace, *, key_source_kind: str) -> Secret
         references=[],
         parameters={},
     )
+
+
+def _dpapi_derivation_input(args: Namespace, *, key_source_kind: str) -> SecretDerivationInput:
+    parameters: dict[str, Any] = {}
+    for attr, parameter_name in (
+        ("sid", "sid"),
+        ("masterkey_guid", "masterkey_guid"),
+    ):
+        value = getattr(args, attr, None)
+        if value:
+            parameters[parameter_name] = value
+    masterkey_path = getattr(args, "masterkey_path", None)
+    if masterkey_path is not None:
+        parameters["masterkey_path"] = str(masterkey_path)
+    env_mappings = (
+        ("password_env", "password"),
+        ("nt_hash_hex_env", "nt_hash_hex"),
+        ("nt_hash_b64_env", "nt_hash_b64"),
+        ("masterkey_hex_env", "masterkey_hex"),
+        ("masterkey_b64_env", "masterkey_b64"),
+        ("entropy_hex_env", "entropy_hex"),
+        ("entropy_b64_env", "entropy_b64"),
+    )
+    for attr, parameter_name in env_mappings:
+        env_name = getattr(args, attr, None)
+        if env_name is not None:
+            parameters[parameter_name] = _secret_env_value(env_name, target=attr)
+    return SecretDerivationInput(
+        case_id=args.case_id,
+        evidence_id=args.evidence_id,
+        key_source_kind=key_source_kind,
+        references=[],
+        parameters=parameters,
+    )
+
+
+def _secret_env_value(env_name: str, *, target: str) -> str:
+    value = os.environ.get(env_name)
+    if value is None:
+        raise ValidationError(
+            "Secret environment variable is not set.",
+            target=target,
+            details={"env_name": env_name},
+        )
+    return value
 
 
 def _secret_material_from_env(args: Namespace, derivation: SecretDerivationInput) -> SecretMaterial:

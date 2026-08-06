@@ -203,7 +203,7 @@ def test_secret_cli_records_decryption_audit_for_registered_case(
         == 0
     )
     output = json.loads(capsys.readouterr().out)
-    assert output["status"] == "CAPABILITY_UNAVAILABLE"
+    assert output["status"] in {"CAPABILITY_UNAVAILABLE", "CORRUPT_KEY_MATERIAL"}
 
     assert (
         main(
@@ -236,10 +236,10 @@ def test_secret_cli_records_decryption_audit_for_registered_case(
     services = build_services(db_path)
     try:
         results = services.repository.list_decryption_results(case_id=case_id)
-        assert {item["status"] for item in results} == {
-            "CAPABILITY_UNAVAILABLE",
-            "DECRYPTED",
-        }
+        assert {item["status"] for item in results} in (
+            {"CAPABILITY_UNAVAILABLE", "DECRYPTED"},
+            {"CORRUPT_KEY_MATERIAL", "DECRYPTED"},
+        )
         assert all("plaintext_b64" not in item for item in results)
     finally:
         services.close()

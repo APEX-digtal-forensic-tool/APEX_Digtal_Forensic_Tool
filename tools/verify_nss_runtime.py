@@ -1,4 +1,4 @@
-"""Verify Firefox NSS provider boundary without emitting passwords."""
+"""Verify Firefox NSS runtime without emitting passwords."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import argparse
 import json
 import os
 
-from apex_forensic.adapters.decryption import NssUnavailableProvider
+from apex_forensic.adapters.decryption import NssLibProvider
 from apex_forensic.domain.models import SecretDerivationInput
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify APEX Firefox NSS provider boundary.")
+    parser = argparse.ArgumentParser(description="Verify APEX Firefox NSS runtime.")
     parser.add_argument("--case-id", default="verification-case")
     parser.add_argument("--evidence-id", default="verification-evidence")
     parser.add_argument("--root-path")
@@ -20,7 +20,7 @@ def main() -> int:
     parser.add_argument("--require-available", action="store_true")
     args = parser.parse_args()
 
-    provider = NssUnavailableProvider()
+    provider = NssLibProvider()
     capability = provider.capabilities().to_schema_dict()
     output: dict[str, object] = {"capability": capability}
     if args.root_path:
@@ -48,7 +48,11 @@ def main() -> int:
             )
         ]
     print(json.dumps(output, ensure_ascii=False, indent=2))
-    if args.require_available and capability["runtime_status"] != "AVAILABLE":
+    if args.require_available and capability["runtime_status"] not in {
+        "AVAILABLE",
+        "AVAILABLE_WITH_EXTERNAL_KEY",
+        "IMPLEMENTED_RUNTIME",
+    }:
         return 1
     return 0
 

@@ -18,6 +18,8 @@ def main() -> int:
     parser.add_argument("--image", type=Path)
     parser.add_argument("--language", action="append", default=[])
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--expect-text")
+    parser.add_argument("--require-candidate", action="store_true")
     parser.add_argument("--require-available", action="store_true")
     args = parser.parse_args()
     provider = (
@@ -27,20 +29,31 @@ def main() -> int:
     )
     capability = provider.capabilities()
     result: dict[str, object] = capability.to_schema_dict()
+    exit_code = 0
     if args.image is not None:
         if not capability.is_available:
             result["analysis"] = {"status": "CAPABILITY_UNAVAILABLE"}
+            if args.require_candidate:
+                exit_code = 1
         else:
             rows = provider.analyze_image(args.image, languages=args.language or ["eng"])
+            flattened = " ".join(str(item.get("text", "")) for item in rows).casefold()
+            expected_present = (
+                args.expect_text is None or args.expect_text.casefold() in flattened
+            )
             result["analysis"] = {
                 "status": "COMPLETED",
                 "candidate_count": len(rows),
                 "candidates": _json_safe(rows),
+                "required_candidate_present": (not args.require_candidate) or bool(rows),
+                "expected_text_present": expected_present,
             }
+            if (args.require_candidate and not rows) or not expected_present:
+                exit_code = 1
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.require_available and not capability.is_available:
         return 1
-    return 0
+    return exit_code
 
 
 def _json_safe(value: Any) -> Any:
