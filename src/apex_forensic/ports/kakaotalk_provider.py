@@ -30,6 +30,14 @@ class KakaoTalkProviderPort(Protocol):
         store_path: str,
     ) -> dict[str, object]: ...
 
+    def acquire_key_material(
+        self,
+        *,
+        case_id: str,
+        evidence_id: str | None,
+        profile_root: str | None = None,
+    ) -> dict[str, object]: ...
+
     def decrypt_store(
         self,
         derivation_input: SecretDerivationInput,

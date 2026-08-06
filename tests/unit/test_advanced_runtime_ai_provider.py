@@ -247,6 +247,16 @@ def test_openai_compatible_provider_structured_error_boundaries(
         provider.generate_scope_summary(_request())
     assert missing_key.value.code == "KEY_UNAVAILABLE"
 
+    file_provider = OpenAICompatibleProvider(
+        OpenAICompatibleConfig(
+            provider_id="fixture-openai",
+            base_url="file:///tmp/provider.sock",
+            model="fixture-model",
+            api_key_env="APEX_TEST_AI_KEY",
+        )
+    )
+    assert file_provider.capabilities().unavailable_reason == "CAPABILITY_UNAVAILABLE"
+
     monkeypatch.setenv("APEX_TEST_AI_KEY", "secret-token-value")
     with pytest.raises(ApexError) as cancelled:
         _provider("http://127.0.0.1:1", monkeypatch).generate_scope_summary(

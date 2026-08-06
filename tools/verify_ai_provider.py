@@ -35,9 +35,21 @@ def main() -> int:
         )
     )
     capability = provider.capabilities().to_schema_dict()
-    result: dict[str, Any] = capability
-    if args.operation != "capability":
-        result = {"capability": capability}
+    result: dict[str, Any] = {
+        "capability": capability,
+        "verification_status": _verification_status(capability),
+        "secret_values_emitted": False,
+    }
+    if args.operation == "capability":
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if args.require_available and not capability["is_available"]:
+            return 1
+        return 0
+    if not capability["is_available"]:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if args.require_available:
+            return 1
+        return 0
     if args.operation == "keywords":
         result["keywords"] = provider.generate_keyword_recommendations(
             _synthetic_request("KEYWORD_RECOMMENDATION", ["RECOMMEND_KEYWORDS"])
@@ -54,6 +66,14 @@ def main() -> int:
     if args.require_available and not capability["is_available"]:
         return 1
     return 0
+
+
+def _verification_status(capability: dict[str, Any]) -> str:
+    if capability.get("is_available") is True:
+        return "NETWORK_PROVIDER_CONFIGURED"
+    if capability.get("unavailable_reason") == "KEY_UNAVAILABLE":
+        return "EXTERNAL_PROVIDER_NOT_CONFIGURED"
+    return str(capability.get("unavailable_reason") or "CAPABILITY_UNAVAILABLE")
 
 
 def _synthetic_request(purpose: str, operations: list[str]) -> AiAssistanceRequest:

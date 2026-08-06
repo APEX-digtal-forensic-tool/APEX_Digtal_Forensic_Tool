@@ -43,6 +43,23 @@ def main() -> int:
     output: dict[str, object] = {
         "capability": capability,
         "external_key_capability": external_capability,
+        "verification": {
+            "status": (
+                "CONFIGURED"
+                if _dpapi_fixture_configured(args)
+                else "EXTERNAL_FIXTURE_NOT_CONFIGURED"
+            ),
+            "uses_live_user_context": False,
+            "requires_windows_host": False,
+            "fixture_inputs": {
+                "input_file": bool(args.input_file),
+                "local_state_path": bool(args.local_state_path),
+                "chromium_input_file": bool(args.chromium_input_file),
+                "masterkey_path": bool(args.masterkey_path),
+                "sid": bool(args.sid),
+            },
+            "secret_values_emitted": False,
+        },
     }
     derivation = _dpapi_derivation(args)
     if args.input_file:
@@ -134,6 +151,15 @@ def main() -> int:
     }:
         return 1
     return 0
+
+
+def _dpapi_fixture_configured(args: argparse.Namespace) -> bool:
+    return bool(
+        args.input_file
+        or args.local_state_path
+        or args.chromium_input_file
+        or args.masterkey_path
+    )
 
 
 def _dpapi_derivation(args: argparse.Namespace) -> SecretDerivationInput:

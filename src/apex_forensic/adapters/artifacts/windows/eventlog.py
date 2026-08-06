@@ -5,11 +5,12 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import platform
-import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from defusedxml import ElementTree
 
 from apex_forensic._time import parse_timestamp
 from apex_forensic.constants import ENGINE_VERSION
@@ -423,7 +424,7 @@ class WindowsEventLogAnalyzer:
                         coverage={"record_count": len(artifacts)},
                         parse_status=ArtifactParseStatus.PARTIAL,
                     )
-        except ET.ParseError as error:
+        except ElementTree.ParseError as error:
             warnings.append(
                 issue(
                     severity="WARNING",
@@ -571,9 +572,9 @@ class WindowsEventLogAnalyzer:
 
 
 def _iter_event_xml(path: Path) -> Iterable[str]:
-    for _, element in ET.iterparse(path, events=("end",)):
+    for _, element in ElementTree.iterparse(path, events=("end",)):
         if _local_name(element.tag) == "Event":
-            yield ET.tostring(element, encoding="unicode")
+            yield ElementTree.tostring(element, encoding="unicode")
             element.clear()
 
 
@@ -586,8 +587,8 @@ def _artifact_from_event_xml(
     ordinal: int,
 ) -> ArtifactRecord:
     try:
-        element = ET.fromstring(event_xml)
-    except ET.ParseError as error:
+        element = ElementTree.fromstring(event_xml)
+    except ElementTree.ParseError as error:
         raise ValueError("invalid Event XML") from error
     if _local_name(element.tag) != "Event":
         raise ValueError("XML element is not an Event")
@@ -696,26 +697,27 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _first_child(element: ET.Element, name: str) -> ET.Element | None:
+def _first_child(element: Any, name: str) -> Any | None:
     for child in element:
         if _local_name(child.tag) == name:
             return child
     return None
 
 
-def _text(element: ET.Element | None) -> str | None:
+def _text(element: Any | None) -> str | None:
     if element is None or element.text is None:
         return None
-    return element.text
+    return str(element.text)
 
 
-def _attr(element: ET.Element | None, name: str) -> str | None:
+def _attr(element: Any | None, name: str) -> str | None:
     if element is None:
         return None
-    return element.attrib.get(name)
+    value = element.attrib.get(name)
+    return None if value is None else str(value)
 
 
-def _int_text(element: ET.Element | None) -> int | None:
+def _int_text(element: Any | None) -> int | None:
     value = _text(element)
     if value is None:
         return None
@@ -725,7 +727,7 @@ def _int_text(element: ET.Element | None) -> int | None:
         return None
 
 
-def _int_attr(element: ET.Element | None, name: str) -> int | None:
+def _int_attr(element: Any | None, name: str) -> int | None:
     value = _attr(element, name)
     if value is None:
         return None
@@ -744,7 +746,7 @@ def _parse_event_time(value: str | None) -> datetime | None:
         return None
 
 
-def _event_data(element: ET.Element) -> dict[str, Any]:
+def _event_data(element: Any) -> dict[str, Any]:
     event_data = _first_child(element, "EventData")
     if event_data is None:
         return {}
@@ -761,7 +763,7 @@ def _event_data(element: ET.Element) -> dict[str, Any]:
     return values
 
 
-def _user_data(element: ET.Element) -> dict[str, Any]:
+def _user_data(element: Any) -> dict[str, Any]:
     user_data = _first_child(element, "UserData")
     if user_data is None:
         return {}
@@ -772,7 +774,7 @@ def _user_data(element: ET.Element) -> dict[str, Any]:
 
 
 def _rendering_info_message(
-    element: ET.Element,
+    element: Any,
     *,
     provider_name: str | None,
     event_id: int | None,
@@ -932,7 +934,7 @@ def _pywin32_version() -> str | None:
         return None
 
 
-def _element_to_data(element: ET.Element) -> Any:
+def _element_to_data(element: Any) -> Any:
     children = list(element)
     if not children:
         return element.text

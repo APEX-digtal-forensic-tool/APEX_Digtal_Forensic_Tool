@@ -22,7 +22,21 @@ def main() -> int:
 
     provider = NssLibProvider()
     capability = provider.capabilities().to_schema_dict()
-    output: dict[str, object] = {"capability": capability}
+    output: dict[str, object] = {
+        "capability": capability,
+        "verification": {
+            "status": "CONFIGURED"
+            if args.root_path or args.profile_path
+            else "EXTERNAL_FIXTURE_NOT_CONFIGURED",
+            "uses_live_user_profile": False,
+            "fixture_inputs": {
+                "root_path": bool(args.root_path),
+                "profile_path": bool(args.profile_path),
+                "primary_password_env": bool(args.primary_password_env),
+            },
+            "secret_values_emitted": False,
+        },
+    }
     if args.root_path:
         output["profiles"] = provider.discover_profiles(
             case_id=args.case_id,

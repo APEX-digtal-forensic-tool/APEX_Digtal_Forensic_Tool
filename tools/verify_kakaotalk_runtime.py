@@ -15,6 +15,7 @@ def main() -> int:
     parser.add_argument("--case-id", default="verification-case")
     parser.add_argument("--evidence-id", default="verification-evidence")
     parser.add_argument("--store-path")
+    parser.add_argument("--profile-root")
     parser.add_argument("--platform", default="WINDOWS_DESKTOP")
     parser.add_argument("--application-version", default="2.0.8.990")
     parser.add_argument("--database-schema-version", default="chatLogs")
@@ -25,11 +26,19 @@ def main() -> int:
     parser.add_argument("--expect-message")
     parser.add_argument("--require-decrypted", action="store_true")
     parser.add_argument("--require-available", action="store_true")
+    parser.add_argument("--require-real-fixture", action="store_true")
     args = parser.parse_args()
 
     provider = KakaoTalkEncryptedStoreProvider()
     capability = provider.capabilities().to_schema_dict()
-    output: dict[str, object] = {"capability": capability}
+    output: dict[str, object] = {
+        "capability": capability,
+        "key_acquisition": provider.acquire_key_material(
+            case_id=args.case_id,
+            evidence_id=args.evidence_id,
+            profile_root=args.profile_root,
+        ),
+    }
     if args.store_path:
         output["inspect"] = provider.inspect_store(
             case_id=args.case_id,
@@ -62,11 +71,17 @@ def main() -> int:
         messages = output["decrypt"]["metadata"].get("messages", [])  # type: ignore[index]
         flattened = " ".join(str(item.get("message_preview", "")) for item in messages)
         output["verification"] = {
-            "decrypted": output["decrypt"]["status"] == "KAKAOTALK_DECRYPTED",  # type: ignore[index]
+            "external_key_contract_decrypted": (
+                output["decrypt"]["status"] == "KAKAOTALK_DECRYPTED"  # type: ignore[index]
+            ),
             "message_count": len(messages),
             "expected_message_present": (
                 args.expect_message is None or args.expect_message in flattened
             ),
+            "real_kakaotalk_fixture_verified": output["decrypt"]["metadata"].get(  # type: ignore[index]
+                "real_kakaotalk_fixture_verified"
+            )
+            is True,
         }
     print(json.dumps(output, ensure_ascii=False, indent=2))
     if args.require_available and capability["runtime_status"] not in {
@@ -76,7 +91,13 @@ def main() -> int:
         return 1
     if args.require_decrypted:
         verification = output.get("verification", {})
-        if not verification.get("decrypted") or not verification.get("expected_message_present"):
+        if not verification.get("external_key_contract_decrypted") or not verification.get(
+            "expected_message_present"
+        ):
+            return 1
+    if args.require_real_fixture:
+        verification = output.get("verification", {})
+        if not verification.get("real_kakaotalk_fixture_verified"):
             return 1
     return 0
 

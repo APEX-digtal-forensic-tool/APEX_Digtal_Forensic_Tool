@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, ClassVar
@@ -222,27 +221,71 @@ class OpenAICompatibleProvider:
                 details={"api_key_env": self._config.api_key_env},
             )
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        url = _chat_completions_url(self._config.base_url)
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+            raise AiAssistanceError(
+                "CAPABILITY_UNAVAILABLE",
+                "AI provider endpoint must be an HTTP or HTTPS URL.",
+                target="base_url",
+            )
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
         headers = {
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-        request = urllib.request.Request(
-            _chat_completions_url(self._config.base_url),
-            data=data,
-            headers=headers,
-            method="POST",
-        )
         attempts = 2
         for attempt in range(attempts):
+            connection: http.client.HTTPConnection | None = None
             try:
-                with urllib.request.urlopen(request, timeout=self._config.timeout) as response:
-                    payload = response.read(MAX_PROVIDER_RESPONSE_BYTES + 1)
+                connection = (
+                    http.client.HTTPSConnection(
+                        parsed.hostname,
+                        parsed.port,
+                        timeout=self._config.timeout,
+                    )
+                    if parsed.scheme == "https"
+                    else http.client.HTTPConnection(
+                        parsed.hostname,
+                        parsed.port,
+                        timeout=self._config.timeout,
+                    )
+                )
+                connection.request("POST", path, body=data, headers=headers)
+                response = connection.getresponse()
+                payload = response.read(MAX_PROVIDER_RESPONSE_BYTES + 1)
                 if len(payload) > MAX_PROVIDER_RESPONSE_BYTES:
                     raise AiAssistanceError(
                         "AI_PROVIDER_RESPONSE_TOO_LARGE",
                         "AI provider response exceeded the maximum size.",
                         target="provider_response",
+                    )
+                if response.status == 401:
+                    raise AiAssistanceError(
+                        "AUTHENTICATION_FAILED",
+                        "AI provider authentication failed.",
+                        target="provider",
+                    )
+                if response.status == 429:
+                    raise AiAssistanceError(
+                        "RATE_LIMITED",
+                        "AI provider reported a rate limit.",
+                        target="provider",
+                        retryable=True,
+                    )
+                if response.status >= 500 and attempt + 1 < attempts:
+                    time.sleep(0.1)
+                    continue
+                if response.status >= 400:
+                    raise AiAssistanceError(
+                        "AI_PROVIDER_FAILED",
+                        "AI provider request failed.",
+                        target="provider",
+                        retryable=response.status >= 500,
+                        details={"status_code": response.status},
                     )
                 parsed = json.loads(payload.decode("utf-8"))
                 return _require_mapping(parsed, target="provider_response")
@@ -253,31 +296,7 @@ class OpenAICompatibleProvider:
                     target="provider",
                     retryable=True,
                 ) from error
-            except urllib.error.HTTPError as error:
-                if error.code == 401:
-                    raise AiAssistanceError(
-                        "AUTHENTICATION_FAILED",
-                        "AI provider authentication failed.",
-                        target="provider",
-                    ) from error
-                if error.code == 429:
-                    raise AiAssistanceError(
-                        "RATE_LIMITED",
-                        "AI provider reported a rate limit.",
-                        target="provider",
-                        retryable=True,
-                    ) from error
-                if error.code >= 500 and attempt + 1 < attempts:
-                    time.sleep(0.1)
-                    continue
-                raise AiAssistanceError(
-                    "AI_PROVIDER_FAILED",
-                    "AI provider request failed.",
-                    target="provider",
-                    retryable=error.code >= 500,
-                    details={"status_code": error.code},
-                ) from error
-            except urllib.error.URLError as error:
+            except (OSError, http.client.HTTPException) as error:
                 raise AiAssistanceError(
                     "CAPABILITY_UNAVAILABLE",
                     "AI provider host is unavailable.",
@@ -290,6 +309,9 @@ class OpenAICompatibleProvider:
                     "AI provider returned invalid JSON.",
                     target="provider_response",
                 ) from error
+            finally:
+                if connection is not None:
+                    connection.close()
         raise AiAssistanceError("AI_PROVIDER_FAILED", "AI provider request failed.")
 
     def _with_metadata(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -354,7 +376,13 @@ class OpenAICompatibleProvider:
 
     def _unavailable_reason(self) -> str | None:
         parsed = urlparse(self._config.base_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             return "CAPABILITY_UNAVAILABLE"
         if not self._config.model:
             return "CAPABILITY_UNAVAILABLE"
