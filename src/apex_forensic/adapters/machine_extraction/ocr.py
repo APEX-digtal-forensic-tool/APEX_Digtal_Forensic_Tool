@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib
 import importlib.util
 import shutil
@@ -98,6 +99,7 @@ class RapidOcrProvider:
         started = datetime.now().astimezone()
         output = engine(str(resolved))
         rows = _rapidocr_rows(output, "+".join(languages or ["auto"]), started)
+        _attach_source_hash(rows, resolved)
         return rows
 
     def _rapidocr_engine(self) -> Any:
@@ -113,8 +115,15 @@ class TesseractCliOcrProvider:
     provider_id = "tesseract-cli"
     provider_version = ENGINE_VERSION
 
-    def __init__(self, *, executable: str = "tesseract", timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        *,
+        executable: str = "tesseract",
+        tessdata_prefix: Path | None = None,
+        timeout: float = 30.0,
+    ) -> None:
         self._executable = executable
+        self._tessdata_prefix = tessdata_prefix
         self._timeout = timeout
 
     def capabilities(self) -> ProviderCapability:
@@ -140,6 +149,9 @@ class TesseractCliOcrProvider:
             metadata={
                 "candidate_is_observed_fact": False,
                 "binary": executable,
+                "tessdata_prefix": None
+                if self._tessdata_prefix is None
+                else str(self._tessdata_prefix.resolve()),
                 "languages": self._languages(executable),
             },
             updated_at=utc_now(),
@@ -170,8 +182,21 @@ class TesseractCliOcrProvider:
                 target="path",
             )
         lang_arg = "+".join(languages or ["eng"])
+        command = [
+            executable,
+            str(resolved),
+            "stdout",
+            "-l",
+            lang_arg,
+            "--psm",
+            "6",
+            "-c",
+            "tessedit_create_tsv=1",
+        ]
+        if self._tessdata_prefix is not None:
+            command.extend(["--tessdata-dir", str(self._tessdata_prefix.resolve())])
         completed = subprocess.run(
-            [executable, str(resolved), "stdout", "-l", lang_arg, "--psm", "6", "tsv"],
+            command,
             check=False,
             capture_output=True,
             timeout=self._timeout,
@@ -184,14 +209,19 @@ class TesseractCliOcrProvider:
                 target="ocr_provider",
                 required_capability="OCR_RUNTIME",
             )
-        return _parse_tsv(completed.stdout.decode("utf-8", errors="replace"), lang_arg)
+        rows = _parse_tsv(completed.stdout.decode("utf-8", errors="replace"), lang_arg)
+        _attach_source_hash(rows, resolved)
+        return rows
 
     def _languages(self, executable: str | None) -> list[str]:
         if executable is None:
             return []
         try:
+            command = [executable, "--list-langs"]
+            if self._tessdata_prefix is not None:
+                command.extend(["--tessdata-dir", str(self._tessdata_prefix.resolve())])
             completed = subprocess.run(
-                [executable, "--list-langs"],
+                command,
                 check=False,
                 capture_output=True,
                 timeout=5,
@@ -303,6 +333,20 @@ def _int(value: str | None) -> int | None:
         return int(value or "")
     except ValueError:
         return None
+
+
+def _attach_source_hash(rows: list[dict[str, Any]], path: Path) -> None:
+    source_sha256 = _file_sha256(path)
+    for row in rows:
+        row["source_sha256"] = source_sha256
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _sequence_attr(output: Any, name: str) -> tuple[Any, ...]:

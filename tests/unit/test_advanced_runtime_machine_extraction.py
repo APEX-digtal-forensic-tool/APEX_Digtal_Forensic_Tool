@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from apex_forensic.adapters.machine_extraction import (
+    FasterWhisperSttProvider,
     RapidOcrProvider,
     TesseractCliOcrProvider,
     WhisperCppCliSttProvider,
@@ -108,6 +110,18 @@ def test_whisper_stt_capability_unavailable_is_structured(tmp_path: Path) -> Non
     assert capability.is_available is False
     assert capability.unavailable_reason == "CAPABILITY_UNAVAILABLE"
     assert {warning["code"] for warning in capability.warnings} == {"CAPABILITY_UNAVAILABLE"}
+    with pytest.raises(ApexError) as unavailable:
+        provider.analyze_audio(tmp_path / "missing.wav")
+    assert unavailable.value.code == "CAPABILITY_UNAVAILABLE"
+
+
+def test_faster_whisper_stt_capability_unavailable_is_structured(tmp_path: Path) -> None:
+    provider = FasterWhisperSttProvider(model_path=tmp_path / "missing-model")
+    capability = provider.capabilities()
+
+    assert capability.is_available is False
+    assert capability.unavailable_reason == "CAPABILITY_UNAVAILABLE"
+    assert capability.metadata["model_auto_download"] is False
     with pytest.raises(ApexError) as unavailable:
         provider.analyze_audio(tmp_path / "missing.wav")
     assert unavailable.value.code == "CAPABILITY_UNAVAILABLE"
@@ -219,6 +233,54 @@ def test_stt_verifier_runs_configured_audio_path_with_segments(
     assert payload["segments"][0]["text"] == "hello world"
 
 
+def test_stt_verifier_runs_real_faster_whisper_when_env_supplies_model_and_audio(
+    project_root: Path,
+    cli_env: dict[str, str],
+) -> None:
+    model_path = os.environ.get("APEX_STT_FAST_MODEL_PATH")
+    english_audio = os.environ.get("APEX_STT_ENGLISH_AUDIO_PATH")
+    korean_audio = os.environ.get("APEX_STT_KOREAN_AUDIO_PATH")
+    if not model_path or not english_audio or not korean_audio:
+        pytest.skip(
+            "Set APEX_STT_FAST_MODEL_PATH, APEX_STT_ENGLISH_AUDIO_PATH, and "
+            "APEX_STT_KOREAN_AUDIO_PATH for real faster-whisper validation."
+        )
+    for language, audio_path, expected_text in (
+        ("en", english_audio, os.environ.get("APEX_STT_ENGLISH_EXPECT_TEXT")),
+        ("ko", korean_audio, os.environ.get("APEX_STT_KOREAN_EXPECT_TEXT")),
+    ):
+        command = [
+            sys.executable,
+            str(project_root / "tools" / "verify_stt_runtime.py"),
+            "--provider",
+            "faster-whisper",
+            "--model-path",
+            model_path,
+            "--audio-path",
+            audio_path,
+            "--language",
+            language,
+            "--require-segment",
+            "--require-available",
+        ]
+        if expected_text:
+            command.extend(["--expect-text", expected_text])
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            env=cli_env,
+            text=True,
+        )
+
+        assert completed.returncode == 0, completed.stderr
+        payload = json.loads(completed.stdout)
+        assert payload["capability"]["is_available"] is True
+        assert payload["verification"]["segment_count"] >= 1
+        if expected_text:
+            assert payload["verification"]["expected_text_present"] is True
+
+
 def test_ocr_verifier_enforces_candidate_and_expected_text(
     tmp_path: Path,
     project_root: Path,
@@ -260,6 +322,59 @@ def test_ocr_verifier_enforces_candidate_and_expected_text(
     assert payload["analysis"]["candidate_count"] == 2
     assert payload["analysis"]["expected_text_present"] is True
     assert payload["analysis"]["required_candidate_present"] is True
+
+
+def test_ocr_verifier_runs_real_korean_and_mixed_tesseract_when_env_supplies_fixtures(
+    project_root: Path,
+    cli_env: dict[str, str],
+) -> None:
+    executable = os.environ.get("APEX_OCR_TESSERACT")
+    tessdata_prefix = os.environ.get("APEX_OCR_TESSDATA_PREFIX")
+    korean_image = os.environ.get("APEX_OCR_KOREAN_IMAGE_PATH")
+    mixed_image = os.environ.get("APEX_OCR_MIXED_IMAGE_PATH")
+    if not executable or not tessdata_prefix or not korean_image or not mixed_image:
+        pytest.skip(
+            "Set APEX_OCR_TESSERACT, APEX_OCR_TESSDATA_PREFIX, "
+            "APEX_OCR_KOREAN_IMAGE_PATH, and APEX_OCR_MIXED_IMAGE_PATH for real Korean OCR."
+        )
+    for image_path, expected_text in (
+        (korean_image, os.environ.get("APEX_OCR_KOREAN_EXPECT_TEXT")),
+        (mixed_image, os.environ.get("APEX_OCR_MIXED_EXPECT_TEXT")),
+    ):
+        command = [
+            sys.executable,
+            str(project_root / "tools" / "verify_ocr_runtime.py"),
+            "--provider",
+            "tesseract",
+            "--tesseract",
+            executable,
+            "--tessdata-prefix",
+            tessdata_prefix,
+            "--image",
+            image_path,
+            "--language",
+            "eng",
+            "--language",
+            "kor",
+            "--require-candidate",
+            "--require-available",
+        ]
+        if expected_text:
+            command.extend(["--expect-text", expected_text])
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            env=cli_env,
+            text=True,
+        )
+
+        assert completed.returncode == 0, completed.stderr
+        payload = json.loads(completed.stdout)
+        assert payload["is_available"] is True
+        assert payload["analysis"]["candidate_count"] >= 1
+        if expected_text:
+            assert payload["analysis"]["expected_text_present"] is True
 
 
 def test_rapidocr_provider_runs_actual_english_ocr(tmp_path: Path) -> None:

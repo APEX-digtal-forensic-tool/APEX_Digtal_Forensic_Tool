@@ -372,6 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     machine_ocr_analyze.add_argument("--language", action="append", default=[])
     machine_ocr_analyze.add_argument("--tesseract", default="tesseract")
+    machine_ocr_analyze.add_argument("--tessdata-prefix", type=Path)
     machine_ocr_analyze.add_argument("--timeout", type=float, default=30.0)
     machine_ocr_analyze.add_argument("--json", action="store_true")
 
@@ -379,9 +380,16 @@ def build_parser() -> argparse.ArgumentParser:
     machine_stt_commands = machine_stt.add_subparsers(dest="stt_command", required=True)
     machine_stt_analyze = machine_stt_commands.add_parser("analyze")
     _add_machine_source_args(machine_stt_analyze)
+    machine_stt_analyze.add_argument(
+        "--provider",
+        default="whisper-cpp",
+        choices=["whisper-cpp", "faster-whisper"],
+    )
     machine_stt_analyze.add_argument("--language")
     machine_stt_analyze.add_argument("--whisper", default="whisper-cli")
     machine_stt_analyze.add_argument("--model-path", type=Path)
+    machine_stt_analyze.add_argument("--device", default="cpu")
+    machine_stt_analyze.add_argument("--compute-type", default="int8")
     machine_stt_analyze.add_argument("--timeout", type=float, default=120.0)
     machine_stt_analyze.add_argument("--json", action="store_true")
 
@@ -468,6 +476,13 @@ def build_parser() -> argparse.ArgumentParser:
     secret_kakao_decrypt = secret_kakao_commands.add_parser("decrypt-store")
     _add_secret_derivation_args(secret_kakao_decrypt)
     secret_kakao_decrypt.add_argument("--path", type=Path, required=True)
+    secret_kakao_decrypt.add_argument("--platform", default="WINDOWS_DESKTOP")
+    secret_kakao_decrypt.add_argument("--application-version", default="2.0.8.990")
+    secret_kakao_decrypt.add_argument("--database-schema-version", default="chatLogs")
+    secret_kakao_decrypt.add_argument("--pragma-key-env")
+    secret_kakao_decrypt.add_argument("--user-nonce-env")
+    secret_kakao_decrypt.add_argument("--db-key-hex-env")
+    secret_kakao_decrypt.add_argument("--db-iv-hex-env")
     secret_kakao_decrypt.add_argument("--json", action="store_true")
 
     candidate_parser = subcommands.add_parser(

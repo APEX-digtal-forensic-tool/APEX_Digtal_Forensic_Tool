@@ -13,6 +13,8 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from cryptography.hazmat.primitives import padding as crypto_padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from apex_forensic.adapters.decryption import (
     DpapiExternalKeyProvider,
@@ -57,6 +59,78 @@ def _write_synthetic_nss_profile(profile: Path, *, logins_version: int = 3) -> N
         ),
         encoding="utf-8",
     )
+
+
+def _write_synthetic_kakaotalk_windows_fixture(tmp_path: Path) -> dict[str, object]:
+    plaintext_db = tmp_path / "chatLogs_plain.sqlite"
+    with sqlite3.connect(plaintext_db) as connection:
+        connection.execute(
+            """
+            CREATE TABLE chatLogs (
+                logId INTEGER PRIMARY KEY,
+                authorId TEXT,
+                type INTEGER,
+                sentAt INTEGER,
+                message TEXT,
+                attachment TEXT,
+                deleted INTEGER
+            )
+            """
+        )
+        connection.executemany(
+            """
+            INSERT INTO chatLogs (
+                logId, authorId, type, sentAt, message, attachment, deleted
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    1001,
+                    "alice",
+                    1,
+                    1_700_000_001,
+                    "안녕하세요 hello forensic",
+                    None,
+                    0,
+                ),
+                (
+                    1002,
+                    "bob",
+                    18,
+                    1_700_000_002,
+                    "첨부 파일",
+                    "https://example.invalid/download?token=secret",
+                    1,
+                ),
+            ],
+        )
+    pragma_key = base64.b64encode(hashlib.sha512(b"apex-kakao-pragma").digest()).decode(
+        "ascii"
+    )
+    user_nonce = "1234567890"
+    key, iv = _kakao_key_iv(pragma_key, user_nonce)
+    plaintext = plaintext_db.read_bytes()
+    padder = crypto_padding.PKCS7(128).padder()
+    padded = padder.update(plaintext) + padder.finalize()
+    encryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).encryptor()
+    encrypted = encryptor.update(padded) + encryptor.finalize()
+    encrypted_db = tmp_path / "chatLogs_42.edb"
+    encrypted_db.write_bytes(encrypted)
+    return {
+        "store": encrypted_db,
+        "pragma_key": pragma_key,
+        "user_nonce": user_nonce,
+        "plaintext": plaintext,
+        "message": "안녕하세요 hello forensic",
+    }
+
+
+def _kakao_key_iv(pragma_key: str, user_nonce: str) -> tuple[bytes, bytes]:
+    seed = (pragma_key + user_nonce).encode("utf-8")
+    material = (seed * ((512 // len(seed)) + 1))[:512]
+    key = hashlib.md5(material, usedforsecurity=False).digest()
+    iv = hashlib.md5(base64.b64encode(key), usedforsecurity=False).digest()
+    return key, iv
 
 
 class _TestSECItem(ctypes.Structure):
@@ -1061,13 +1135,131 @@ def test_kakaotalk_provider_hashes_store_and_requires_key(tmp_path: Path) -> Non
     )
     result = provider.decrypt_store(_derivation(), store_path=str(store)).to_schema_dict()
 
-    assert capability["runtime_status"] == "KEY_UNAVAILABLE"
+    assert capability["runtime_status"] == "AVAILABLE_WITH_EXTERNAL_KEY"
     assert inspected["status"] == "KEY_UNAVAILABLE"
     assert inspected["raw_store_emitted"] is False
     assert result["status"] == "KEY_UNAVAILABLE"
     assert result["metadata"]["store_length"] == len(b"encrypted-kakao-fixture-with-token=secret")
     assert "plaintext_b64" not in result
     assert "token=secret" not in str(result)
+
+
+def test_kakaotalk_provider_decrypts_supported_windows_208_fixture(
+    tmp_path: Path,
+    schema_validator,
+) -> None:
+    fixture = _write_synthetic_kakaotalk_windows_fixture(tmp_path)
+    provider = KakaoTalkEncryptedStoreProvider()
+    derivation = SecretDerivationInput(
+        case_id="case-1",
+        evidence_id="ev-1",
+        key_source_kind="KAKAOTALK_KPRAGMA_AND_SERVER_NONCE",
+        parameters={
+            "platform": "WINDOWS_DESKTOP",
+            "application_version": "2.0.8.990",
+            "database_schema_version": "chatLogs",
+            "pragma_key": fixture["pragma_key"],
+            "user_nonce": fixture["user_nonce"],
+        },
+    )
+
+    result = provider.decrypt_store(derivation, store_path=str(fixture["store"]))
+    schema = result.to_schema_dict()
+
+    assert result.status == "KAKAOTALK_DECRYPTED"
+    assert result.plaintext == fixture["plaintext"]
+    assert schema["status"] == "KAKAOTALK_DECRYPTED"
+    assert schema["content_sha256"] == hashlib.sha256(fixture["plaintext"]).hexdigest()
+    assert schema["metadata"]["message_count"] == 2
+    assert schema["metadata"]["sqlite_integrity_check"] == "ok"
+    assert schema["metadata"]["messages"][0]["message_preview"] == fixture["message"]
+    assert schema["metadata"]["messages"][1]["attachment_present"] is True
+    assert schema["metadata"]["messages"][1]["deleted_candidate"] is True
+    assert schema["metadata"]["search_projection_ready"] is True
+    assert schema["metadata"]["timeline_projection_ready"] is True
+    assert schema["citations"]
+    assert "plaintext_b64" not in schema
+    assert "token=secret" not in str(schema)
+    schema_validator.validate("decryption-result.schema.json", schema)
+
+
+def test_kakaotalk_provider_rejects_wrong_key_and_unsupported_version(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_synthetic_kakaotalk_windows_fixture(tmp_path)
+    provider = KakaoTalkEncryptedStoreProvider()
+    wrong_key = SecretDerivationInput(
+        case_id="case-1",
+        evidence_id="ev-1",
+        key_source_kind="KAKAOTALK_KPRAGMA_AND_SERVER_NONCE",
+        parameters={
+            "platform": "WINDOWS_DESKTOP",
+            "application_version": "2.0.8.990",
+            "database_schema_version": "chatLogs",
+            "pragma_key": fixture["pragma_key"],
+            "user_nonce": "wrong",
+        },
+    )
+    unsupported = SecretDerivationInput(
+        case_id="case-1",
+        evidence_id="ev-1",
+        key_source_kind="KAKAOTALK_KPRAGMA_AND_SERVER_NONCE",
+        parameters={
+            "platform": "WINDOWS_DESKTOP",
+            "application_version": "3.0.0.0",
+            "database_schema_version": "chatLogs",
+            "pragma_key": fixture["pragma_key"],
+            "user_nonce": fixture["user_nonce"],
+        },
+    )
+
+    wrong_result = provider.decrypt_store(wrong_key, store_path=str(fixture["store"]))
+    unsupported_result = provider.decrypt_store(unsupported, store_path=str(fixture["store"]))
+
+    assert wrong_result.status == "AUTHENTICATION_FAILED"
+    assert wrong_result.plaintext is None
+    assert unsupported_result.status == "UNSUPPORTED_VERSION"
+    assert unsupported_result.plaintext is None
+
+
+def test_kakaotalk_verifier_requires_decrypted_supported_fixture(
+    tmp_path: Path,
+    project_root: Path,
+    cli_env: dict[str, str],
+) -> None:
+    fixture = _write_synthetic_kakaotalk_windows_fixture(tmp_path)
+    cli_env = {
+        **cli_env,
+        "APEX_KAKAO_PRAGMA_KEY": str(fixture["pragma_key"]),
+        "APEX_KAKAO_USER_NONCE": str(fixture["user_nonce"]),
+    }
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(project_root / "tools" / "verify_kakaotalk_runtime.py"),
+            "--store-path",
+            str(fixture["store"]),
+            "--pragma-key-env",
+            "APEX_KAKAO_PRAGMA_KEY",
+            "--user-nonce-env",
+            "APEX_KAKAO_USER_NONCE",
+            "--expect-message",
+            str(fixture["message"]),
+            "--require-decrypted",
+            "--require-available",
+        ],
+        check=False,
+        capture_output=True,
+        env=cli_env,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["decrypt"]["status"] == "KAKAOTALK_DECRYPTED"
+    assert payload["verification"]["message_count"] == 2
+    assert payload["verification"]["expected_message_present"] is True
 
 
 def test_secret_provider_and_decryption_schemas_validate_runtime_boundaries(

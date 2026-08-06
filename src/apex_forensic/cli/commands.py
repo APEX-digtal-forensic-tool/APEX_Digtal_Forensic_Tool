@@ -22,6 +22,7 @@ from apex_forensic.adapters.decryption import (
     NssUnavailableProvider,
 )
 from apex_forensic.adapters.machine_extraction import (
+    FasterWhisperSttProvider,
     RapidOcrProvider,
     TesseractCliOcrProvider,
     WhisperCppCliSttProvider,
@@ -592,7 +593,11 @@ def _machine(args: Namespace, services: Any) -> Any:
         ocr_provider = (
             RapidOcrProvider(timeout=args.timeout)
             if args.provider == "rapidocr"
-            else TesseractCliOcrProvider(executable=args.tesseract, timeout=args.timeout)
+            else TesseractCliOcrProvider(
+                executable=args.tesseract,
+                tessdata_prefix=args.tessdata_prefix,
+                timeout=args.timeout,
+            )
         )
         rows = services.candidates.analyze_image_file(
             case_id=args.case_id,
@@ -605,10 +610,19 @@ def _machine(args: Namespace, services: Any) -> Any:
         )
         return [row.to_schema_dict() for row in rows]
     if args.machine_command == "stt" and args.stt_command == "analyze":
-        stt_provider = WhisperCppCliSttProvider(
-            executable=args.whisper,
-            model_path=args.model_path,
-            timeout=args.timeout,
+        stt_provider = (
+            FasterWhisperSttProvider(
+                model_path=args.model_path,
+                device=args.device,
+                compute_type=args.compute_type,
+                timeout=args.timeout,
+            )
+            if args.provider == "faster-whisper"
+            else WhisperCppCliSttProvider(
+                executable=args.whisper,
+                model_path=args.model_path,
+                timeout=args.timeout,
+            )
         )
         rows = services.candidates.analyze_audio_file(
             case_id=args.case_id,
@@ -731,7 +745,10 @@ def _secret(args: Namespace, services: Any) -> Any:
                 store_path=str(args.path),
             )
         if args.kakaotalk_command == "decrypt-store":
-            derivation = _secret_derivation_input(args, key_source_kind=args.key_source_kind)
+            derivation = _kakaotalk_derivation_input(
+                args,
+                key_source_kind=args.key_source_kind,
+            )
             return _record_decryption_result(
                 services,
                 kakaotalk_provider.decrypt_store(derivation, store_path=str(args.path)),
@@ -1515,6 +1532,37 @@ def _secret_derivation_input(args: Namespace, *, key_source_kind: str) -> Secret
         key_source_kind=key_source_kind,
         references=[],
         parameters={},
+    )
+
+
+def _kakaotalk_derivation_input(
+    args: Namespace,
+    *,
+    key_source_kind: str,
+) -> SecretDerivationInput:
+    parameters: dict[str, Any] = {
+        "platform": args.platform,
+        "application_version": args.application_version,
+        "database_schema_version": args.database_schema_version,
+    }
+    env_mappings = (
+        ("pragma_key_env", "pragma_key"),
+        ("user_nonce_env", "user_nonce"),
+        ("db_key_hex_env", "db_key_hex"),
+        ("db_iv_hex_env", "db_iv_hex"),
+    )
+    for attr, parameter_name in env_mappings:
+        env_name = getattr(args, attr, None)
+        if env_name:
+            value = os.environ.get(env_name)
+            if value:
+                parameters[parameter_name] = value
+    return SecretDerivationInput(
+        case_id=args.case_id,
+        evidence_id=args.evidence_id,
+        key_source_kind=key_source_kind,
+        references=[],
+        parameters=parameters,
     )
 
 

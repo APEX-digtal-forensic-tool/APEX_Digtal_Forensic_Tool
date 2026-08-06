@@ -41,7 +41,7 @@ class CandidatePage:
 
 
 class MachineExtractionService:
-    """Stores OCR/STT contracts and human review state without running engines."""
+    """Runs OCR/STT providers and stores machine-extracted review candidates."""
 
     def __init__(
         self,
@@ -288,6 +288,11 @@ class MachineExtractionService:
                     "source_node_id": source_node_id,
                     "candidate_index": index,
                     "locator_type": extraction_type,
+                    **(
+                        {"source_sha256": str(row["source_sha256"])}
+                        if row.get("source_sha256") is not None
+                        else {}
+                    ),
                 },
                 citations=[],
                 review_status="UNREVIEWED",

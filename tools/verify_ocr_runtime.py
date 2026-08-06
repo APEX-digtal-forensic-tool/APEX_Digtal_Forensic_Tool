@@ -15,6 +15,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Verify local OCR provider capability.")
     parser.add_argument("--provider", default="tesseract", choices=["tesseract", "rapidocr"])
     parser.add_argument("--tesseract", default="tesseract")
+    parser.add_argument("--tessdata-prefix", type=Path)
     parser.add_argument("--image", type=Path)
     parser.add_argument("--language", action="append", default=[])
     parser.add_argument("--timeout", type=float, default=30.0)
@@ -25,7 +26,11 @@ def main() -> int:
     provider = (
         RapidOcrProvider(timeout=args.timeout)
         if args.provider == "rapidocr"
-        else TesseractCliOcrProvider(executable=args.tesseract, timeout=args.timeout)
+        else TesseractCliOcrProvider(
+            executable=args.tesseract,
+            tessdata_prefix=args.tessdata_prefix,
+            timeout=args.timeout,
+        )
     )
     capability = provider.capabilities()
     result: dict[str, object] = capability.to_schema_dict()
@@ -38,8 +43,9 @@ def main() -> int:
         else:
             rows = provider.analyze_image(args.image, languages=args.language or ["eng"])
             flattened = " ".join(str(item.get("text", "")) for item in rows).casefold()
-            expected_present = (
-                args.expect_text is None or args.expect_text.casefold() in flattened
+            expected_present = args.expect_text is None or _contains_expected(
+                flattened,
+                args.expect_text,
             )
             result["analysis"] = {
                 "status": "COMPLETED",
@@ -64,6 +70,13 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, list | tuple):
         return [_json_safe(item) for item in value]
     return value
+
+
+def _contains_expected(flattened: str, expected_text: str) -> bool:
+    expected = expected_text.casefold()
+    compact_flattened = "".join(flattened.split())
+    compact_expected = "".join(expected.split())
+    return expected in flattened or compact_expected in compact_flattened
 
 
 if __name__ == "__main__":

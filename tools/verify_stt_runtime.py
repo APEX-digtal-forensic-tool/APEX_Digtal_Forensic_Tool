@@ -6,14 +6,24 @@ import argparse
 import json
 from pathlib import Path
 
-from apex_forensic.adapters.machine_extraction import WhisperCppCliSttProvider
+from apex_forensic.adapters.machine_extraction import (
+    FasterWhisperSttProvider,
+    WhisperCppCliSttProvider,
+)
 from apex_forensic.domain.errors import ApexError
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify local whisper.cpp STT capability.")
+    parser.add_argument(
+        "--provider",
+        default="whisper-cpp",
+        choices=["whisper-cpp", "faster-whisper"],
+    )
     parser.add_argument("--whisper", default="whisper-cli")
     parser.add_argument("--model-path", type=Path)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--compute-type", default="int8")
     parser.add_argument("--audio-path", type=Path)
     parser.add_argument("--language")
     parser.add_argument("--timeout", type=float, default=120.0)
@@ -21,10 +31,19 @@ def main() -> int:
     parser.add_argument("--require-segment", action="store_true")
     parser.add_argument("--require-available", action="store_true")
     args = parser.parse_args()
-    provider = WhisperCppCliSttProvider(
-        executable=args.whisper,
-        model_path=args.model_path,
-        timeout=args.timeout,
+    provider = (
+        FasterWhisperSttProvider(
+            model_path=args.model_path,
+            device=args.device,
+            compute_type=args.compute_type,
+            timeout=args.timeout,
+        )
+        if args.provider == "faster-whisper"
+        else WhisperCppCliSttProvider(
+            executable=args.whisper,
+            model_path=args.model_path,
+            timeout=args.timeout,
+        )
     )
     capability = provider.capabilities()
     result: dict[str, object] = {

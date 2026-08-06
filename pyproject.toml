@@ -37,6 +37,7 @@ advanced-secrets = [
 machine-extraction = [
   "rapidocr>=3,<4",
   "onnxruntime>=1.18,<2",
+  "faster-whisper>=1.2,<2",
 ]
 report-renderer = [
   "reportlab>=4.2",
