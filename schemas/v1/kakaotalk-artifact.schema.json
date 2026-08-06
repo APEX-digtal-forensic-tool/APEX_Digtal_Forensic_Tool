@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/kakaotalk-artifact.schema.json",
+  "title": "APEX KakaoTalk Runtime Artifact",
+  "$ref": "#/$defs/kakaoTalkArtifact",
+  "$defs": {
+    "kakaoTalkArtifact": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "case_id",
+        "evidence_id",
+        "store_path",
+        "status",
+        "reason",
+        "success_without_key"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "case_id": { "type": "string", "minLength": 1 },
+        "evidence_id": { "type": ["string", "null"] },
+        "store_path": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "status": {
+          "enum": [
+            "KAKAOTALK_DECRYPTED",
+            "KEY_UNAVAILABLE",
+            "SOURCE_UNAVAILABLE",
+            "UNSUPPORTED_PLATFORM",
+            "UNSUPPORTED_VERSION",
+            "AUTHENTICATION_FAILED",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "encrypted_store_detected": { "type": "boolean" },
+        "store_length": { "type": "integer", "minimum": 0 },
+        "store_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "raw_store_emitted": { "const": false },
+        "plaintext_emitted": { "const": false },
+        "success_without_key": { "const": false }
+      },
+      "propertyNames": {
+        "not": {
+          "pattern": "(?:[Pp][Ll][Aa][Ii][Nn][Tt][Ee][Xx][Tt]_[Bb][Oo][Dd][Yy]|[Mm][Ee][Ss][Ss][Aa][Gg][Ee]_[Bb][Oo][Dd][Yy]|[Kk][Ee][Yy]_[Vv][Aa][Ll][Uu][Ee]|[Ss][Ee][Cc][Rr][Ee][Tt])"
+        }
+      }
+    }
+  }
+}

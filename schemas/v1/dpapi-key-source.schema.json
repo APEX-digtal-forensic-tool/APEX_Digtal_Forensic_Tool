@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/dpapi-key-source.schema.json",
+  "title": "APEX DPAPI Key Source",
+  "$ref": "#/$defs/dpapiKeySource",
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "dpapiKeySource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "case_id",
+        "evidence_id",
+        "provider_id",
+        "source_kind",
+        "scope",
+        "sid",
+        "masterkey_guid",
+        "source_path",
+        "source_revision",
+        "fingerprint",
+        "raw_locator",
+        "status",
+        "warnings",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "case_id": { "type": "string", "minLength": 1 },
+        "evidence_id": { "type": ["string", "null"] },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "source_kind": {
+          "enum": [
+            "WINDOWS_USER_PASSWORD",
+            "WINDOWS_NT_HASH",
+            "WINDOWS_DOMAIN_BACKUP_KEY",
+            "WINDOWS_SYSTEM_LSA_SECRETS",
+            "BROWSER_LOCAL_STATE",
+            "CHROMIUM_LOCAL_STATE_DPAPI_KEY",
+            "EXTERNAL_MASTERKEY"
+          ]
+        },
+        "scope": { "enum": ["USER", "MACHINE", "UNKNOWN"] },
+        "sid": { "type": ["string", "null"], "maxLength": 256 },
+        "masterkey_guid": { "type": ["string", "null"], "maxLength": 128 },
+        "source_path": { "type": ["string", "null"], "maxLength": 4096 },
+        "source_revision": { "type": ["integer", "null"], "minimum": 0 },
+        "fingerprint": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
+        },
+        "raw_locator": { "type": "object", "additionalProperties": true },
+        "status": {
+          "enum": [
+            "RESOLVED",
+            "KEY_UNAVAILABLE",
+            "CAPABILITY_UNAVAILABLE",
+            "AUTHENTICATION_FAILED",
+            "CORRUPT_KEY_MATERIAL",
+            "SOURCE_MISMATCH",
+            "UNSUPPORTED_VERSION"
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "created_at": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/timestamp" }, { "type": "null" }]
+        }
+      },
+      "propertyNames": {
+        "not": {
+          "pattern": "(?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Kk][Ee][Yy]_[Vv][Aa][Ll][Uu][Ee])"
+        }
+      }
+    }
+  }
+}

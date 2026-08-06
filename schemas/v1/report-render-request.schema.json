@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/report-render-request.schema.json",
+  "title": "APEX Report Render Request",
+  "$ref": "#/$defs/reportRenderRequest",
+  "$defs": {
+    "reportRenderRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "report_version_id",
+        "format",
+        "requested_filename",
+        "renderer_id",
+        "derived_output_root_id",
+        "overwrite_policy",
+        "redaction_policy",
+        "include_citations",
+        "include_custody",
+        "include_technical_appendix"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "report_version_id": { "type": "string", "minLength": 1 },
+        "format": { "enum": ["HTML", "PDF"] },
+        "requested_filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180,
+          "allOf": [
+            { "not": { "pattern": "^(?:/|[A-Za-z]:|.*(?:^|/)\\.\\.(?:/|$)|.*[/\\\\])" } },
+            { "not": { "pattern": "[<>:\"|?*\\u0000-\\u001F]" } }
+          ]
+        },
+        "renderer_id": { "type": "string", "minLength": 1 },
+        "derived_output_root_id": { "type": "string", "minLength": 1 },
+        "overwrite_policy": { "const": "DENY" },
+        "redaction_policy": { "type": "string", "minLength": 1 },
+        "include_citations": { "type": "boolean" },
+        "include_custody": { "type": "boolean" },
+        "include_technical_appendix": { "type": "boolean" }
+      }
+    }
+  }
+}

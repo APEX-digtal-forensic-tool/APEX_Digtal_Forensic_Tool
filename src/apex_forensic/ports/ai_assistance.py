@@ -42,6 +42,10 @@ class AiAssistanceProviderPort(Protocol):
         self, request: AiAssistanceRequest, *, cancellation_requested: bool = False
     ) -> dict[str, Any]: ...
 
+    def generate_report_draft(
+        self, request: AiAssistanceRequest, *, cancellation_requested: bool = False
+    ) -> dict[str, Any]: ...
+
 
 class UnavailableAiAssistanceProvider:
     """Default provider that advertises no runtime AI capability."""
@@ -89,6 +93,17 @@ class UnavailableAiAssistanceProvider:
         raise AiAssistanceError(
             "CAPABILITY_UNAVAILABLE",
             "The engine does not implement runtime AI scope summary generation.",
+            target="provider",
+            details={"provider_id": self.provider_id},
+        )
+
+    def generate_report_draft(
+        self, request: AiAssistanceRequest, *, cancellation_requested: bool = False
+    ) -> dict[str, Any]:
+        del request, cancellation_requested
+        raise AiAssistanceError(
+            "CAPABILITY_UNAVAILABLE",
+            "The engine does not implement runtime AI report draft generation.",
             target="provider",
             details={"provider_id": self.provider_id},
         )

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-provider-config.schema.json",
+  "title": "APEX AI Provider Config",
+  "$ref": "#/$defs/aiProviderConfig",
+  "$defs": {
+    "aiProviderConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "provider_id",
+        "base_url",
+        "model_id",
+        "api_key_env",
+        "timeout",
+        "max_output",
+        "temperature",
+        "request_policy"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "provider_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "base_url": { "type": "string", "pattern": "^https?://[^\\s]+$" },
+        "model_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "api_key_env": {
+          "type": "string",
+          "pattern": "^[A-Z_][A-Z0-9_]*$",
+          "maxLength": 128
+        },
+        "timeout": { "type": "number", "exclusiveMinimum": 0, "maximum": 600 },
+        "max_output": { "type": "integer", "minimum": 1, "maximum": 200000 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "request_policy": {
+          "enum": ["SELECTED_CONTEXT_ONLY", "NO_RAW_EVIDENCE", "CUSTOM"]
+        }
+      }
+    }
+  }
+}

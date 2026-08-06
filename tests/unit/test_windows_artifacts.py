@@ -223,7 +223,11 @@ def test_analyzer_capabilities_are_provider_neutral() -> None:
     else:
         assert "PREFETCH_MAM_DECOMPRESSION" in prefetch_unavailable
         assert capabilities[2]["metadata"]["mam"]["decompression"] == "CAPABILITY_UNAVAILABLE"
-    assert "REGISTRY_BINARY_DELETED_CELL_RECOVERY" in registry_unavailable
+    assert "REGISTRY_BINARY_DELETED_CELL_RECOVERY" not in registry_unavailable
+    assert "REGISTRY_BINARY_DELETED_CELL_RECOVERY" in capabilities[0]["capabilities"]
+    assert capabilities[0]["metadata"]["deleted_key_recovery"]["binary_deleted_cells"] == (
+        "IMPLEMENTED_RUNTIME"
+    )
     assert "REGISTRY_EXPORT_DELETED_DIRECTIVE_CANDIDATES" in capabilities[0]["capabilities"]
     event_message_capability = "EVENT_MESSAGE_RENDERING_WINDOWS_ADAPTER"
 

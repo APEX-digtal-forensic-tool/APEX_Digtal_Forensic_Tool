@@ -222,6 +222,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     registry_parser = artifact_commands.add_parser("registry", help="Registry artifact helpers")
     registry_commands = registry_parser.add_subparsers(dest="registry_command", required=True)
+    registry_carve_deleted = registry_commands.add_parser("carve-deleted")
+    _add_artifact_query_args(registry_carve_deleted, artifact_type_required=False)
     for command_name in ("autoruns", "usb", "timezone", "userassist"):
         registry_command = registry_commands.add_parser(command_name)
         _add_artifact_query_args(registry_command, artifact_type_required=False)
@@ -268,6 +270,16 @@ def build_parser() -> argparse.ArgumentParser:
     browser_show = browser_commands.add_parser("show")
     browser_show.add_argument("--artifact-id", required=True)
     browser_show.add_argument("--json", action="store_true")
+
+    communication_parser = artifact_commands.add_parser(
+        "communication", help="Communication artifact helpers"
+    )
+    communication_commands = communication_parser.add_subparsers(
+        dest="communication_command", required=True
+    )
+    for command_name in ("messages", "attachments", "unsupported", "kakaotalk"):
+        communication_command = communication_commands.add_parser(command_name)
+        _add_artifact_query_args(communication_command, artifact_type_required=False)
 
     browser_top = subcommands.add_parser("browser", help="Browser artifact commands")
     browser_top_commands = browser_top.add_subparsers(dest="browser_command", required=True)
@@ -347,6 +359,132 @@ def build_parser() -> argparse.ArgumentParser:
     media_warnings.add_argument("--evidence-id")
     media_warnings.add_argument("--json", action="store_true")
 
+    machine_parser = subcommands.add_parser("machine", help="Machine extraction runtime commands")
+    machine_commands = machine_parser.add_subparsers(dest="machine_command", required=True)
+    machine_ocr = machine_commands.add_parser("ocr")
+    machine_ocr_commands = machine_ocr.add_subparsers(dest="ocr_command", required=True)
+    machine_ocr_analyze = machine_ocr_commands.add_parser("analyze")
+    _add_machine_source_args(machine_ocr_analyze)
+    machine_ocr_analyze.add_argument(
+        "--provider",
+        default="tesseract",
+        choices=["tesseract", "rapidocr"],
+    )
+    machine_ocr_analyze.add_argument("--language", action="append", default=[])
+    machine_ocr_analyze.add_argument("--tesseract", default="tesseract")
+    machine_ocr_analyze.add_argument("--tessdata-prefix", type=Path)
+    machine_ocr_analyze.add_argument("--timeout", type=float, default=30.0)
+    machine_ocr_analyze.add_argument("--json", action="store_true")
+
+    machine_stt = machine_commands.add_parser("stt")
+    machine_stt_commands = machine_stt.add_subparsers(dest="stt_command", required=True)
+    machine_stt_analyze = machine_stt_commands.add_parser("analyze")
+    _add_machine_source_args(machine_stt_analyze)
+    machine_stt_analyze.add_argument(
+        "--provider",
+        default="whisper-cpp",
+        choices=["whisper-cpp", "faster-whisper"],
+    )
+    machine_stt_analyze.add_argument("--language")
+    machine_stt_analyze.add_argument("--whisper", default="whisper-cli")
+    machine_stt_analyze.add_argument("--model-path", type=Path)
+    machine_stt_analyze.add_argument("--device", default="cpu")
+    machine_stt_analyze.add_argument("--compute-type", default="int8")
+    machine_stt_analyze.add_argument("--timeout", type=float, default=120.0)
+    machine_stt_analyze.add_argument("--json", action="store_true")
+
+    secret_parser = subcommands.add_parser("secret", help="Secret/decryption runtime commands")
+    secret_commands = secret_parser.add_subparsers(dest="secret_command", required=True)
+    secret_capability = secret_commands.add_parser("capability")
+    secret_capability.add_argument(
+        "--provider",
+        default="all",
+        choices=[
+            "all",
+            "dpapi",
+            "dpapi-external",
+            "dpapi-unavailable",
+            "nss",
+            "nss-unavailable",
+            "kakaotalk",
+        ],
+    )
+    secret_capability.add_argument("--json", action="store_true")
+    secret_decrypt_dpapi = secret_commands.add_parser("decrypt-dpapi")
+    _add_secret_derivation_args(secret_decrypt_dpapi)
+    _add_dpapi_offline_key_args(secret_decrypt_dpapi)
+    secret_decrypt_dpapi.add_argument("--input-file", type=Path, required=True)
+    secret_decrypt_dpapi.add_argument("--json", action="store_true")
+    secret_decrypt_nss = secret_commands.add_parser("decrypt-nss")
+    _add_secret_derivation_args(secret_decrypt_nss)
+    secret_decrypt_nss.add_argument("--profile-path", type=Path, required=True)
+    secret_decrypt_nss.add_argument("--primary-password-env")
+    secret_decrypt_nss.add_argument("--json", action="store_true")
+
+    secret_dpapi = secret_commands.add_parser("dpapi")
+    secret_dpapi_commands = secret_dpapi.add_subparsers(dest="dpapi_command", required=True)
+    secret_dpapi_discover = secret_dpapi_commands.add_parser("discover-profiles")
+    _add_secret_derivation_args(secret_dpapi_discover)
+    secret_dpapi_discover.add_argument("--root-path", type=Path, required=True)
+    secret_dpapi_discover.add_argument("--json", action="store_true")
+    secret_dpapi_local_state = secret_dpapi_commands.add_parser("inspect-local-state")
+    _add_secret_derivation_args(secret_dpapi_local_state)
+    secret_dpapi_local_state.add_argument("--local-state-path", type=Path, required=True)
+    secret_dpapi_local_state.add_argument("--source-revision", type=int)
+    secret_dpapi_local_state.add_argument("--json", action="store_true")
+    secret_dpapi_decrypt = secret_dpapi_commands.add_parser("decrypt-blob")
+    _add_secret_derivation_args(secret_dpapi_decrypt)
+    _add_dpapi_offline_key_args(secret_dpapi_decrypt)
+    secret_dpapi_decrypt.add_argument("--input-file", type=Path, required=True)
+    secret_dpapi_decrypt.add_argument("--json", action="store_true")
+    secret_dpapi_local_state_decrypt = secret_dpapi_commands.add_parser("decrypt-local-state-key")
+    _add_secret_derivation_args(secret_dpapi_local_state_decrypt)
+    _add_dpapi_offline_key_args(secret_dpapi_local_state_decrypt)
+    secret_dpapi_local_state_decrypt.add_argument("--local-state-path", type=Path, required=True)
+    secret_dpapi_local_state_decrypt.add_argument("--source-revision", type=int)
+    secret_dpapi_local_state_decrypt.add_argument("--json", action="store_true")
+    secret_dpapi_chromium = secret_dpapi_commands.add_parser("decrypt-chromium-secret")
+    _add_secret_derivation_args(secret_dpapi_chromium)
+    secret_dpapi_chromium.add_argument("--input-file", type=Path, required=True)
+    key_group = secret_dpapi_chromium.add_mutually_exclusive_group(required=True)
+    key_group.add_argument("--key-hex-env")
+    key_group.add_argument("--key-b64-env")
+    secret_dpapi_chromium.add_argument("--secret-id", default="chromium-external-key")
+    secret_dpapi_chromium.add_argument("--json", action="store_true")
+
+    secret_nss = secret_commands.add_parser("nss")
+    secret_nss_commands = secret_nss.add_subparsers(dest="nss_command", required=True)
+    secret_nss_discover = secret_nss_commands.add_parser("discover-profiles")
+    _add_secret_derivation_args(secret_nss_discover)
+    secret_nss_discover.add_argument("--root-path", type=Path, required=True)
+    secret_nss_discover.add_argument("--json", action="store_true")
+    secret_nss_decrypt = secret_nss_commands.add_parser("decrypt-logins")
+    _add_secret_derivation_args(secret_nss_decrypt)
+    secret_nss_decrypt.add_argument("--profile-path", type=Path, required=True)
+    secret_nss_decrypt.add_argument("--primary-password-env")
+    secret_nss_decrypt.add_argument("--json", action="store_true")
+
+    secret_kakao = secret_commands.add_parser("kakaotalk")
+    secret_kakao_commands = secret_kakao.add_subparsers(
+        dest="kakaotalk_command", required=True
+    )
+    secret_kakao_inspect = secret_kakao_commands.add_parser("inspect")
+    secret_kakao_inspect.add_argument("--case-id", required=True)
+    secret_kakao_inspect.add_argument("--evidence-id")
+    secret_kakao_inspect.add_argument("--path", type=Path, required=True)
+    secret_kakao_inspect.add_argument("--json", action="store_true")
+    secret_kakao_decrypt = secret_kakao_commands.add_parser("decrypt-store")
+    _add_secret_derivation_args(secret_kakao_decrypt)
+    secret_kakao_decrypt.add_argument("--path", type=Path, required=True)
+    secret_kakao_decrypt.add_argument("--platform", default="WINDOWS_DESKTOP")
+    secret_kakao_decrypt.add_argument("--application-version", default="2.0.8.990")
+    secret_kakao_decrypt.add_argument("--database-schema-version", default="chatLogs")
+    secret_kakao_decrypt.add_argument("--pragma-key-env")
+    secret_kakao_decrypt.add_argument("--user-nonce-env")
+    secret_kakao_decrypt.add_argument("--db-key-hex-env")
+    secret_kakao_decrypt.add_argument("--db-iv-hex-env")
+    secret_kakao_decrypt.add_argument("--json", action="store_true")
+
     candidate_parser = subcommands.add_parser(
         "candidate", help="Machine-extracted candidate commands"
     )
@@ -420,6 +558,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     ai_request_capabilities = ai_commands.add_parser("request-capabilities")
     ai_request_capabilities.add_argument("--json", action="store_true")
+
+    ai_provider_capability = ai_commands.add_parser("provider-capability")
+    _add_ai_provider_args(ai_provider_capability)
+    ai_provider_capability.add_argument("--json", action="store_true")
+
+    ai_generate_keywords = ai_commands.add_parser("generate-keywords")
+    ai_generate_keywords.add_argument("--assistance-request-id", required=True)
+    _add_ai_provider_args(ai_generate_keywords)
+    ai_generate_keywords.add_argument("--json", action="store_true")
+
+    ai_generate_summary = ai_commands.add_parser("generate-summary")
+    ai_generate_summary.add_argument("--assistance-request-id", required=True)
+    _add_ai_provider_args(ai_generate_summary)
+    ai_generate_summary.add_argument("--json", action="store_true")
+
+    ai_generate_report_draft = ai_commands.add_parser("generate-report-draft")
+    ai_generate_report_draft.add_argument("--assistance-request-id", required=True)
+    ai_generate_report_draft.add_argument("--report-id")
+    ai_generate_report_draft.add_argument("--created-by", default="external-ai-layer")
+    _add_ai_provider_args(ai_generate_report_draft)
+    ai_generate_report_draft.add_argument("--json", action="store_true")
 
     ai_keyword_ingest = ai_commands.add_parser("keyword-ingest")
     ai_keyword_ingest.add_argument("--assistance-request-id", required=True)
@@ -1010,6 +1169,12 @@ def build_parser() -> argparse.ArgumentParser:
     report_export_capabilities.add_argument("--correlation-id")
     report_export_capabilities.add_argument("--json", action="store_true")
 
+    report_render_html = report_commands.add_parser("render-html")
+    _add_report_runtime_render_args(report_render_html)
+
+    report_render_pdf = report_commands.add_parser("render-pdf")
+    _add_report_runtime_render_args(report_render_pdf)
+
     interface_parser = subcommands.add_parser("interface", help="Public engine interface commands")
     interface_commands = interface_parser.add_subparsers(dest="interface_command", required=True)
     interface_version = interface_commands.add_parser("version")
@@ -1149,6 +1314,58 @@ def _add_report_review_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--expected-review-revision", type=int)
     parser.add_argument("--correlation-id")
     parser.add_argument("--json", action="store_true")
+
+
+def _add_report_runtime_render_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--report-version-id", required=True)
+    parser.add_argument("--filename", required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--created-by", required=True)
+    parser.add_argument("--redaction-policy", default="STANDARD")
+    parser.add_argument("--no-citations", action="store_true")
+    parser.add_argument("--no-custody", action="store_true")
+    parser.add_argument("--no-technical-appendix", action="store_true")
+    parser.add_argument("--stale-confirmed", action="store_true")
+    parser.add_argument("--correlation-id")
+    parser.add_argument("--json", action="store_true")
+
+
+def _add_ai_provider_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--provider-id", default="openai-compatible")
+    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--api-key-env", required=True)
+    parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--max-output", type=int, default=4096)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--request-policy", default="SELECTED_CONTEXT_ONLY")
+
+
+def _add_machine_source_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--case-id", required=True)
+    parser.add_argument("--evidence-id", required=True)
+    parser.add_argument("--source-node-id", required=True)
+    parser.add_argument("--path", type=Path, required=True)
+    parser.add_argument("--source-revision", type=int, default=0)
+
+
+def _add_secret_derivation_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--case-id", required=True)
+    parser.add_argument("--evidence-id", required=True)
+    parser.add_argument("--key-source-kind", default="EXTERNAL_OFFLINE_KEY_MATERIAL")
+
+
+def _add_dpapi_offline_key_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--sid")
+    parser.add_argument("--masterkey-path", type=Path)
+    parser.add_argument("--masterkey-guid")
+    parser.add_argument("--password-env")
+    parser.add_argument("--nt-hash-hex-env")
+    parser.add_argument("--nt-hash-b64-env")
+    parser.add_argument("--masterkey-hex-env")
+    parser.add_argument("--masterkey-b64-env")
+    parser.add_argument("--entropy-hex-env")
+    parser.add_argument("--entropy-b64-env")
 
 
 def _add_artifact_scope_args(parser: argparse.ArgumentParser, *, include_case: bool) -> None:

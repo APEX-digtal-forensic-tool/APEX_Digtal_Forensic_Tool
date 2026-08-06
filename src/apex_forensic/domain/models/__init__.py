@@ -54,6 +54,10 @@ from apex_forensic.domain.models.filesystem import (
     IndexCoverage,
 )
 from apex_forensic.domain.models.job import Job, JobProgress
+from apex_forensic.domain.models.registry_carving import (
+    RegistryCarvingReport,
+    RegistryDeletedCellCandidate,
+)
 from apex_forensic.domain.models.report import (
     CustodySnapshotRecord,
     RenderedReportArtifact,
@@ -77,6 +81,15 @@ from apex_forensic.domain.models.search import (
     SearchQuery,
     SearchResult,
     SearchResultPage,
+)
+from apex_forensic.domain.models.secret import (
+    DecryptionAttempt,
+    DecryptionResult,
+    RedactedSecret,
+    SecretDerivationInput,
+    SecretMaterial,
+    SecretProviderCapability,
+    SecretReference,
 )
 from apex_forensic.domain.models.timeline import (
     TimelineBuildCoverage,
@@ -112,6 +125,8 @@ __all__ = [
     "CursorPage",
     "CustodyEvent",
     "CustodySnapshotRecord",
+    "DecryptionAttempt",
+    "DecryptionResult",
     "EngineInterfaceVersion",
     "EngineToolDescriptor",
     "Evidence",
@@ -132,6 +147,9 @@ __all__ = [
     "Phase5Checkpoint",
     "ProviderCapability",
     "RawViewProjection",
+    "RedactedSecret",
+    "RegistryCarvingReport",
+    "RegistryDeletedCellCandidate",
     "RenderedReportArtifact",
     "ReportApprovalRecord",
     "ReportExportAuditEvent",
@@ -150,6 +168,10 @@ __all__ = [
     "SearchQuery",
     "SearchResult",
     "SearchResultPage",
+    "SecretDerivationInput",
+    "SecretMaterial",
+    "SecretProviderCapability",
+    "SecretReference",
     "ThumbnailRecord",
     "TimelineBuildCoverage",
     "TimelineEvent",

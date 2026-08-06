@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/decryption-result.schema.json",
+  "title": "APEX Decryption Result",
+  "$ref": "#/$defs/decryptionResult",
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "attempt_id",
+        "case_id",
+        "evidence_id",
+        "provider_id",
+        "provider_version",
+        "algorithm",
+        "key_source_kind",
+        "status",
+        "started_at",
+        "completed_at",
+        "warnings",
+        "error_code",
+        "error_message"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "attempt_id": { "type": "string", "minLength": 1 },
+        "case_id": { "type": "string", "minLength": 1 },
+        "evidence_id": { "type": ["string", "null"] },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "provider_version": { "type": "string", "minLength": 1 },
+        "algorithm": { "type": "string", "minLength": 1 },
+        "key_source_kind": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "started_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "completed_at": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "error_code": { "type": ["string", "null"] },
+        "error_message": { "type": ["string", "null"] }
+      }
+    },
+    "decryptionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "attempt",
+        "status",
+        "output_kind",
+        "content_sha256",
+        "content_length",
+        "citations",
+        "partial",
+        "metadata"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "attempt": { "$ref": "#/$defs/attempt" },
+        "status": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "output_kind": { "type": ["string", "null"] },
+        "content_sha256": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "content_length": { "type": ["integer", "null"], "minimum": 0 },
+        "citations": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "partial": { "type": "boolean" },
+        "metadata": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
+}

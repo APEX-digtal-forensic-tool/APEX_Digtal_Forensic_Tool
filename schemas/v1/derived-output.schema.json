@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/derived-output.schema.json",
+  "title": "APEX Derived Output",
+  "$ref": "#/$defs/derivedOutput",
+  "$defs": {
+    "derivedOutputReference": {
+      "type": "string",
+      "pattern": "^derived://[A-Za-z0-9_.-]+/[A-Za-z0-9_.@%+=,/-]+$",
+      "allOf": [
+        { "not": { "pattern": "(?:^|/)\\.\\.(?:/|$)" } },
+        {
+          "not": {
+            "pattern": "(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|/|$)"
+          }
+        }
+      ]
+    },
+    "derivedOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "derived_output_root_id",
+        "output_reference",
+        "filename",
+        "mime_type",
+        "size_bytes",
+        "sha256",
+        "created_by",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "derived_output_root_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "output_reference": { "$ref": "#/$defs/derivedOutputReference" },
+        "filename": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "mime_type": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "created_by": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "created_at": { "$ref": "common.schema.json#/$defs/timestamp" }
+      }
+    }
+  }
+}
