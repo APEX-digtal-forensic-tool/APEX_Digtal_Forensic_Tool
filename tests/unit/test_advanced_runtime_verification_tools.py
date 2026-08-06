@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import ctypes.util
 import importlib.util
 import json
@@ -55,6 +56,7 @@ def test_windows_host_runtime_help_documents_fixture_contract(project_root) -> N
     assert completed.returncode == 0
     assert "Windows fixture policy" in completed.stdout
     assert "Synthetic fixture generation" in completed.stdout
+    assert "Linux-generated NSS fixtures" in completed.stdout
     assert "run_windows_runtime_verification.ps1" in completed.stdout
     assert "DPAPI fixture manifest fields" in completed.stdout
     assert "NSS fixture manifest fields" in completed.stdout
@@ -156,6 +158,71 @@ def test_nss_verifier_rejects_live_user_profile_paths(
     assert payload["verification"]["status"] == "LIVE_USER_PROFILE_REJECTED"
     assert policy["synthetic_or_redistributable_fixture_required"] is True
     assert policy["rejected_paths"][0]["input"] == "profile_path"
+
+
+def test_windows_runtime_fixture_generator_reports_missing_nss_encrypt_symbol(
+    project_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "generate_windows_runtime_fixtures_missing_encrypt",
+        project_root / "tools" / "generate_windows_runtime_fixtures.py",
+    )
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    attrs = {
+        name: object()
+        for name in module._NSS_REQUIRED_SYMBOLS
+        if name != module.NSS_ENCRYPT_SYMBOL
+    }
+    fake_nss = type("FakeNss", (), attrs)()
+    fixture_root = tmp_path / "fixtures"
+    manifest_path = fixture_root / "manifest.json"
+    monkeypatch.setattr(module.ctypes, "CDLL", lambda path: fake_nss)
+    monkeypatch.setattr(
+        module,
+        "_generate_dpapi_fixture",
+        lambda output_dir: module._unavailable_fixture(
+            fixture_id=module.DPAPI_FIXTURE_ID,
+            status="CAPABILITY_UNAVAILABLE",
+            warning_code="DPAPI_TEST_SKIPPED",
+            message="DPAPI generation skipped by synthetic unit test.",
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate_windows_runtime_fixtures.py",
+            "--output-dir",
+            str(fixture_root),
+            "--manifest-path",
+            str(manifest_path),
+            "--nss-library-path",
+            "nss3.dll",
+            "--require-nss",
+            "--json",
+        ],
+    )
+
+    assert module.main() == 1
+
+    summary = json.loads(capsys.readouterr().out)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert summary["nss_status"] == "NSS_ENCRYPT_SYMBOL_UNAVAILABLE"
+    assert manifest["nss"]["status"] == "NSS_ENCRYPT_SYMBOL_UNAVAILABLE"
+    assert manifest["nss"]["warnings"][0]["code"] == "NSS_ENCRYPT_SYMBOL_UNAVAILABLE"
+    assert module.NSS_ENCRYPT_SYMBOL in manifest["nss"]["warnings"][0]["details"][
+        "missing_symbols"
+    ]
+    assert manifest["verification_flows"]["linux_generated_nss_windows_decrypt_supported"] is True
+    assert not (fixture_root / "firefox").exists()
 
 
 def test_windows_runtime_fixture_generator_creates_dpapi_fixture_and_manifest(
@@ -271,6 +338,9 @@ def test_windows_runtime_fixture_generator_creates_nss_fixture_when_nss_is_avail
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["nss"]["status"] == "GENERATED"
     assert manifest["nss"]["primary_password_env"] == "APEX_NSS_PRIMARY_PASSWORD"
+    assert manifest["nss"]["generation_method"] == "NSS_PK11SDR_ENCRYPT_SYMBOL"
+    assert manifest["nss"]["profile_path_relative"] == "firefox/Profiles/verify.default"
+    assert manifest["nss"]["linux_generated_windows_decrypt_supported"] is True
     assert "apex synthetic nss primary password v1" not in json.dumps(
         manifest,
         ensure_ascii=False,
@@ -303,6 +373,53 @@ def test_windows_runtime_fixture_generator_creates_nss_fixture_when_nss_is_avail
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "plaintext_b64" not in serialized
     assert "APEX synthetic Firefox NSS login secret" not in serialized
+
+
+def test_windows_host_manifest_prefers_manifest_relative_fixture_paths(
+    project_root: Path,
+    tmp_path: Path,
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "verify_windows_host_runtime_relative_manifest",
+        project_root / "tools" / "verify_windows_host_runtime.py",
+    )
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    fixture_root = tmp_path / "copied-fixtures"
+    manifest_path = fixture_root / "manifest.json"
+    fixture_root.mkdir()
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "nss": {
+                    "status": "GENERATED",
+                    "root_path": "Z:/linux-generated/firefox",
+                    "root_path_relative": "firefox",
+                    "profile_path": "Z:/linux-generated/firefox/Profiles/verify.default",
+                    "profile_path_relative": "firefox/Profiles/verify.default",
+                    "primary_password_env": "APEX_NSS_PRIMARY_PASSWORD",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        nss_root_path=None,
+        nss_profile_path=None,
+        nss_primary_password_env=None,
+    )
+
+    module._apply_fixture_manifest(args, manifest_path)
+
+    assert args.nss_root_path == str((fixture_root / "firefox").resolve(strict=False))
+    assert args.nss_profile_path == str(
+        (fixture_root / "firefox" / "Profiles" / "verify.default").resolve(strict=False)
+    )
+    assert args.nss_primary_password_env == "APEX_NSS_PRIMARY_PASSWORD"
 
 
 def test_windows_host_runtime_verifier_loads_generated_fixture_manifest(
@@ -399,6 +516,9 @@ def test_windows_runtime_powershell_runner_is_static_redacted_flow(project_root:
     assert "verify_dpapi_runtime.py" in script
     assert "verify_nss_runtime.py" in script
     assert "verify_windows_host_runtime.py" in script
+    assert "FixtureManifestPath" in script
+    assert "PREGENERATED_MANIFEST" in script
+    assert "Resolve-ApexManifestPath" in script
     assert "ConvertTo-Json -Depth 80" in script
     assert "Remove-Item -LiteralPath $FixtureRoot -Recurse -Force" in script
     assert "APEX_AI_VERIFY_BASE_URL" in script

@@ -2,6 +2,7 @@
 param(
     [string]$Python = "",
     [string]$FixtureRoot = "",
+    [string]$FixtureManifestPath = "",
     [string]$ResultPath = "",
     [string]$NssLibraryPath = "",
     [int]$TimeoutSeconds = 120,
@@ -93,8 +94,49 @@ function Test-ApexAiProviderReady {
     return $baseUrlConfigured -and $modelConfigured -and $keyConfigured
 }
 
+function Get-ApexJsonProperty {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return ""
+    }
+    return [string]$property.Value
+}
+
+function Resolve-ApexManifestPath {
+    param(
+        [string]$ManifestDirectory,
+        [object]$Section,
+        [string]$Name
+    )
+
+    $relative = Get-ApexJsonProperty -Object $Section -Name ($Name + "_relative")
+    $value = if (-not [string]::IsNullOrWhiteSpace($relative)) {
+        $relative
+    } else {
+        Get-ApexJsonProperty -Object $Section -Name $Name
+    }
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return ""
+    }
+    if ([System.IO.Path]::IsPathRooted($value)) {
+        return [System.IO.Path]::GetFullPath($value)
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path $ManifestDirectory $value))
+}
+
 $Python = Resolve-ApexPython -RequestedPython $Python
-if ([string]::IsNullOrWhiteSpace($FixtureRoot)) {
+$UsingExistingManifest = -not [string]::IsNullOrWhiteSpace($FixtureManifestPath)
+if ($UsingExistingManifest) {
+    $ManifestPath = (Resolve-Path -LiteralPath $FixtureManifestPath).Path
+    if ([string]::IsNullOrWhiteSpace($FixtureRoot)) {
+        $FixtureRoot = Split-Path -Parent $ManifestPath
+    }
+} elseif ([string]::IsNullOrWhiteSpace($FixtureRoot)) {
     $FixtureRoot = Join-Path $env:TEMP ("apex-windows-runtime-fixtures-" + [guid]::NewGuid())
     $CreatedFixtureRoot = $true
 }
@@ -102,43 +144,77 @@ if ([string]::IsNullOrWhiteSpace($ResultPath)) {
     $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
     $ResultPath = Join-Path $env:TEMP "apex-windows-runtime-verification-$stamp.json"
 }
-
-$ManifestPath = Join-Path $FixtureRoot "windows-runtime-fixtures.manifest.json"
+if (-not $UsingExistingManifest) {
+    $ManifestPath = Join-Path $FixtureRoot "windows-runtime-fixtures.manifest.json"
+}
 $env:APEX_DPAPI_FIXTURE_PASSWORD = "apex synthetic dpapi fixture password v1"
 $env:APEX_NSS_PRIMARY_PASSWORD = "apex synthetic nss primary password v1"
 
 try {
-    $generatorArgs = @(
-        (Join-Path $RepoRoot "tools\generate_windows_runtime_fixtures.py"),
-        "--output-dir",
-        $FixtureRoot,
-        "--manifest-path",
-        $ManifestPath,
-        "--require-all",
-        "--json"
-    )
-    if (-not [string]::IsNullOrWhiteSpace($NssLibraryPath)) {
-        $generatorArgs += @("--nss-library-path", $NssLibraryPath)
+    if ($UsingExistingManifest) {
+        $generation = [ordered]@{
+            status = "PREGENERATED_MANIFEST"
+            manifest_path = $ManifestPath
+            secret_values_emitted = $false
+        }
+    } else {
+        $generatorArgs = @(
+            (Join-Path $RepoRoot "tools\generate_windows_runtime_fixtures.py"),
+            "--output-dir",
+            $FixtureRoot,
+            "--manifest-path",
+            $ManifestPath,
+            "--require-all",
+            "--json"
+        )
+        if (-not [string]::IsNullOrWhiteSpace($NssLibraryPath)) {
+            $generatorArgs += @("--nss-library-path", $NssLibraryPath)
+        }
+        $generation = Invoke-ApexJsonCommand `
+            -Executable $Python `
+            -Arguments $generatorArgs `
+            -Timeout $TimeoutSeconds
     }
-    $generation = Invoke-ApexJsonCommand `
-        -Executable $Python `
-        -Arguments $generatorArgs `
-        -Timeout $TimeoutSeconds
     $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+    $ManifestDirectory = Split-Path -Parent $ManifestPath
+    $dpapiInputFile = Resolve-ApexManifestPath `
+        -ManifestDirectory $ManifestDirectory `
+        -Section $manifest.dpapi `
+        -Name "input_file"
+    $dpapiLocalStatePath = Resolve-ApexManifestPath `
+        -ManifestDirectory $ManifestDirectory `
+        -Section $manifest.dpapi `
+        -Name "local_state_path"
+    $dpapiChromiumInputFile = Resolve-ApexManifestPath `
+        -ManifestDirectory $ManifestDirectory `
+        -Section $manifest.dpapi `
+        -Name "chromium_input_file"
+    $dpapiMasterkeyPath = Resolve-ApexManifestPath `
+        -ManifestDirectory $ManifestDirectory `
+        -Section $manifest.dpapi `
+        -Name "masterkey_path"
+    $nssRootPath = Resolve-ApexManifestPath `
+        -ManifestDirectory $ManifestDirectory `
+        -Section $manifest.nss `
+        -Name "root_path"
+    $nssProfilePath = Resolve-ApexManifestPath `
+        -ManifestDirectory $ManifestDirectory `
+        -Section $manifest.nss `
+        -Name "profile_path"
 
     $dpapiArgs = @(
         (Join-Path $RepoRoot "tools\verify_dpapi_runtime.py"),
         "--input-file",
-        $manifest.dpapi.input_file,
+        $dpapiInputFile,
         "--local-state-path",
-        $manifest.dpapi.local_state_path,
+        $dpapiLocalStatePath,
         "--decrypt-local-state-key",
         "--chromium-input-file",
-        $manifest.dpapi.chromium_input_file,
+        $dpapiChromiumInputFile,
         "--sid",
         $manifest.dpapi.sid,
         "--masterkey-path",
-        $manifest.dpapi.masterkey_path,
+        $dpapiMasterkeyPath,
         "--password-env",
         "APEX_DPAPI_FIXTURE_PASSWORD",
         "--require-available"
@@ -151,9 +227,9 @@ try {
     $nssArgs = @(
         (Join-Path $RepoRoot "tools\verify_nss_runtime.py"),
         "--root-path",
-        $manifest.nss.root_path,
+        $nssRootPath,
         "--profile-path",
-        $manifest.nss.profile_path,
+        $nssProfilePath,
         "--primary-password-env",
         "APEX_NSS_PRIMARY_PASSWORD",
         "--require-available"

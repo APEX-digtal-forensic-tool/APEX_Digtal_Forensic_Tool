@@ -8,6 +8,7 @@ import importlib
 import io
 import os
 import re
+import stat
 import tempfile
 from collections.abc import Iterable
 from contextlib import suppress
@@ -21,6 +22,7 @@ from apex_forensic.domain.models import ReportRendererCapability, ReportRenderPa
 
 DEFAULT_DERIVED_OUTPUT_ROOT_ID = "apex-derived-default"
 MAX_RENDER_BYTES = 50 * 1024 * 1024
+_PRIVATE_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
 _WINDOWS_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
 _WINDOWS_FORBIDDEN_NAME_CHARS = re.compile(r'[<>:"\\|?*\x00-\x1f]')
 _WINDOWS_RESERVED_BASENAMES = {
@@ -241,12 +243,13 @@ class RuntimeReportRenderer:
                 "Report renderer refuses to overwrite an existing output file.",
                 target="filename",
             )
+        fd = -1
         fd, temp_name = tempfile.mkstemp(prefix=f".{filename}.", suffix=".tmp", dir=root)
         temp_path = Path(temp_name)
         try:
-            with suppress(OSError):
-                os.fchmod(fd, 0o600)
+            _restrict_temp_file_permissions(fd, temp_path)
             with os.fdopen(fd, "wb") as handle:
+                fd = -1
                 handle.write(data)
             if destination.exists():
                 raise ReportError(
@@ -254,11 +257,20 @@ class RuntimeReportRenderer:
                     "Report renderer refuses to overwrite an existing output file.",
                     target="filename",
                 )
-            temp_path.replace(destination)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
+            os.replace(temp_path, destination)
+        except Exception as error:
+            if fd >= 0:
+                with suppress(OSError):
+                    os.close(fd)
+            _cleanup_temp_output(temp_path, original_error=error)
+            if isinstance(error, ReportError):
+                raise
+            raise ReportError(
+                "REPORT_OUTPUT_WRITE_FAILED",
+                "Failed to write renderer output file.",
+                target="render_output",
+                details={"error_type": type(error).__name__},
+            ) from error
         return destination
 
     def _prepare_output_root(self) -> Path:
@@ -277,6 +289,53 @@ class RuntimeReportRenderer:
                 target="filename",
             )
         return path
+
+
+def _restrict_temp_file_permissions(fd: int, temp_path: Path) -> None:
+    fchmod = getattr(os, "fchmod", None)
+    if fchmod is not None:
+        try:
+            fchmod(fd, _PRIVATE_FILE_MODE)
+        except OSError as error:
+            raise ReportError(
+                "REPORT_OUTPUT_PERMISSION_FAILED",
+                "Failed to restrict renderer temporary output permissions.",
+                target="render_output",
+                details={"mode": oct(_PRIVATE_FILE_MODE), "platform": os.name},
+            ) from error
+        return
+    if _is_windows_platform():
+        # Windows does not expose fd-based chmod. The temporary file is created under the
+        # configured derived-output root and inherits that directory's ACL boundary.
+        return
+    raise ReportError(
+        "REPORT_OUTPUT_PERMISSION_UNSUPPORTED",
+        "The current platform does not support fd-based renderer output permissions.",
+        target="render_output",
+        details={"mode": oct(_PRIVATE_FILE_MODE), "platform": os.name, "path": str(temp_path)},
+    )
+
+
+def _is_windows_platform() -> bool:
+    return os.name == "nt"
+
+
+def _cleanup_temp_output(temp_path: Path, *, original_error: Exception) -> None:
+    if not temp_path.exists():
+        return
+    try:
+        temp_path.unlink()
+    except OSError as cleanup_error:
+        raise ReportError(
+            "REPORT_OUTPUT_CLEANUP_FAILED",
+            "Failed to remove incomplete renderer temporary output.",
+            target="render_output",
+            details={
+                "cleanup_error_type": type(cleanup_error).__name__,
+                "original_error_type": type(original_error).__name__,
+                "temp_path": str(temp_path),
+            },
+        ) from original_error
 
 
 def _render_html(package: ReportRenderPackage) -> bytes:

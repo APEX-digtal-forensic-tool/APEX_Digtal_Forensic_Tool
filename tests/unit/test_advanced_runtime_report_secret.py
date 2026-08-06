@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -7,6 +9,7 @@ from typing import Any
 import pytest
 
 from apex_forensic.adapters.report import RuntimeReportRenderer
+from apex_forensic.adapters.report import runtime as report_runtime
 from apex_forensic.config import build_services
 from apex_forensic.domain.enums import AnalysisProfileType
 from apex_forensic.domain.errors import ApexError
@@ -115,6 +118,180 @@ def test_runtime_html_renderer_writes_sanitized_utf8_output(tmp_path: Path) -> N
     assert "한국어 Report" in output
     assert "<script>" not in output
     assert "&lt;script&gt;" in output
+    if hasattr(os, "fchmod"):
+        assert stat.S_IMODE((tmp_path / "report.html").stat().st_mode) == 0o600
+
+
+def test_runtime_html_renderer_handles_windows_fchmod_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr(report_runtime.os, "fchmod", raising=False)
+    monkeypatch.setattr(report_runtime, "_is_windows_platform", lambda: True)
+    renderer = RuntimeReportRenderer(output_root=tmp_path)
+
+    result = renderer.render(
+        _package(),
+        export_manifest_id="manifest-1",
+        requested_filename="windows.html",
+    )
+    renderer.verify_output(result)
+
+    assert result["status"] == "COMPLETED"
+    assert (tmp_path / "windows.html").is_file()
+
+
+def test_runtime_renderer_closes_file_before_cleanup_on_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = RuntimeReportRenderer(output_root=tmp_path)
+    real_close = report_runtime.os.close
+    real_unlink = report_runtime.Path.unlink
+    events: list[str] = []
+    handle_box: dict[str, Any] = {}
+
+    class FailingHandle:
+        def __init__(self, fd: int) -> None:
+            self.fd = fd
+            self.closed = False
+
+        def __enter__(self) -> FailingHandle:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            self.close()
+
+        def write(self, data: bytes) -> None:
+            del data
+            raise OSError("synthetic write failure")
+
+        def close(self) -> None:
+            if not self.closed:
+                self.closed = True
+                events.append("close")
+                real_close(self.fd)
+
+    def fake_fdopen(fd: int, mode: str) -> FailingHandle:
+        assert mode == "wb"
+        handle = FailingHandle(fd)
+        handle_box["handle"] = handle
+        return handle
+
+    def fake_unlink(path: Path) -> None:
+        handle = handle_box["handle"]
+        events.append("unlink_after_close" if handle.closed else "unlink_before_close")
+        real_unlink(path)
+
+    monkeypatch.setattr(report_runtime.os, "fdopen", fake_fdopen)
+    monkeypatch.setattr(report_runtime.Path, "unlink", fake_unlink)
+
+    with pytest.raises(ApexError) as error:
+        renderer.render(
+            _package(),
+            export_manifest_id="manifest-1",
+            requested_filename="write-failure.html",
+        )
+
+    assert error.value.code == "REPORT_OUTPUT_WRITE_FAILED"
+    assert events == ["close", "unlink_after_close"]
+    assert not list(tmp_path.glob(".write-failure.html.*.tmp"))
+
+
+def test_runtime_renderer_closes_fd_before_cleanup_on_chmod_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = RuntimeReportRenderer(output_root=tmp_path)
+    real_close = report_runtime.os.close
+    real_unlink = report_runtime.Path.unlink
+    events: list[str] = []
+
+    def failing_fchmod(fd: int, mode: int) -> None:
+        del fd, mode
+        events.append("chmod")
+        raise OSError("synthetic chmod failure")
+
+    def tracked_close(fd: int) -> None:
+        events.append("close")
+        real_close(fd)
+
+    def tracked_unlink(path: Path) -> None:
+        events.append("unlink")
+        assert "close" in events
+        real_unlink(path)
+
+    monkeypatch.setattr(report_runtime.os, "fchmod", failing_fchmod, raising=False)
+    monkeypatch.setattr(report_runtime.os, "close", tracked_close)
+    monkeypatch.setattr(report_runtime.Path, "unlink", tracked_unlink)
+
+    with pytest.raises(ApexError) as error:
+        renderer.render(
+            _package(),
+            export_manifest_id="manifest-1",
+            requested_filename="chmod-failure.html",
+        )
+
+    assert error.value.code == "REPORT_OUTPUT_PERMISSION_FAILED"
+    assert events == ["chmod", "close", "unlink"]
+    assert not list(tmp_path.glob(".chmod-failure.html.*.tmp"))
+
+
+def test_runtime_renderer_cleans_up_temp_file_on_replace_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = RuntimeReportRenderer(output_root=tmp_path)
+    replace_calls: list[tuple[Path, Path]] = []
+
+    def failing_replace(source: Path, destination: Path) -> None:
+        replace_calls.append((source, destination))
+        raise OSError("synthetic replace failure")
+
+    monkeypatch.setattr(report_runtime.os, "replace", failing_replace)
+
+    with pytest.raises(ApexError) as error:
+        renderer.render(
+            _package(),
+            export_manifest_id="manifest-1",
+            requested_filename="replace-failure.html",
+        )
+
+    assert error.value.code == "REPORT_OUTPUT_WRITE_FAILED"
+    assert error.value.details["error_type"] == "OSError"
+    assert replace_calls
+    assert not (tmp_path / "replace-failure.html").exists()
+    assert not list(tmp_path.glob(".replace-failure.html.*.tmp"))
+
+
+def test_runtime_renderer_reports_cleanup_failure_after_replace_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = RuntimeReportRenderer(output_root=tmp_path)
+
+    def failing_replace(source: Path, destination: Path) -> None:
+        del source, destination
+        raise OSError("synthetic replace failure")
+
+    def failing_unlink(path: Path) -> None:
+        del path
+        raise OSError("synthetic cleanup failure")
+
+    monkeypatch.setattr(report_runtime.os, "replace", failing_replace)
+    monkeypatch.setattr(report_runtime.Path, "unlink", failing_unlink)
+
+    with pytest.raises(ApexError) as error:
+        renderer.render(
+            _package(),
+            export_manifest_id="manifest-1",
+            requested_filename="cleanup-failure.html",
+        )
+
+    assert error.value.code == "REPORT_OUTPUT_CLEANUP_FAILED"
+    assert error.value.details["cleanup_error_type"] == "OSError"
+    assert error.value.details["original_error_type"] == "OSError"
+    assert list(tmp_path.glob(".cleanup-failure.html.*.tmp"))
 
 
 def test_runtime_renderer_requires_approved_package(tmp_path: Path) -> None:

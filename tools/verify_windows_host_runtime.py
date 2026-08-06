@@ -56,6 +56,11 @@ Synthetic fixture generation:
     --require-all `
     --json
 
+Linux-generated NSS fixtures:
+  Generate the synthetic NSS fixture on a Linux host with libnss3, copy the complete
+  fixture directory to Windows, then pass the copied manifest to --fixture-manifest.
+  Manifest-relative paths are preferred over the original generation host paths.
+
 PowerShell one-shot runner:
   .\\tools\\run_windows_runtime_verification.ps1 -Python $py
 
@@ -267,29 +272,29 @@ def _apply_fixture_manifest(args: argparse.Namespace, manifest_path: Path) -> No
         raise ValueError("manifest root must be an object")
     dpapi = manifest.get("dpapi")
     if isinstance(dpapi, dict) and dpapi.get("status") == "GENERATED":
-        _set_default(args, "dpapi_input_file", _manifest_path(dpapi.get("input_file"), base))
+        _set_default(args, "dpapi_input_file", _manifest_fixture_path(dpapi, "input_file", base))
         _set_default(
             args,
             "dpapi_local_state_path",
-            _manifest_path(dpapi.get("local_state_path"), base),
+            _manifest_fixture_path(dpapi, "local_state_path", base),
         )
         _set_default(
             args,
             "dpapi_chromium_input_file",
-            _manifest_path(dpapi.get("chromium_input_file"), base),
+            _manifest_fixture_path(dpapi, "chromium_input_file", base),
         )
         _set_default(args, "dpapi_sid", _string_or_none(dpapi.get("sid")))
         _set_default(
             args,
             "dpapi_masterkey_path",
-            _manifest_path(dpapi.get("masterkey_path"), base),
+            _manifest_fixture_path(dpapi, "masterkey_path", base),
         )
         _set_default(args, "dpapi_password_env", _string_or_none(dpapi.get("credential_env")))
         args.dpapi_decrypt_local_state_key = True
     nss = manifest.get("nss")
     if isinstance(nss, dict) and nss.get("status") == "GENERATED":
-        _set_default(args, "nss_root_path", _manifest_path(nss.get("root_path"), base))
-        _set_default(args, "nss_profile_path", _manifest_path(nss.get("profile_path"), base))
+        _set_default(args, "nss_root_path", _manifest_fixture_path(nss, "root_path", base))
+        _set_default(args, "nss_profile_path", _manifest_fixture_path(nss, "profile_path", base))
         _set_default(
             args,
             "nss_primary_password_env",
@@ -300,6 +305,13 @@ def _apply_fixture_manifest(args: argparse.Namespace, manifest_path: Path) -> No
 def _set_default(args: argparse.Namespace, attr: str, value: str | None) -> None:
     if value and not getattr(args, attr):
         setattr(args, attr, value)
+
+
+def _manifest_fixture_path(section: dict[str, Any], key: str, base: Path) -> str | None:
+    return _manifest_path(section.get(f"{key}_relative"), base) or _manifest_path(
+        section.get(key),
+        base,
+    )
 
 
 def _manifest_path(value: object, base: Path) -> str | None:

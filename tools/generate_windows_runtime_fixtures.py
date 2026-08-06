@@ -36,6 +36,18 @@ NSS_PRIMARY_PASSWORD_ENV = "APEX_NSS_PRIMARY_PASSWORD"
 NSS_PRIMARY_PASSWORD_VALUE = "apex synthetic nss primary password v1"
 NSS_USERNAME = b"apex.synthetic@example.invalid"
 NSS_PASSWORD = "APEX synthetic Firefox NSS login secret 한글".encode()
+NSS_ENCRYPT_SYMBOL = "PK11SDR_Encrypt"
+_NSS_REQUIRED_SYMBOLS = (
+    "NSS_InitReadWrite",
+    "NSS_Shutdown",
+    "PK11_GetInternalKeySlot",
+    "PK11_FreeSlot",
+    "PK11_InitPin",
+    "PK11_CheckUserPassword",
+    "PK11_Authenticate",
+    NSS_ENCRYPT_SYMBOL,
+    "SECITEM_ZfreeItem",
+)
 
 
 class FixtureGenerationError(RuntimeError):
@@ -84,6 +96,10 @@ def main() -> int:
         "synthetic_only": True,
         "secret_values_emitted": False,
         "live_user_profile_used": False,
+        "verification_flows": {
+            "linux_generated_nss_windows_decrypt_supported": True,
+            "manifest_relative_paths_supported": True,
+        },
         "dpapi": dpapi,
         "nss": nss,
         "ai_provider": {
@@ -246,9 +262,13 @@ def _generate_dpapi_fixture(output_dir: Path) -> dict[str, Any]:
         "sid": DPAPI_SID,
         "masterkey_guid": str(DPAPI_MASTERKEY_GUID),
         "masterkey_path": str(masterkey_path),
+        "masterkey_path_relative": _fixture_relative_path(masterkey_path, output_dir),
         "input_file": str(blob_path),
+        "input_file_relative": _fixture_relative_path(blob_path, output_dir),
         "local_state_path": str(local_state_path),
+        "local_state_path_relative": _fixture_relative_path(local_state_path, output_dir),
         "chromium_input_file": str(chromium_secret_path),
+        "chromium_input_file_relative": _fixture_relative_path(chromium_secret_path, output_dir),
         "credential_env": DPAPI_PASSWORD_ENV,
         "credential_value_emitted": False,
         "expected_key_source": "WINDOWS_USER_PASSWORD",
@@ -403,10 +423,50 @@ def _generate_nss_fixture(output_dir: Path, *, library_path: str | None) -> dict
             warning_code="NSS_FIXTURE_DEPENDENCY_UNAVAILABLE",
             message="Firefox NSS fixture generation requires libnss3.",
         )
+    try:
+        lib = ctypes.CDLL(resolved_library)
+    except OSError as error:
+        return _unavailable_fixture(
+            fixture_id=NSS_FIXTURE_ID,
+            status="NSS_CAPABILITY_UNAVAILABLE",
+            warning_code="NSS_FIXTURE_DEPENDENCY_UNAVAILABLE",
+            message=str(error),
+            details={"nss_library_path": str(resolved_library)},
+        )
+
+    missing_symbols = _missing_nss_symbols(lib)
+    if missing_symbols:
+        encrypt_missing = NSS_ENCRYPT_SYMBOL in missing_symbols
+        return _unavailable_fixture(
+            fixture_id=NSS_FIXTURE_ID,
+            status=(
+                "NSS_ENCRYPT_SYMBOL_UNAVAILABLE"
+                if encrypt_missing
+                else "NSS_CAPABILITY_UNAVAILABLE"
+            ),
+            warning_code=(
+                "NSS_ENCRYPT_SYMBOL_UNAVAILABLE"
+                if encrypt_missing
+                else "NSS_SYMBOL_UNAVAILABLE"
+            ),
+            message=(
+                "Firefox NSS library cannot generate a synthetic fixture because "
+                f"{NSS_ENCRYPT_SYMBOL} is unavailable. Generate the NSS fixture on a "
+                "host whose NSS exports that symbol, then pass the generated manifest "
+                "to the Windows verifier."
+                if encrypt_missing
+                else "Firefox NSS fixture generation requires NSS symbols that are unavailable."
+            ),
+            details={
+                "nss_library_path": str(resolved_library),
+                "missing_symbols": missing_symbols,
+                "linux_generated_nss_windows_decrypt_supported": True,
+            },
+        )
+
     profile = output_dir / "firefox" / "Profiles" / "verify.default"
     profile.mkdir(parents=True, exist_ok=True)
     try:
-        lib = ctypes.CDLL(resolved_library)
         _configure_nss_library(lib)
         config = f"sql:{profile}".encode()
         if lib.NSS_InitReadWrite(config) != 0:
@@ -471,13 +531,19 @@ def _generate_nss_fixture(output_dir: Path, *, library_path: str | None) -> dict
         "license": "CC0-1.0",
         "version": "1",
         "root_path": str(output_dir / "firefox"),
+        "root_path_relative": _fixture_relative_path(output_dir / "firefox", output_dir),
         "profile_path": str(profile),
+        "profile_path_relative": _fixture_relative_path(profile, output_dir),
         "key4_db_path": str(key4_path),
+        "key4_db_path_relative": _fixture_relative_path(key4_path, output_dir),
         "logins_json_path": str(logins_path),
+        "logins_json_path_relative": _fixture_relative_path(logins_path, output_dir),
         "primary_password_required": True,
         "primary_password_env": NSS_PRIMARY_PASSWORD_ENV,
         "credential_value_emitted": False,
         "algorithm": "FIREFOX_NSS_LOGINS_JSON/PK11SDR",
+        "generation_method": "NSS_PK11SDR_ENCRYPT_SYMBOL",
+        "linux_generated_windows_decrypt_supported": True,
         "expected_login_count": 1,
         "file_hashes": {
             "key4_db_sha256": _file_sha256(key4_path) if key4_path.exists() else None,
@@ -501,6 +567,10 @@ def _generate_nss_fixture(output_dir: Path, *, library_path: str | None) -> dict
             "plaintext_emitted": False,
         },
     }
+
+
+def _missing_nss_symbols(lib: Any) -> list[str]:
+    return [name for name in _NSS_REQUIRED_SYMBOLS if not hasattr(lib, name)]
 
 
 def _configure_nss_library(lib: Any) -> None:
@@ -557,21 +627,29 @@ def _unavailable_fixture(
     status: str,
     warning_code: str,
     message: str,
+    details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    warning: dict[str, Any] = {
+        "code": warning_code,
+        "developer_message": message,
+        "secret_values_emitted": False,
+    }
+    if details:
+        warning["details"] = details
     return {
         "fixture_id": fixture_id,
         "status": status,
         "source": "APEX generated synthetic fixture set",
         "license": "CC0-1.0",
         "secret_values_emitted": False,
-        "warnings": [
-            {
-                "code": warning_code,
-                "developer_message": message,
-                "secret_values_emitted": False,
-            }
-        ],
+        "warnings": [warning],
     }
+
+
+def _fixture_relative_path(path: Path, fixture_root: Path) -> str:
+    return path.resolve(strict=False).relative_to(
+        fixture_root.resolve(strict=False)
+    ).as_posix()
 
 
 def _suite_status(dpapi: dict[str, Any], nss: dict[str, Any]) -> str:
