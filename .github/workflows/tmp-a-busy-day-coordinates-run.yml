@@ -1,0 +1,67 @@
+name: tmp-a-busy-day-coordinates-run
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Resolve all what3words records
+        shell: bash
+        run: |
+          python3 - <<'PYCODE'
+          import csv
+          import io
+          import pathlib
+          import requests
+          import time
+
+          source = pathlib.Path('.github/workflows/tmp-a-busy-day-coordinates.yml').read_text(encoding='utf-8')
+          lines = source.splitlines()
+          start = lines.index('seq\tday\twords')
+          rows = []
+          for line in lines[start:]:
+              if line.strip() == 'EOF_RECORDS':
+                  break
+              rows.append(line)
+
+          key = '5WHIM4GD'
+          session = requests.Session()
+          session.headers.update({'User-Agent': 'Mozilla/5.0'})
+          print('COORDCSV_START')
+          for row in csv.DictReader(io.StringIO('\n'.join(rows)), delimiter='\t'):
+              response = session.get(
+                  'https://api.what3words.com/v3/convert-to-coordinates',
+                  params={'words': row['words'], 'key': key, 'format': 'json'},
+                  timeout=30,
+              )
+              payload = response.json()
+              if response.status_code != 200 or 'coordinates' not in payload:
+                  print('ERROR', row['seq'], response.status_code, payload)
+                  raise SystemExit(1)
+              coords = payload['coordinates']
+              print(f"{row['seq']},{row['day']},{coords['lat']:.6f},{coords['lng']:.6f},{row['words']}")
+              time.sleep(0.03)
+          print('COORDCSV_END')
+          PYCODE
+
+      - name: Delete temporary branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [ -n "$HEAD_REF" ]; then
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$HEAD_REF" || true
+          fi
