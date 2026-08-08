@@ -1,0 +1,165 @@
+name: tmp-a-busy-day-coordinates
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  decode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve all what3words records
+        shell: bash
+        run: |
+          cat > /tmp/records.tsv <<'EOF_RECORDS'
+seq	day	words
+1	1	cureur.abreuver.bienfaisance
+2	1	excédentaire.informaticienne.lançage
+3	1	souplement.troquant.embrayant
+4	1	bufflon.ébonite.tardivement
+5	1	trompette.manipuler.palatin
+6	1	orgueilleuse.dirions.revenu
+7	1	emboîture.rabibocher.transmuable
+8	1	julienne.festoyons.compétiteur
+9	2	encablure.écarquiller.économat
+10	2	vinaigrer.réadmettre.enfouisse
+11	2	émondeur.évoluer.ramassage
+12	2	régimentaire.évitons.transmuable
+13	2	effilocher.surboum.remédier
+14	2	trapézoïde.connaissable.préluder
+15	2	penderie.dorure.documentaliste
+16	3	glaçage.raclement.satiriser
+17	3	dépaysant.réadaptation.surséance
+18	4	lier.frontalier.optimisation
+19	4	contourner.sidéraux.élégiaque
+20	5	omelette.nivelons.chansonner
+21	5	écouter.plioir.affaler
+22	5	femme.tisser.vinification
+23	5	indifférente.thyroïdienne.nourrissante
+24	5	basse.préemption.lumière
+25	5	îlot.gypaète.harmonium
+26	5	grimons.lamente.percement
+27	5	caillage.soldeur.tentaculaire
+28	5	étudiante.podomètre.déclarative
+29	6	recopiant.anticiper.remouiller
+30	6	rayonnement.conceptrice.annamite
+31	6	déglaçant.irrigateur.exclamative
+32	6	applaudissement.ahurissement.connaisseur
+33	6	guerrière.trognon.dépotons
+34	6	appesantir.avertir.apothéose
+35	6	silicium.bateau.dénotons
+36	6	cloutage.alentour.rustine
+37	6	recopiant.anticiper.remouiller
+38	7	compléter.refaire.îlotier
+39	7	jusque.accueillante.judicieuse
+40	7	gouffre.alphabétiser.grutier
+41	7	îlot.bobineur.présupposer
+42	7	contrôleuse.objectivisme.forfait
+43	7	comblant.rengainer.préludant
+44	7	vicomtesse.ambrer.sophistiquer
+45	8	notifier.trottin.hameçonner
+46	8	isobare.branchant.néolithique
+47	9	endormir.giboyeux.dégrisant
+48	9	étameur.tertio.vinaigrier
+49	9	attributif.carbonisation.coquelicot
+50	9	chicanière.jouxtant.dévorant
+51	9	redécouvrir.indigestion.salpêtrier
+52	9	suavité.pingouin.piquer
+53	9	corpulence.obligeante.latiniser
+54	10	corpulence.obligeante.latiniser
+55	10	suavité.pingouin.piquer
+56	10	spécimen.inégalable.estompons
+57	10	séismique.inventaire.désenfumer
+58	10	atténuant.résorber.décidable
+59	10	endormir.giboyeux.dégrisant
+60	11	atteindre.amarinage.voyante
+61	11	flottable.radoucissement.globaliser
+62	12	mazurka.écouter.brosseur
+63	12	flottaison.martelons.magasinier
+64	13	excédentaire.prélevons.rebeller
+65	13	astuce.vallonnement.franchisse
+66	14	testeur.impertinente.restons
+67	14	complaisance.babouche.fougue
+68	15	centenaire.chauffagiste.ventraux
+69	15	obélisque.amidon.parfumeur
+70	16	aplanir.rétroactive.amphibie
+71	16	noël.contumace.chargeons
+72	17	récurage.catégorique.soutier
+73	17	brioche.oxydation.gastrique
+74	17	saxophoniste.syllabaire.rétroactif
+75	17	sustenter.anticiper.renseigner
+76	17	chicorée.censément.froisser
+77	17	immanence.purement.semoncer
+78	17	récurage.catégorique.soutier
+79	18	législatif.marivauder.imprudence
+80	18	pagne.débrouillarde.authentiquement
+81	18	minorons.billetterie.accrocher
+82	18	déciderions.palourde.remodeler
+83	18	vertèbre.universellement.groupage
+84	18	froidement.aubade.carrousel
+85	18	recoin.intéressons.globuleuse
+86	19	colmatant.ramure.caprin
+87	19	besogneuse.vigoureuse.jardinière
+88	20	décuivrer.régner.pruneau
+89	20	butoir.mariachi.mûrement
+90	21	burineur.trottin.détectant
+91	21	optons.débosseler.lycaon
+92	22	reconstruite.rythmer.indigestion
+93	22	blanchir.gréant.cuisant
+94	23	ratifiant.comité.ambigument
+95	23	argot.réclamons.actionnariat
+96	24	argot.réclamons.actionnariat
+97	24	cligner.rétrocession.initialement
+98	25	glissade.savonnage.éconduit
+99	25	hilarité.éponger.influencer
+100	26	soupesons.canneberge.démographe
+101	26	fournaise.affirmer.polissable
+102	27	aligner.terrienne.chiot
+103	27	marquage.allusif.subsistance
+104	28	retailler.occultant.soupesant
+105	28	producteur.encensoir.annonceuse
+106	28	étameuse.envier.obligeance
+107	28	cordillère.vidanger.offerte
+108	28	correspondons.dormante.oreillette
+109	28	déversons.calorifère.enfant
+110	28	chatterton.gélule.contemplons
+111	28	habiliter.limoneux.lacunaire
+112	28	forain.mercenaire.pilaire
+          EOF_RECORDS
+          python3 - <<'PY'
+          import csv, requests, time
+          key = '5WHIM4GD'
+          s = requests.Session()
+          s.headers.update({'User-Agent':'Mozilla/5.0'})
+          print('COORDCSV_START')
+          with open('/tmp/records.tsv', encoding='utf-8') as f:
+              for row in csv.DictReader(f, delimiter='\t'):
+                  r = s.get('https://api.what3words.com/v3/convert-to-coordinates', params={'words':row['words'],'key':key,'format':'json'}, timeout=30)
+                  try:
+                      j = r.json()
+                  except Exception:
+                      print('ERROR', row['seq'], r.status_code, r.text[:300])
+                      raise
+                  if r.status_code != 200 or 'coordinates' not in j:
+                      print('ERROR', row['seq'], r.status_code, j)
+                      raise SystemExit(1)
+                  c=j['coordinates']
+                  print(f"{row['seq']},{row['day']},{c['lat']:.6f},{c['lng']:.6f},{row['words']}")
+                  time.sleep(0.03)
+          print('COORDCSV_END')
+          PY
+
+      - name: Delete temporary branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [ -n "$HEAD_REF" ]; then
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$HEAD_REF" || true
+          fi
