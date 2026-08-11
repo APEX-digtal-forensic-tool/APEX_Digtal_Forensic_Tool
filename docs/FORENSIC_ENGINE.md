@@ -698,6 +698,12 @@ AI는 검토되지 않은 Candidate를 확정 사실로 표현할 수 없습니�
 
 후순위 기능은 초기 구현 완료 항목으로 표시하지 않습니다.
 
+별도 KakaoTalk Decryption Provider는 Windows Desktop 2.0.8.990만 대상으로 합니다. 명시적
+Offline Root 아래의 `chatLogs*.edb` 후보와 `KakaoTalk.exe` PE Fixed File Version을 bounded,
+read-only 방식으로 검증하며, 외부 KPRAGMA+nonce 또는 AES DB Key+IV가 있을 때 합성 Contract
+Fixture를 복호화해 SQLite `quick_check(1)`, `chatLogs` Schema와 실제 존재 Column을 검증합니다.
+자동 Key 획득과 실제 KakaoTalk Fixture 검증은 `BLOCKED_EXTERNAL_FIXTURE`입니다.
+
 ---
 
 ## AI Report와 Human Review
@@ -1187,7 +1193,10 @@ parse status, warning flag, and opaque stable cursors.
 - Regex 중첩 반복·역참조·확장 Group·과도한 Bounded Repeat를 거부하고 Event XML 입력/Record 크기를 제한
 - Bandit High 0건, Medium `B608` 43건은 모두 근거와 함께 False Positive로 분류하며 Bandit Clean으로 주장하지 않음
 - Linux에서 Windows 전용 Probe는 `HOST_VERIFICATION_REQUIRED`; Optional Runtime과 외부 설정은 성공으로 승격하지 않음
-- KakaoTalk 자동 Key 획득 및 암호화 DB 복호화는 Release Gate에서 제외
+- KakaoTalk Windows 2.0.8.990 Offline Discovery, PE Version 검증, 외부 Key 기반
+  AES-128-CBC/SQLite/chatLogs 합성 Contract 검증은 구현됨
+- KakaoTalk 자동 Key 획득과 실제 KakaoTalk 암호화 Fixture 검증은
+  `BLOCKED_EXTERNAL_FIXTURE`이며 Release Gate에서 제외
 
 ---
 

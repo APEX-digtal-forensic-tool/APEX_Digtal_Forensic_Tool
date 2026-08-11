@@ -1543,8 +1543,9 @@ def _kakaotalk_derivation_input(
     parameters: dict[str, Any] = {
         "platform": args.platform,
         "application_version": args.application_version,
-        "database_schema_version": args.database_schema_version,
     }
+    if args.database_schema_version:
+        parameters["database_schema_version"] = args.database_schema_version
     env_mappings = (
         ("pragma_key_env", "pragma_key"),
         ("user_nonce_env", "user_nonce"),

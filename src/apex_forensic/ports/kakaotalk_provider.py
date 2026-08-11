@@ -28,6 +28,7 @@ class KakaoTalkProviderPort(Protocol):
         case_id: str,
         evidence_id: str | None,
         store_path: str,
+        profile_root: str | None = None,
     ) -> dict[str, object]: ...
 
     def acquire_key_material(
@@ -36,6 +37,7 @@ class KakaoTalkProviderPort(Protocol):
         case_id: str,
         evidence_id: str | None,
         profile_root: str | None = None,
+        platform: str = "WINDOWS_DESKTOP",
     ) -> dict[str, object]: ...
 
     def decrypt_store(
@@ -43,5 +45,6 @@ class KakaoTalkProviderPort(Protocol):
         derivation_input: SecretDerivationInput,
         *,
         store_path: str,
+        profile_root: str | None = None,
         cancellation_requested: bool = False,
     ) -> DecryptionResult: ...

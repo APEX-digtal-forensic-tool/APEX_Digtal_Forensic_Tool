@@ -3,6 +3,10 @@
 현재 Core Engine은 **Phase 1~8 및 Phase 9 Release Hardening 구현 완료 Candidate** 단계다.
 설계 완료, 구현 완료, 현재 Host Runtime 검증 및 외부 검증 완료를 서로 구분한다. MCP Server,
 LLM Provider, Desktop GUI와 KakaoTalk 자동 Key 획득은 이 Core Roadmap의 완료 Gate에서 제외한다.
+KakaoTalk Windows 2.0.8.990은 명시적 Offline Root의 bounded discovery, PE Fixed File
+Version 검증, 외부 Key 기반 합성 AES/SQLite Contract 복호화와 `chatLogs` 추출까지
+`IMPLEMENTED_UNVERIFIED` 상태다. 실제 KakaoTalk Fixture와 자동 KPRAGMA 획득 근거가 없어
+`real_kakaotalk_fixture_verified=false`를 유지한다.
 
 ## Phase 0. 설계 정합성, Schema와 테스트 기반
 

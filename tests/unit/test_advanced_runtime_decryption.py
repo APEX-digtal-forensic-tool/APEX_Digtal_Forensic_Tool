@@ -1151,7 +1151,7 @@ def test_kakaotalk_provider_hashes_store_and_requires_key(tmp_path: Path) -> Non
     assert inspected["redistributable_fixture_status"] == "BLOCKED_EXTERNAL_FIXTURE"
     assert inspected["real_kakaotalk_fixture_verified"] is False
     assert inspected["raw_store_emitted"] is False
-    assert result["status"] == "KEY_UNAVAILABLE"
+    assert result["status"] == "VERSION_UNVERIFIED"
     assert result["metadata"]["store_length"] == len(b"encrypted-kakao-fixture-with-token=secret")
     assert "plaintext_b64" not in result
     assert "token=secret" not in str(result)
@@ -1265,7 +1265,7 @@ def test_kakaotalk_provider_reports_corrupt_db_with_correct_external_key(
 
     result = provider.decrypt_store(derivation, store_path=str(corrupt_store)).to_schema_dict()
 
-    assert result["status"] == "FAILED"
+    assert result["status"] == "CORRUPT_DB"
     assert result["attempt"]["error_code"] == "KAKAOTALK_CORRUPT_DB"
     assert result["metadata"]["raw_store_emitted"] is False
     assert result["metadata"]["plaintext_emitted"] is False
@@ -1289,6 +1289,10 @@ def test_kakaotalk_verifier_decrypts_external_key_contract_without_real_fixture_
             str(project_root / "tools" / "verify_kakaotalk_runtime.py"),
             "--store-path",
             str(fixture["store"]),
+            "--application-version",
+            "2.0.8.990",
+            "--database-schema-version",
+            "chatLogs",
             "--pragma-key-env",
             "APEX_KAKAO_PRAGMA_KEY",
             "--user-nonce-env",
@@ -1306,11 +1310,17 @@ def test_kakaotalk_verifier_decrypts_external_key_contract_without_real_fixture_
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert payload["key_acquisition"]["status"] == "BLOCKED_EXTERNAL_FIXTURE"
+    assert payload["key_acquisition"]["status"] == "SOURCE_UNAVAILABLE"
     assert payload["decrypt"]["status"] == "KAKAOTALK_DECRYPTED"
     assert payload["verification"]["message_count"] == 2
     assert payload["verification"]["expected_message_present"] is True
+    assert payload["verification"]["message_contents_emitted"] is False
+    assert payload["verification"]["secret_leakage_check_passed"] is True
     assert payload["verification"]["real_kakaotalk_fixture_verified"] is False
+    assert "message_preview" not in completed.stdout
+    assert str(fixture["message"]) not in completed.stdout
+    assert str(fixture["pragma_key"]) not in completed.stdout
+    assert str(fixture["user_nonce"]) not in completed.stdout
 
 
 def test_secret_provider_and_decryption_schemas_validate_runtime_boundaries(

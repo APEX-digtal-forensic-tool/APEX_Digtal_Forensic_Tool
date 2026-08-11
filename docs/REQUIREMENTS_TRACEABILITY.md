@@ -375,6 +375,11 @@ Phase 6 stops at the public engine/interface boundary. MCP transport, AI provide
 | RH-CAP-001 | Optional Dependency를 가짜 성공으로 표시하지 않아야 한다 | `apex_forensic.runtime.capabilities` | `python3 -m apex_forensic doctor --json` actual Import/Executable/Runtime probes |
 | RH-GATE-001 | 하나의 재현 가능한 Release 검증 경로가 필요하다 | `tools/verify_engine_release.py` | pytest/Ruff/mypy/diff/design/runtime/recovery/Bandit/benchmark/CLI/Unicode/read-only checks |
 | RH-DOC-001 | 현재 Host 결과와 외부 Blocker를 구분해야 한다 | Required status documents | Linux verified, Windows host, optional dependency, external configuration states separated |
+| KAKAO-OFFLINE-001 | 명시적 Offline Root만 bounded/read-only 탐색해야 한다 | KakaoTalk provider의 containment, depth/entry/size limit, symlink/reparse 차단 | `test_kakaotalk_runtime.py` discovery/security tests |
+| KAKAO-VERSION-001 | 지원 Version을 Evidence로 검증해야 한다 | `KakaoTalk.exe` PE Fixed File Version resource parser | supported, unsupported, unverified version tests |
+| KAKAO-DB-001 | 외부 Key 복호화 결과를 SQLite/Schema로 검증해야 한다 | AES-128-CBC, read-only `quick_check(1)`, `chatLogs` column-aware extraction | synthetic contract, corruption, wrong key/IV/schema tests |
+| KAKAO-BLOCK-001 | 자동 획득과 실제 Fixture를 검증 없이 성공 처리하지 않아야 한다 | `BLOCKED_EXTERNAL_FIXTURE`, `real_kakaotalk_fixture_verified=false` | verifier redaction and require-flag tests |
 
-KakaoTalk automatic key acquisition, Android/iOS support, new cryptographic research and encrypted
-fixture claims are excluded from these requirements and from the Release Gate.
+KakaoTalk automatic key acquisition, Android/iOS support, new cryptographic research and real
+encrypted-fixture claims remain excluded from the Release Gate. The external-key synthetic contract
+does not establish real KakaoTalk compatibility.

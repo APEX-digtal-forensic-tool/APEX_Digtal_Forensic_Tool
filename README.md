@@ -15,7 +15,7 @@ APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 �
 > 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 기반 기능, Core Runtime 확장 및 Release Hardening 경로를 구현한 Goal-scope Feature Complete Candidate** 상태입니다.
 > 기존 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive Indexing, Windows Artifact, Search·Timeline, Browser·Media, Context, AI Assistance Contract 및 Report Contract에 더해 RAW·DD·IMG·E01·VHD·VHDX Reader, MBR·GPT·Extended Partition, `pytsk3` 기반 Image File System, 삭제 파일·Unallocated·Slack 처리, Registry Transaction Replay, Prefetch MAM, Windows Event Message Rendering, Browser Cache·삭제 Candidate, Communication Analyzer, 실제 Thumbnail 및 제한된 Video Frame Sampling을 구현했습니다.
 >
-> Linux Release Hardening에서는 합성 Fixture 기반 Runtime·Recovery·보안·Benchmark·Doctor·CLI 검증을 수행합니다. Windows 전용 DPAPI/NSS Host Smoke와 Event Message Rendering은 현재 Linux 결과에서 `HOST_VERIFICATION_REQUIRED`로 유지하며, OCR/STT 또는 Image Runtime Dependency가 없으면 `CAPABILITY_UNAVAILABLE`로 보고합니다. KakaoTalk 자동 Key 획득과 암호화 DB 복호화는 범위 밖입니다. X-Ways·Autopsy 대비 성능 우위는 주장하지 않습니다.
+> Linux Release Hardening에서는 합성 Fixture 기반 Runtime·Recovery·보안·Benchmark·Doctor·CLI 검증을 수행합니다. Windows 전용 DPAPI/NSS Host Smoke와 Event Message Rendering은 현재 Linux 결과에서 `HOST_VERIFICATION_REQUIRED`로 유지하며, OCR/STT 또는 Image Runtime Dependency가 없으면 `CAPABILITY_UNAVAILABLE`로 보고합니다. KakaoTalk Windows 2.0.8.990은 명시적 Offline Root 탐색, PE Version 검증 및 외부 Key 기반 합성 AES Contract 복호화까지만 구현했으며, 자동 Key 획득과 실제 KakaoTalk Fixture 검증은 `BLOCKED_EXTERNAL_FIXTURE`입니다. X-Ways·Autopsy 대비 성능 우위는 주장하지 않습니다.
 
 ---
 
@@ -626,7 +626,7 @@ Machine Extraction 구현 범위:
 현재 Browser·Media 확장에서는 외부 Key 기반 Chromium AES-GCM, Browser Cache,
 WAL·Freelist 삭제 Candidate, Private-mode Candidate, Pillow Raster Thumbnail 및 제한된
 FFmpeg Frame Sampling, 합성 입력 기반 Offline DPAPI, Firefox NSS Adapter 및 HTML/PDF Renderer를
-지원합니다. KakaoTalk 자동 Key 획득·암호화 DB 복호화, Cloud Sync, Video 전체 Frame 분석,
+지원합니다. KakaoTalk 자동 Key 획득·실제 암호화 DB Fixture 검증, Cloud Sync, Video 전체 Frame 분석,
 Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP 실행은 미지원입니다. OCR·STT와 외부 AI는
 Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사용할 수 없는 상태를 반환합니다.
 
@@ -725,7 +725,7 @@ Phase 1~8 기반 위에 다음 Runtime을 추가했습니다.
 현재 명시적 미지원 경계:
 
 - Live Profile Credential 자동 획득
-- KakaoTalk 암호화 DB 복호화
+- KakaoTalk 자동 Key 획득과 실제 KakaoTalk 암호화 DB Fixture 검증
 - 형태소 기반 한국어 검색
 - MCP·LLM Agent Runtime과 Desktop GUI
 - 설치되지 않은 OCR·STT·E01·VHD·VHDX Runtime은 `CAPABILITY_UNAVAILABLE`
@@ -948,7 +948,12 @@ Communication Analyzer:
 - Telegram
 - KakaoTalk 암호화 Store Discovery
 
-KakaoTalk는 OS·앱 Version별 Key 획득과 암호화 DB 복호화를 지원하지 않습니다.
+KakaoTalk Windows Desktop 2.0.8.990에 한해 명시적 Offline Root 아래의 `chatLogs*.edb`
+후보를 bounded/read-only 방식으로 탐색하고, `KakaoTalk.exe` PE Fixed File Version을 검증합니다.
+외부 KPRAGMA+nonce 또는 AES DB Key+IV를 사용한 AES-128-CBC 복호화, SQLite
+`quick_check(1)`, `chatLogs` Schema 검증과 column-aware 추출은 합성 Contract Fixture로
+검증했습니다. 자동 KPRAGMA 획득 경로와 실제 KakaoTalk Fixture는 재현 가능한 근거가 없어
+`BLOCKED_EXTERNAL_FIXTURE`이며 `real_kakaotalk_fixture_verified=false`입니다.
 
 ### Timeline Analysis
 
@@ -1660,7 +1665,8 @@ APEX/
 
 ### 구현 예정
 
-- [ ] 지원 OS·앱 Version을 고정한 KakaoTalk 암호화 DB 복호화
+- [x] Windows 2.0.8.990 KakaoTalk 외부 Key 합성 Contract 복호화와 Offline Discovery
+- [ ] KakaoTalk 자동 Key 획득 및 실제 KakaoTalk Fixture 검증
 - [ ] 형태소 기반 한국어 Search 검토
 - [ ] OCR·STT Runtime/Model 배포와 실제 Host Fixture Matrix
 - [ ] 외부 AI Adapter 품질 평가와 실제 Provider 통합 검증
@@ -1816,7 +1822,8 @@ APEX/
 
 - [x] DPAPI·NSS Offline Secret Recovery Adapter와 Synthetic Verification
 - [x] Registry Binary Deleted-cell Carving
-- 지원 Version을 고정한 KakaoTalk DB 복호화
+- [x] Windows 2.0.8.990 KakaoTalk 외부 Key 합성 Contract 복호화와 Schema 검증
+- [ ] KakaoTalk 자동 Key 획득 및 실제 암호화 DB Fixture 검증
 - [x] 동일 조건 기반 Synthetic Quick/Full Benchmark Harness
 - [x] Progressive Indexing 및 Cache Cold·Warm 측정
 - [x] Evidence Reader·File System·Recovery Fault-injection 검증

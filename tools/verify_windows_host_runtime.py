@@ -141,6 +141,9 @@ def main() -> int:
     parser.add_argument("--nss-primary-password-env")
     parser.add_argument("--kakaotalk-store-path")
     parser.add_argument("--kakaotalk-profile-root")
+    parser.add_argument("--kakaotalk-platform", default="WINDOWS_DESKTOP")
+    parser.add_argument("--kakaotalk-application-version")
+    parser.add_argument("--kakaotalk-database-schema-version")
     parser.add_argument("--kakaotalk-pragma-key-env")
     parser.add_argument("--kakaotalk-user-nonce-env")
     parser.add_argument("--kakaotalk-db-key-hex-env")
@@ -226,6 +229,17 @@ def _probes(root: Path, python_executable: str, args: argparse.Namespace) -> lis
     kakaotalk_command = [python_executable, script("verify_kakaotalk_runtime.py")]
     _append_option(kakaotalk_command, "--store-path", args.kakaotalk_store_path)
     _append_option(kakaotalk_command, "--profile-root", args.kakaotalk_profile_root)
+    _append_option(kakaotalk_command, "--platform", args.kakaotalk_platform)
+    _append_option(
+        kakaotalk_command,
+        "--application-version",
+        args.kakaotalk_application_version,
+    )
+    _append_option(
+        kakaotalk_command,
+        "--database-schema-version",
+        args.kakaotalk_database_schema_version,
+    )
     _append_option(kakaotalk_command, "--pragma-key-env", args.kakaotalk_pragma_key_env)
     _append_option(kakaotalk_command, "--user-nonce-env", args.kakaotalk_user_nonce_env)
     _append_option(kakaotalk_command, "--db-key-hex-env", args.kakaotalk_db_key_hex_env)
