@@ -48,10 +48,32 @@ def test_windows_host_runtime_verifier_dry_run_reports_probe_matrix(project_root
         "ocr",
         "report-renderers",
         "stt",
+        "windows-event-message-renderer",
     }
     assert {item["status"] for item in payload["probes"]} == {"SKIPPED_BY_REQUEST"}
     assert payload["windows_runtime_success_claimed"] is False
     assert payload["windows_host_dpapi_nss_verified"] is False
+
+
+def test_windows_host_runtime_verifier_reports_explicit_probe_exclusion(project_root) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(project_root / "tools" / "verify_windows_host_runtime.py"),
+            "--skip-execution",
+            "--exclude-probe",
+            "kakaotalk",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+    excluded = next(item for item in payload["probes"] if item["name"] == "kakaotalk")
+    assert excluded["status"] == "SKIPPED_WITH_REASON"
+    assert excluded["reason"] == "EXCLUDED_BY_REQUEST"
 
 
 def test_windows_host_semantic_dpapi_rejects_key_unavailable_and_passes_decrypted(
@@ -175,6 +197,48 @@ def test_windows_host_semantic_report_renderer_requires_html_and_pdf_completed(
     assert passed == "PASSED"
     assert failed == "FAILED"
     assert checks["pdf_status"] == "CAPABILITY_UNAVAILABLE"
+
+
+def test_windows_host_semantic_event_message_renderer_requires_rendered_message(
+    project_root: Path,
+) -> None:
+    module = _load_windows_host_module(project_root)
+
+    passed, passed_checks = module._classify_probe_status(
+        "windows-event-message-renderer",
+        returncode=0,
+        child_json={
+            "message_rendered": True,
+            "rendered_message": "The operating system started.",
+            "message_rendering": {"status": "RENDERED"},
+        },
+        json_error=None,
+    )
+    unavailable, _ = module._classify_probe_status(
+        "windows-event-message-renderer",
+        returncode=2,
+        child_json={
+            "message_rendered": False,
+            "rendered_message": None,
+            "message_rendering": {"status": "PYWIN32_UNAVAILABLE"},
+        },
+        json_error=None,
+    )
+    host_required, _ = module._classify_probe_status(
+        "windows-event-message-renderer",
+        returncode=2,
+        child_json={
+            "message_rendered": False,
+            "rendered_message": None,
+            "message_rendering": {"status": "WINDOWS_HOST_REQUIRED"},
+        },
+        json_error=None,
+    )
+
+    assert passed == "PASSED"
+    assert passed_checks["rendered_message_present"] is True
+    assert unavailable == "CAPABILITY_UNAVAILABLE"
+    assert host_required == "HOST_VERIFICATION_REQUIRED"
 
 
 def test_windows_host_semantic_ocr_and_stt_do_not_pass_without_real_fixture(

@@ -126,6 +126,27 @@ class StateConflictError(ApexError):
         )
 
 
+class PersistenceError(ApexError):
+    """Raised when the persistence adapter cannot safely complete an operation."""
+
+    def __init__(
+        self,
+        code: str,
+        developer_message: str,
+        *,
+        retryable: bool,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=code,
+            message_key=f"error.{code.lower()}",
+            developer_message=developer_message,
+            target="database",
+            retryable=retryable,
+            details=details or {},
+        )
+
+
 class ContextError(ApexError):
     """Raised for structured Phase 6 context contract violations."""
 

@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0.0",
+  "scanner": "bandit",
+  "policy": "Every current Medium-or-higher finding must have an explicit disposition.",
+  "classifications": [
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "The interpolated pagination fragment is selected from fixed SQL literals; all cursor values remain bound parameters.",
+      "locations": [
+        "src/apex_forensic/adapters/artifacts/browser.py:1559",
+        "src/apex_forensic/adapters/artifacts/browser.py:1632",
+        "src/apex_forensic/adapters/artifacts/browser.py:1753",
+        "src/apex_forensic/adapters/artifacts/browser.py:1823",
+        "src/apex_forensic/adapters/artifacts/browser.py:1911"
+      ]
+    },
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "Browser schema expressions use only hardcoded table and column choices after observed-schema membership checks; no evidence value becomes SQL syntax.",
+      "locations": [
+        "src/apex_forensic/adapters/artifacts/browser.py:1991",
+        "src/apex_forensic/adapters/artifacts/browser.py:2085",
+        "src/apex_forensic/adapters/artifacts/browser.py:2168",
+        "src/apex_forensic/adapters/artifacts/browser.py:2968",
+        "src/apex_forensic/adapters/artifacts/browser.py:2980"
+      ]
+    },
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "The communication query passes hardcoded identifiers through a double-quote escaping helper and substitutes NULL for absent columns.",
+      "locations": [
+        "src/apex_forensic/adapters/artifacts/communication/core.py:1125"
+      ]
+    },
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "The NSS metadata table identifier is assigned exclusively from the two fixed literals metadata and metaData after sqlite_master inspection.",
+      "locations": [
+        "src/apex_forensic/adapters/decryption/nss.py:742"
+      ]
+    },
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "UPDATE assignments and the auxiliary job-table identifier are assembled only from hardcoded internal field and table literals; all state values are bound.",
+      "locations": [
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3224",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3738",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3743",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3888",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5705",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6371"
+      ]
+    },
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "WHERE fragments are selected from hardcoded internal predicates and placeholder counts; all case, evidence, cursor, filter, and limit values are bound parameters.",
+      "locations": [
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3581",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3933",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:4852",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5026",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5105",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5537",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5576",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6035",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6124",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6286",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7070",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7127",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7217",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7350",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7585",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8007",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8984",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9055",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9117",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9174",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9230",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9285"
+      ]
+    },
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "Timeline sort direction and comparison operators are reduced to the fixed literals ASC or DESC and less-than or greater-than before query assembly; cursor values are bound.",
+      "locations": [
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6591"
+      ]
+    },
+    {
+      "test_id": "B608",
+      "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
+      "justification": "Dynamic resource identifiers must match an explicit five-entry table-to-ID-column allowlist, and artifact-type expansion creates only question-mark placeholders with bound values.",
+      "locations": [
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8134",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8152"
+      ]
+    }
+  ]
+}

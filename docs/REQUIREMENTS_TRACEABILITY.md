@@ -305,9 +305,9 @@ analyzers, and report rendering.
   capability/corrupt handling, GPS/time raw+normalized preservation, thumbnail cache rows, browser
   visit/search/download provenance queries, corrupt media/browser resilience, candidate review
   immutability, and top-level CLI smoke coverage.
-- Unsupported boundaries: raster thumbnail pixel rendering, actual OCR/STT execution, Email,
-  Discord, Telegram, KakaoTalk, other messenger parsers, deleted/slack/unallocated recovery, live
-  browser acquisition, GUI/web/MCP, AI/LLM flows, and report rendering remain outside Phase 5.
+- Later Core Runtime extensions add raster thumbnails, optional OCR/STT adapters, Email/Discord/
+  Telegram analyzers, deleted/slack/unallocated recovery, and local HTML/PDF rendering. Live browser
+  acquisition, GUI/web/MCP, AI/LLM agent flows, and KakaoTalk automatic key acquisition remain out of scope.
 
 ### Phase 6 Implementation Trace
 
@@ -348,7 +348,7 @@ Phase 6 stops at the public engine/interface boundary. MCP transport, AI provide
 - Schemas: `report-record`, `report-version`, `report-section`, `report-render-package`, `ai-report-draft-input`, `report-review-event`, `report-approval-record`, `custody-snapshot`, `report-export-manifest`, `rendered-report-artifact`, and `report-renderer-capability`.
 - CLI: `report create/list/show/archive`, version commands, AI draft ingest, review/approval/custody/package/export commands, plus public interface `report.*` descriptors and invocation.
 - Verification: Phase 8 unit/integration tests cover report/version persistence and reopen, deterministic replay, cross-case rejection, script/raw response rejection, AI draft provenance, review conflicts, approval hash chain/revoke, new-version approval separation, custody verification, default renderer unavailable, fake renderer success/failure/cancel, rendered artifact metadata, export audit append-only behavior, descriptors, interface invocation, CLI E2E, and schema validation.
-- Boundary: actual AI report draft generation, LLM/prompt/MCP runtime, GUI preview, runtime PDF/HTML rendering, renderer shell/network adapters, arbitrary local output paths, electronic signature, RBAC/authentication, and observed-fact promotion from report text are not implemented.
+- Boundary: actual AI report draft generation, LLM/prompt/MCP runtime, GUI preview, renderer network adapters, arbitrary local output paths, electronic signature, RBAC/authentication, and observed-fact promotion from report text are not implemented. Local HTML and optional ReportLab PDF adapters implement approved-package rendering.
 
 | ID | 요구사항 | 구현 | 검증 |
 |---|---|---|---|
@@ -362,3 +362,19 @@ Phase 6 stops at the public engine/interface boundary. MCP transport, AI provide
 | P8-RPT-008 | Renderer는 provider-neutral이고 기본 unavailable이어야 한다 | `ReportRendererPort`, `UnavailableReportRenderer` | capability and manifest tests |
 | P8-RPT-009 | Output path traversal/root escape를 막아야 한다 | filename and `derived://` validators | traversal/root rejection tests |
 | P8-RPT-010 | Prompt/API key/raw response/chain-of-thought 저장을 막아야 한다 | forbidden payload validators | AI/report security tests |
+
+## Release Hardening Traceability Update
+
+| ID | 요구사항 | 구현 | 검증/상태 |
+|---|---|---|---|
+| RH-RUN-001 | Runtime 성공은 Semantic 결과로 판정해야 한다 | `verify_windows_host_runtime.py` Probe Classifier와 Event Message Renderer 판정 | Linux Probe는 실제 실행, Windows 전용은 `HOST_VERIFICATION_REQUIRED` |
+| RH-REC-001 | DB Corruption/Lock/Writer Contention을 구조화해야 한다 | SQLite Adapter `PersistenceError` 변환 | `test_release_hardening_recovery.py`의 deterministic temp DB tests |
+| RH-SEC-001 | Catastrophic Regex와 Oversized XML을 제한해야 한다 | Search Regex Policy, bounded Event XML Reader/Record Size | Search/Windows Artifact regression tests |
+| RH-SEC-002 | Bandit Medium 이상을 모두 분류해야 한다 | `tools/security_findings.json` | Release Gate가 현재 Finding과 Manifest의 누락/Drift를 실패 처리 |
+| RH-BENCH-001 | 재현 가능한 Quick/Full Benchmark와 Read-only 증명이 필요하다 | `apex_forensic.runtime.benchmark` | Synthetic Fixture hash, fresh DB, Cold/Warm, resource/throughput metrics, before/after snapshot |
+| RH-CAP-001 | Optional Dependency를 가짜 성공으로 표시하지 않아야 한다 | `apex_forensic.runtime.capabilities` | `python3 -m apex_forensic doctor --json` actual Import/Executable/Runtime probes |
+| RH-GATE-001 | 하나의 재현 가능한 Release 검증 경로가 필요하다 | `tools/verify_engine_release.py` | pytest/Ruff/mypy/diff/design/runtime/recovery/Bandit/benchmark/CLI/Unicode/read-only checks |
+| RH-DOC-001 | 현재 Host 결과와 외부 Blocker를 구분해야 한다 | Required status documents | Linux verified, Windows host, optional dependency, external configuration states separated |
+
+KakaoTalk automatic key acquisition, Android/iOS support, new cryptographic research and encrypted
+fixture claims are excluded from these requirements and from the Release Gate.

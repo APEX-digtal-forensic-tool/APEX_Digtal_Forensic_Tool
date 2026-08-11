@@ -116,6 +116,13 @@ def main() -> int:
         action="store_true",
         help="Only print the host/probe matrix; do not execute verifier scripts.",
     )
+    parser.add_argument(
+        "--exclude-probe",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Exclude a named probe and report the exclusion explicitly.",
+    )
     parser.add_argument("--dpapi-input-file")
     parser.add_argument("--dpapi-local-state-path")
     parser.add_argument("--dpapi-decrypt-local-state-key", action="store_true")
@@ -151,11 +158,20 @@ def main() -> int:
 
     results: list[dict[str, Any]] = []
     for probe in probes:
+        if probe.name in args.exclude_probe:
+            results.append(
+                _skipped_probe(
+                    probe,
+                    "SKIPPED_WITH_REASON",
+                    reason="EXCLUDED_BY_REQUEST",
+                )
+            )
+            continue
         if args.skip_execution:
             results.append(_skipped_probe(probe, "SKIPPED_BY_REQUEST"))
             continue
         if probe.requires_windows and not is_windows:
-            results.append(_skipped_probe(probe, "WINDOWS_HOST_REQUIRED"))
+            results.append(_skipped_probe(probe, "HOST_VERIFICATION_REQUIRED"))
             continue
         if not probe.fixture_configured:
             results.append(_skipped_probe(probe, "EXTERNAL_FIXTURE_NOT_CONFIGURED"))
@@ -167,7 +183,7 @@ def main() -> int:
 
     payload = {
         "host_platform": platform.platform(),
-        "host_platform_status": "WINDOWS" if is_windows else "WINDOWS_HOST_REQUIRED",
+        "host_platform_status": "WINDOWS" if is_windows else "HOST_VERIFICATION_REQUIRED",
         "python": args.python,
         "secret_values_emitted": False,  # nosec
         "windows_runtime_success_claimed": is_windows
@@ -234,6 +250,11 @@ def _probes(root: Path, python_executable: str, args: argparse.Namespace) -> lis
         Probe(
             "report-renderers",
             [python_executable, script("verify_report_renderers.py"), "--require-pdf"],
+        ),
+        Probe(
+            "windows-event-message-renderer",
+            [python_executable, script("verify_windows_event_message_renderer.py")],
+            requires_windows=True,
         ),
     ]
     ai_command = [
@@ -368,15 +389,23 @@ def _probe_passed(results: list[dict[str, Any]], name: str) -> bool:
     return any(item["name"] == name and item["status"] == "PASSED" for item in results)
 
 
-def _skipped_probe(probe: Probe, reason: str) -> dict[str, Any]:
-    return {
+def _skipped_probe(
+    probe: Probe,
+    status: str,
+    *,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    result = {
         "name": probe.name,
-        "status": reason,
+        "status": status,
         "command": _redacted_command(probe.command),
         "returncode": None,
         "stdout": "",
         "stderr": "",
     }
+    if reason is not None:
+        result["reason"] = reason
+    return result
 
 
 def _run_probe(probe: Probe, *, timeout: float, cwd: Path) -> dict[str, Any]:
@@ -453,6 +482,8 @@ def _classify_probe_status(
         status, checks = _classify_nss_probe(child_json)
     elif name == "report-renderers":
         status, checks = _classify_report_renderer_probe(child_json)
+    elif name == "windows-event-message-renderer":
+        status, checks = _classify_windows_event_message_probe(child_json)
     elif name == "ocr":
         status, checks = _classify_ocr_probe(child_json)
     elif name == "stt":
@@ -547,6 +578,30 @@ def _classify_report_renderer_probe(payload: dict[str, Any]) -> tuple[str, dict[
     }
     if html_status == "COMPLETED" and pdf_status == "COMPLETED":
         return "PASSED", checks
+    return "FAILED", checks
+
+
+def _classify_windows_event_message_probe(
+    payload: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    rendered = payload.get("message_rendered") is True
+    status = _nested_str(payload, "message_rendering", "status")
+    rendered_message = payload.get("rendered_message")
+    checks = {
+        "message_rendered": rendered,
+        "message_rendering_status": status,
+        "rendered_message_present": isinstance(rendered_message, str) and bool(rendered_message),
+    }
+    if (
+        rendered
+        and checks["rendered_message_present"]
+        and status in {"RENDERED", "WINDOWS_ADAPTER_RENDERED"}
+    ):
+        return "PASSED", checks
+    if status in {"WINDOWS_HOST_REQUIRED", "HOST_VERIFICATION_REQUIRED"}:
+        return "HOST_VERIFICATION_REQUIRED", checks
+    if status == "PYWIN32_UNAVAILABLE":
+        return "CAPABILITY_UNAVAILABLE", checks
     return "FAILED", checks
 
 

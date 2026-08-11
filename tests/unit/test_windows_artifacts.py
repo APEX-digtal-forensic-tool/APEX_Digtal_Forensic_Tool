@@ -118,6 +118,31 @@ def _event_xml() -> str:
 """
 
 
+def test_event_xml_oversize_is_a_structured_failure(
+    services,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence_dir = tmp_path / "oversize-event"
+    evidence_dir.mkdir()
+    event_path = evidence_dir / "oversize.xml"
+    event_path.write_text(_event_xml(), encoding="utf-8")
+    monkeypatch.setattr(eventlog_module, "MAX_EVENT_XML_BYTES", 128)
+    case, evidence = _case_evidence_and_index(services, evidence_dir)
+
+    job, coverage = services.artifacts.analyze_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+        analyzers=["windows.eventlog"],
+    )
+
+    issues = services.artifacts.list_warnings(job_id=job.job_id)
+    assert job.status == "PARTIAL"
+    assert coverage.error_count == 1
+    assert [item["code"] for item in issues] == ["EVENT_XML_INPUT_TOO_LARGE"]
+
+
 def _registry_text() -> str:
     userassist_name = codecs.encode(r"UEME_RUNPATH:C:\Windows\CALC.EXE", "rot_13")
     userassist_bytes = bytearray(72)

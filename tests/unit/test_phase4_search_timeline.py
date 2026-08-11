@@ -356,6 +356,21 @@ def test_keyword_set_versioning_duplicate_and_regex_validation(services, tmp_pat
             keyword_type=KeywordType.REGEX,
             match_mode=KeywordMatchMode.REGEX_METADATA,
         )
+    for unsafe_pattern in (
+        r"(a|aa)+$",
+        r"(a+)+$",
+        r"a*a*b",
+        r"a?a?b",
+        r"(?=secret)",
+        r"(a)\1",
+    ):
+        with pytest.raises(ValidationError):
+            services.search.add_keyword(
+                version_two.keyword_set_id,
+                term=unsafe_pattern,
+                keyword_type=KeywordType.REGEX,
+                match_mode=KeywordMatchMode.REGEX_METADATA,
+            )
 
     active = services.search.activate_keyword_set(version_two.keyword_set_id)
 

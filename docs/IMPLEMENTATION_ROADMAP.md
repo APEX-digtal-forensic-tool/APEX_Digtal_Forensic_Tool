@@ -1,8 +1,8 @@
 # 단계별 구현 Roadmap
 
-현재 단계는 **Phase 0: 설계 정합성 검토**다. 설계 완료와 코드 구현 완료를 구분하며, 각
-Phase는 Acceptance Gate 통과 후 다음 단계로 진행한다. MCP Server와 LLM Provider 구현은
-별도 담당자의 Roadmap이며 이 Core 저장소에서 구현하지 않는다.
+현재 Core Engine은 **Phase 1~8 및 Phase 9 Release Hardening 구현 완료 Candidate** 단계다.
+설계 완료, 구현 완료, 현재 Host Runtime 검증 및 외부 검증 완료를 서로 구분한다. MCP Server,
+LLM Provider, Desktop GUI와 KakaoTalk 자동 Key 획득은 이 Core Roadmap의 완료 Gate에서 제외한다.
 
 ## Phase 0. 설계 정합성, Schema와 테스트 기반
 
@@ -37,7 +37,7 @@ Phase는 Acceptance Gate 통과 후 다음 단계로 진행한다. MCP Server와
 - Phase 1 SQLite Table, WAL/Foreign Key 설정, Custody Append-only Trigger 구현
 - MD5, SHA-1, SHA-256 Streaming Hash와 변경 감지, 취소, Progress 구현
 - Case/Evidence/Job/Custody JSON Schema 검증 테스트 구현
-- Phase 2 이후 File System Parsing, Artifact Parser, Progressive Indexing 전체 기능은 미구현
+- 이후 Phase의 File System Parsing, Artifact Parser 및 Progressive Indexing도 현재 구현됨
 
 Acceptance Gate:
 
@@ -210,6 +210,24 @@ Acceptance Gate:
 - MCP/AI Component 장애 시 Core 분석/조회는 독립적으로 동작
 - Packaging에 Core 금지 의존성, API Key 또는 Secret이 포함되지 않음
 
+현재 구현 상태:
+
+- Deterministic Synthetic Evidence를 사용하는 Quick Triage/Full Analysis Benchmark Harness
+- Evidence Bytes, File/Artifact 처리량, Search Cold/Warm P50/P95, Timeline, Peak RSS 및 DB Size 측정
+- Optional User Evidence의 Content/Metadata Snapshot 기반 Read-only Invariant
+- SQLite Corruption/Lock/Writer Contention, Resume 및 Analyzer Isolation Fault-injection Test
+- Regex DoS와 Oversized Event XML 방어
+- Import/Executable/경량 Runtime Probe 기반 `doctor --json` Capability Matrix
+- Bandit Medium-or-higher Finding Disposition Manifest와 Scanner Drift 검증
+- Test/Static Analysis/Design/Runtime/Recovery/Security/Benchmark/CLI/Unicode 통합 Release Gate
+
+남은 Gate:
+
+- Windows 전용 DPAPI/NSS Host Smoke 및 Event Message Rendering 재검증
+- 설치되지 않은 E01/VHD/VHDX, OCR/STT 및 ffmpeg Runtime/Model Packaging
+- 외부 AI Provider Configuration과 Live Validation
+- 실제 Evidence 정확성/성능 검증, 외부 전문가 검토 및 Windows Desktop Packaging
+
 APEX는 “Autopsy보다 빠르다” 또는 “X-Ways와 동일하다”는 표현을 Benchmark 없이 사용하지
 않는다. X-Ways의 빠른 분석 철학을 참고하여 대용량 Evidence 처리 최적화를 목표로 한다.
 
@@ -375,4 +393,4 @@ The implemented boundary is intentionally non-generative. The default provider r
 
 Phase 8 is implemented as an engine-side Report Review, Approval, Custody Snapshot, and Export Contract. Completed scope includes report aggregate headers, immutable versions, deterministic section/content/package/export fingerprints, analyst draft ingest, external AI draft ingest, citation/context/evidence/search/timeline/AI reference validation, partial/stale/coverage/limitations propagation, append-only review and approval hash chains, section review state, approval bound to content fingerprint, custody snapshot verification metadata, render packages, export manifests, rendered artifact metadata validation, export audit events, public interface descriptors, CLI coverage, SQLite migration/triggers, JSON schemas, and unit/integration tests.
 
-The boundary remains non-rendering and non-generative. The engine does not create AI report prose, run LLMs, store prompts, register MCP tools, provide GUI preview, render HTML/PDF, call renderer networks, execute renderer shells, or accept arbitrary output paths. Runtime renderer support is represented only by `ReportRendererPort`; the default implementation reports `CAPABILITY_UNAVAILABLE`, and fake renderers are test-only.
+The boundary remains non-generative. The engine does not create AI report prose, run LLMs, store prompts, register MCP tools, provide GUI preview, call renderer networks, execute arbitrary renderer shells, or accept arbitrary output paths. Local HTML and optional ReportLab PDF adapters now render approved packages with Unicode/Korean verification; renderer availability remains explicit through `ReportRendererPort`.

@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고합니다.
 
 단, Autopsy의 Java 코드나 NetBeans 애플리케이션 구조를 기반으로 구현하지 않습니다. APEX의 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독자적인 구조를 사용합니다.
 
-> 현재 Forensic Core Engine은 **Phase 3 Windows Artifact Analysis MVP 구현 완료** 상태입니다.
-> Case·Evidence 관리, Streaming Hash와 무결성 검증, SQLite Repository, Append-only Chain of Custody, Job·Progress·Cancellation, Logical File System Indexing, Windows Registry `.reg`, exported Event XML, minimal Prefetch metadata, Artifact Query, JSON Schema 검증, CLI 및 Unit·Integration Test가 구현되었습니다.
+> 현재 Forensic Core Engine은 **Phase 1~8, Advanced Core Runtime 및 Release Hardening 구현 완료 Candidate** 상태입니다.
+> Case·Evidence·Custody, Progressive/Image File System Indexing, Windows·Browser·Media·Communication Artifact, Search·Timeline, Context·AI·Report Contract, Offline DPAPI/NSS, Registry Recovery, HTML/PDF Rendering, Runtime Doctor, Synthetic Benchmark 및 통합 Release Gate가 구현되었습니다.
 >
-> Disk image 내부 File System parsing, live Windows 수집, credential/secret 추출, Event Message DLL rendering, Timeline·Search, GUI, MCP, AI, OCR/STT 및 PDF·HTML Report Renderer는 이후 단계에서 구현합니다.
+> 현재 Linux Runtime에서 Windows Event Message Rendering과 Windows DPAPI/NSS Host Smoke는 `HOST_VERIFICATION_REQUIRED`입니다. E01/VHD/VHDX, OCR/STT 및 외부 AI는 Dependency·Model·설정에 따라 `CAPABILITY_UNAVAILABLE` 또는 `EXTERNAL_CONFIGURATION_REQUIRED`가 될 수 있습니다. Live Windows 수집, Desktop GUI, MCP/LLM Agent Runtime 및 KakaoTalk 자동 Key 획득은 구현 범위가 아닙니다.
 
 ---
 
@@ -145,8 +145,8 @@ Background Index 및 Artifact 분석
 - API Key 및 Credential 관리
 - AI Token 과금
 - Provider별 사용량 집계
-- 실제 OCR/STT Provider 실행
-- 실제 PDF/HTML Renderer 구현
+- OCR/STT Runtime과 Model 배포 정책
+- GUI Report Preview 및 Network Renderer
 - AI 결과를 Observed Fact로 확정하는 동작
 - Evidence 원본 수정
 
@@ -632,13 +632,15 @@ Chain of Custody는 일반 Report 문장이 아니라 Evidence 관리의 독립�
 현재 제한:
 
 - Pixel 자동 회전, 원본 Media 수정, Reverse Geocoding, 자동 대량 Thumbnail Rendering은 구현하지 않음
-- Video 전체 Frame Sampling, Subtitle 추출, OCR/STT 실행은 구현하지 않음
+- Video 전체 Frame Sampling과 Subtitle 추출은 구현하지 않음
+- OCR/STT는 Optional Runtime과 실제 Fixture가 있어야 실행되며 미설치 상태를 성공으로 대체하지 않음
 
 ### Machine-extracted Candidate
 
 OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
-Provider Port와 Candidate Review Workflow는 구현되어 있으며 기본 OCR/STT Provider는
-`CAPABILITY_UNAVAILABLE`을 반환합니다. 실제 OCR/STT Engine은 실행하지 않습니다.
+Provider Port, Candidate Review Workflow, RapidOCR 및 faster-whisper Adapter가 구현되어 있습니다.
+Runtime, Model 또는 Fixture가 없으면 `CAPABILITY_UNAVAILABLE` 또는 명시적 Skip을 반환하며
+인식 Text나 Transcript를 생성한 것처럼 처리하지 않습니다.
 
 Review 상태:
 
@@ -1165,8 +1167,8 @@ parse status, warning flag, and opaque stable cursors.
 
 ### Phase 9 — Benchmark 및 배포
 
-- 동일 조건 기반 내부 Benchmark
-- Progressive Indexing 및 Cache Cold/Warm 비교
+- 동일 조건 기반 Synthetic Quick Triage/Full Analysis Benchmark Harness 구현
+- Progressive Indexing 및 Search Cache Cold/Warm 측정 구현
 - Timezone 정확성과 Timeline 재현성 검증
 - Chain of Custody 무결성 검증
 - AI Citation 및 Keyword 추천 유용성 평가
@@ -1175,6 +1177,17 @@ parse status, warning flag, and opaque stable cursors.
 - Native Dependency Packaging 검증
 - Windows Desktop Packaging
 - 최종 문서 및 Release 준비
+
+### Release Hardening Runtime 상태
+
+- `python3 -m apex_forensic doctor --json`: 실제 Import, Executable 및 경량 Runtime Probe 기반 Capability Matrix
+- `python3 -m apex_forensic benchmark --json`: 결정적 Synthetic Fixture, Fresh DB, 처리량·Search P50/P95·Timeline·Peak RSS·DB Size 및 Read-only Snapshot 측정
+- `python3 tools/verify_engine_release.py --json`: Test, Static Analysis, Design, Runtime, Recovery, Security, Benchmark, CLI, Unicode 및 Read-only Invariant 통합
+- SQLite Corruption/Lock/Writer Contention은 구조화된 `PersistenceError`로 변환하고 재시도 가능 여부를 구분
+- Regex 중첩 반복·역참조·확장 Group·과도한 Bounded Repeat를 거부하고 Event XML 입력/Record 크기를 제한
+- Bandit High 0건, Medium `B608` 43건은 모두 근거와 함께 False Positive로 분류하며 Bandit Clean으로 주장하지 않음
+- Linux에서 Windows 전용 Probe는 `HOST_VERIFICATION_REQUIRED`; Optional Runtime과 외부 설정은 성공으로 승격하지 않음
+- KakaoTalk 자동 Key 획득 및 암호화 DB 복호화는 Release Gate에서 제외
 
 ---
 
@@ -1219,10 +1232,10 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 
 ---
 
-## Phase 1 실행 방법
+## Legacy Phase 1 CLI 예시
 
-현재 실행 구현은 Phase 1 Core Foundation에 한정됩니다. Evidence 원본은 읽기 전용으로 열고,
-Directory Evidence는 Metadata 등록만 지원하며 Directory 전체 Hash는 아직 지원하지 않습니다.
+다음은 Phase 1부터 유지되는 기본 CLI 흐름입니다. 현재 Engine 범위는 Phase 1에 한정되지 않으며,
+Evidence 원본 Read-only 정책과 Directory Metadata 등록 정책은 이후 Phase에서도 유지됩니다.
 
 ### 가상환경 생성 및 Dependency 설치
 
@@ -1281,7 +1294,7 @@ python3 -m venv .venv
 - MD5, SHA-1, SHA-256 Streaming Hash
 - 저장 Hash 재검증과 `HASH_VERIFIED` Custody Event
 
-### 현재 지원되지 않는 기능
+### Phase 1 당시 지원되지 않았던 기능
 
 - E01 / RAW / VHD 내부 File System Parsing
 - Registry, Event Log, Prefetch, Browser, Media Artifact Parser
@@ -1449,4 +1462,4 @@ Review and approval are append-only. Review events and approval records carry se
 
 Report custody snapshots reference existing custody event IDs, ledger head hashes, and verification status without copying or editing the custody ledger. Invalid or missing custody verification blocks approval by default.
 
-Export is contract-only. The engine creates render packages, export manifests, renderer capability snapshots, rendered artifact metadata, and export audit events. The default renderer port returns `CAPABILITY_UNAVAILABLE`. Test fake renderers exercise orchestration only; the core still has no PDF library, HTML renderer/template, browser renderer, shell adapter, network renderer, GUI preview, LLM, prompt, MCP SDK, or runtime AI provider.
+The engine creates render packages, export manifests, renderer capability snapshots, rendered artifact metadata, and export audit events. The default renderer port remains capability-aware; local HTML and optional ReportLab PDF adapters render Unicode/Korean packages without changing original evidence. GUI preview, network renderers, LLM, prompts, MCP SDK, and automatic AI report generation remain outside the core runtime.

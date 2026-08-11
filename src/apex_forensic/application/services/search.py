@@ -54,6 +54,7 @@ from apex_forensic.ports.search_index import SearchIndexProvider, SearchReposito
 
 MAX_QUERY_LIMIT = 1000
 MAX_REGEX_LENGTH = 512
+MAX_REGEX_BOUNDED_REPEAT = 1000
 DEFAULT_SEARCH_CACHE_TTL_SECONDS: int | None = None
 SEARCH_NORMALIZATION_VERSION = "apex-search-normalization-ko-v1"
 SEARCH_TOKENIZER_VERSION = "sqlite-fts5-unicode61-apex-ko-v1"
@@ -1143,11 +1144,6 @@ def _require_non_empty(value: str, target: str) -> str:
 def _validate_safe_regex(pattern: str) -> None:
     if len(pattern) > MAX_REGEX_LENGTH:
         raise ValidationError("Regex keyword is too long.", target="regex")
-    unsafe_fragments = (r"(.+)+", r"(.*)+", r"(.+)*", r"(.*)*")
-    if any(fragment in pattern for fragment in unsafe_fragments):
-        raise ValidationError("Potentially catastrophic regex is not allowed.", target="regex")
-    if re.search(r"\([^)]*[+*][^)]*\)[+*]", pattern):
-        raise ValidationError("Nested quantified regex is not allowed.", target="regex")
     try:
         re.compile(pattern)
     except re.error as error:
@@ -1156,3 +1152,49 @@ def _validate_safe_regex(pattern: str) -> None:
             target="regex",
             details={"error": str(error)},
         ) from error
+    lexical = _regex_lexical_tokens(pattern)
+    if re.search(r"\\[1-9]", lexical) or "(?P=" in lexical:
+        raise ValidationError("Regex backreferences are not allowed.", target="regex")
+    if "(?" in lexical:
+        raise ValidationError("Extended regex groups are not allowed.", target="regex")
+    if "|" in lexical:
+        raise ValidationError("Regex alternation is not allowed.", target="regex")
+    if re.search(r"\)(?:[*+?]|\{\d+(?:,\d*)?\})", lexical):
+        raise ValidationError("Quantified regex groups are not allowed.", target="regex")
+    variable_quantifiers = len(re.findall(r"(?<!\\)[*+?]", lexical))
+    variable_quantifiers += len(re.findall(r"(?<!\\)\{\d+,\d*\}", lexical))
+    if variable_quantifiers > 1:
+        raise ValidationError(
+            "Regex may contain at most one variable quantifier.",
+            target="regex",
+        )
+    for match in re.finditer(r"(?<!\\)\{(\d+)(?:,(\d*))?\}", lexical):
+        upper_text = match.group(2)
+        upper = int(upper_text) if upper_text else int(match.group(1))
+        if upper > MAX_REGEX_BOUNDED_REPEAT:
+            raise ValidationError("Regex bounded repeat is too large.", target="regex")
+
+
+def _regex_lexical_tokens(pattern: str) -> str:
+    """Mask character classes while retaining escaped backreference syntax."""
+
+    output: list[str] = []
+    in_class = False
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "\\" and index + 1 < len(pattern):
+            escaped = pattern[index : index + 2]
+            output.append(escaped if not in_class else "__")
+            index += 2
+            continue
+        if character == "[" and not in_class:
+            in_class = True
+            output.append("_")
+        elif character == "]" and in_class:
+            in_class = False
+            output.append("_")
+        else:
+            output.append("_" if in_class else character)
+        index += 1
+    return "".join(output)

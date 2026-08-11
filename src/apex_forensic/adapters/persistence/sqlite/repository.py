@@ -47,6 +47,7 @@ from apex_forensic.domain.enums import (
     TimezoneSource,
     ViewMode,
 )
+from apex_forensic.domain.errors import PersistenceError
 from apex_forensic.domain.models import (
     AiAssistanceRequest,
     AiKeywordPromotion,
@@ -120,6 +121,86 @@ _FS_METADATA_ALLOWLIST = {
     "gid",
     "nlink",
 }
+
+
+class _ApexSQLiteConnection(sqlite3.Connection):
+    """Translate SQLite failures at the adapter boundary without exposing SQL or paths."""
+
+    def execute(
+        self,
+        sql: str,
+        parameters: Any = (),
+    ) -> sqlite3.Cursor:
+        try:
+            return super().execute(sql, parameters)
+        except sqlite3.Error as error:
+            raise _translate_sqlite_error(error) from error
+
+    def executemany(
+        self,
+        sql: str,
+        parameters: Any,
+    ) -> sqlite3.Cursor:
+        try:
+            return super().executemany(sql, parameters)
+        except sqlite3.Error as error:
+            raise _translate_sqlite_error(error) from error
+
+    def executescript(self, sql_script: str) -> sqlite3.Cursor:
+        try:
+            return super().executescript(sql_script)
+        except sqlite3.Error as error:
+            raise _translate_sqlite_error(error) from error
+
+    def commit(self) -> None:
+        try:
+            super().commit()
+        except sqlite3.Error as error:
+            raise _translate_sqlite_error(error) from error
+
+    def rollback(self) -> None:
+        try:
+            super().rollback()
+        except sqlite3.Error as error:
+            raise _translate_sqlite_error(error) from error
+
+
+def _translate_sqlite_error(error: sqlite3.Error) -> sqlite3.Error | PersistenceError:
+    if isinstance(error, sqlite3.IntegrityError):
+        return error
+    error_code = getattr(error, "sqlite_errorcode", None)
+    error_name = getattr(error, "sqlite_errorname", None)
+    primary_code = error_code & 0xFF if isinstance(error_code, int) else None
+    details = {"sqlite_error_name": error_name} if isinstance(error_name, str) else {}
+    if primary_code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+        return PersistenceError(
+            "DATABASE_LOCKED",
+            "The case database is busy with another writer.",
+            retryable=True,
+            details=details,
+        )
+    if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB}:
+        return PersistenceError(
+            "DATABASE_CORRUPT",
+            "The case database is corrupt or is not a SQLite database.",
+            retryable=False,
+            details=details,
+        )
+    if primary_code in {sqlite3.SQLITE_FULL, sqlite3.SQLITE_IOERR, sqlite3.SQLITE_READONLY}:
+        return PersistenceError(
+            "DATABASE_WRITE_FAILED",
+            "The case database write could not be completed.",
+            retryable=primary_code == sqlite3.SQLITE_IOERR,
+            details=details,
+        )
+    return PersistenceError(
+        "DATABASE_ERROR",
+        "The case database operation failed.",
+        retryable=False,
+        details=details,
+    )
+
+
 _PROVIDER_METADATA_ALLOWLIST = {
     "entry_sort_key",
     "file_attributes",
@@ -556,7 +637,7 @@ class SQLiteRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(str(db_path))
+        self.connection = sqlite3.connect(str(db_path), factory=_ApexSQLiteConnection)
         self.connection.row_factory = sqlite3.Row
         self._configure_connection()
 
@@ -8779,7 +8860,7 @@ class SQLiteRepository:
                 "CREATE VIRTUAL TABLE IF NOT EXISTS temp.apex_fts5_probe USING fts5(value)"
             )
             self.connection.execute("DROP TABLE IF EXISTS temp.apex_fts5_probe")
-        except sqlite3.Error:
+        except (sqlite3.Error, PersistenceError):
             return False
         return True
 

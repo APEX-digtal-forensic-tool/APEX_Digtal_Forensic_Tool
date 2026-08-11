@@ -8,7 +8,7 @@ import platform
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from defusedxml import ElementTree
 
@@ -31,6 +31,29 @@ from apex_forensic.domain.models import (
 )
 
 from .common import issue, make_artifact, make_raw_locator, sha256_hex, source_shell
+
+MAX_EVENT_XML_BYTES = 64 * 1024 * 1024
+MAX_EVENT_RECORD_XML_BYTES = 2 * 1024 * 1024
+
+
+class _EventXmlInputTooLargeError(ValueError):
+    pass
+
+
+class _BoundedXmlReader:
+    def __init__(self, source: BinaryIO, max_bytes: int) -> None:
+        self._source = source
+        self._max_bytes = max_bytes
+        self._read_bytes = 0
+
+    def read(self, size: int = -1) -> bytes:
+        remaining = self._max_bytes + 1 - self._read_bytes
+        requested = remaining if size < 0 else min(size, remaining)
+        data = self._source.read(requested)
+        self._read_bytes += len(data)
+        if self._read_bytes > self._max_bytes:
+            raise _EventXmlInputTooLargeError("exported Event XML exceeds the size limit")
+        return data
 
 _EVENT_ID_SUBTYPES = {
     4624: ("SECURITY_LOGON_SUCCESS", "Windows logon success"),
@@ -384,6 +407,25 @@ class WindowsEventLogAnalyzer:
         warnings: list[ArtifactIssue] = []
         try:
             for ordinal, event_xml in enumerate(_iter_event_xml(file_path), start=1):
+                if len(event_xml.encode("utf-8")) > MAX_EVENT_RECORD_XML_BYTES:
+                    oversized_record = issue(
+                        severity="ERROR",
+                        code="EVENT_XML_RECORD_TOO_LARGE",
+                        message_key="error.eventlog.record_too_large",
+                        developer_message="An exported Event XML record exceeds the size limit.",
+                        node=node,
+                        details={
+                            "record_ordinal": ordinal,
+                            "max_bytes": MAX_EVENT_RECORD_XML_BYTES,
+                        },
+                    )
+                    return ArtifactAnalysisResult(
+                        artifacts=tuple(artifacts),
+                        warnings=tuple(warnings),
+                        errors=(oversized_record,),
+                        coverage={"record_count": len(artifacts)},
+                        parse_status=ArtifactParseStatus.FAILED,
+                    )
                 try:
                     artifacts.append(
                         _artifact_from_event_xml(
@@ -424,6 +466,22 @@ class WindowsEventLogAnalyzer:
                         coverage={"record_count": len(artifacts)},
                         parse_status=ArtifactParseStatus.PARTIAL,
                     )
+        except _EventXmlInputTooLargeError:
+            return ArtifactAnalysisResult(
+                artifacts=tuple(artifacts),
+                errors=(
+                    issue(
+                        severity="ERROR",
+                        code="EVENT_XML_INPUT_TOO_LARGE",
+                        message_key="error.eventlog.input_too_large",
+                        developer_message="Exported Event XML exceeds the size limit.",
+                        node=node,
+                        details={"max_bytes": MAX_EVENT_XML_BYTES},
+                    ),
+                ),
+                coverage={"record_count": len(artifacts)},
+                parse_status=ArtifactParseStatus.FAILED,
+            )
         except ElementTree.ParseError as error:
             warnings.append(
                 issue(
@@ -572,10 +630,14 @@ class WindowsEventLogAnalyzer:
 
 
 def _iter_event_xml(path: Path) -> Iterable[str]:
-    for _, element in ElementTree.iterparse(path, events=("end",)):
-        if _local_name(element.tag) == "Event":
-            yield ElementTree.tostring(element, encoding="unicode")
-            element.clear()
+    if path.stat().st_size > MAX_EVENT_XML_BYTES:
+        raise _EventXmlInputTooLargeError("exported Event XML exceeds the size limit")
+    with path.open("rb") as source:
+        bounded = _BoundedXmlReader(source, MAX_EVENT_XML_BYTES)
+        for _, element in ElementTree.iterparse(bounded, events=("end",)):
+            if _local_name(element.tag) == "Event":
+                yield ElementTree.tostring(element, encoding="unicode")
+                element.clear()
 
 
 def _artifact_from_event_xml(

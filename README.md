@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 기반 기능과 Core Runtime 확장을 구현하고 Windows·Linux 회귀 검증을 완료한 Goal-scope Feature Complete Candidate** 상태입니다.
+> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 기반 기능, Core Runtime 확장 및 Release Hardening 경로를 구현한 Goal-scope Feature Complete Candidate** 상태입니다.
 > 기존 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive Indexing, Windows Artifact, Search·Timeline, Browser·Media, Context, AI Assistance Contract 및 Report Contract에 더해 RAW·DD·IMG·E01·VHD·VHDX Reader, MBR·GPT·Extended Partition, `pytsk3` 기반 Image File System, 삭제 파일·Unallocated·Slack 처리, Registry Transaction Replay, Prefetch MAM, Windows Event Message Rendering, Browser Cache·삭제 Candidate, Communication Analyzer, 실제 Thumbnail 및 제한된 Video Frame Sampling을 구현했습니다.
 >
-> Windows Event Message Renderer는 실제 Windows Host에서 검증했으며, Windows·Linux 전체 `pytest`, Ruff, mypy, Python·Node Design Validator 및 `git diff --check`를 통과했습니다. 현재 미지원 범위는 DPAPI·NSS 자동 복호화, KakaoTalk 암호화 DB 복호화, Registry Binary Deleted-cell Carving, 실제 Desktop GUI·MCP·LLM·OCR·STT 및 PDF·HTML Rendering입니다. X-Ways·Autopsy 대비 성능 우위는 Benchmark 전까지 주장하지 않습니다.
+> Linux Release Hardening에서는 합성 Fixture 기반 Runtime·Recovery·보안·Benchmark·Doctor·CLI 검증을 수행합니다. Windows 전용 DPAPI/NSS Host Smoke와 Event Message Rendering은 현재 Linux 결과에서 `HOST_VERIFICATION_REQUIRED`로 유지하며, OCR/STT 또는 Image Runtime Dependency가 없으면 `CAPABILITY_UNAVAILABLE`로 보고합니다. KakaoTalk 자동 Key 획득과 암호화 DB 복호화는 범위 밖입니다. X-Ways·Autopsy 대비 성능 우위는 주장하지 않습니다.
 
 ---
 
@@ -621,13 +621,14 @@ Machine Extraction 구현 범위:
 - Append-only Candidate Review History
 - Candidate와 Observed Fact의 명시적 분리
 - 기본 OCR·STT Provider의 `CAPABILITY_UNAVAILABLE` 처리
-- 실제 OCR·STT Engine 실행은 미지원
+- Optional RapidOCR/ONNX Runtime 및 faster-whisper Adapter와 실제 Fixture Verifier
 
 현재 Browser·Media 확장에서는 외부 Key 기반 Chromium AES-GCM, Browser Cache,
 WAL·Freelist 삭제 Candidate, Private-mode Candidate, Pillow Raster Thumbnail 및 제한된
-FFmpeg Frame Sampling을 지원합니다. DPAPI·NSS 자동 복호화, KakaoTalk 암호화 DB 복호화,
-Cloud Sync, 실제 OCR·STT, Video 전체 Frame 분석, Subtitle·Audio Transcription,
-Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP·AI 실행 및 실제 Report Renderer는 미지원입니다.
+FFmpeg Frame Sampling, 합성 입력 기반 Offline DPAPI, Firefox NSS Adapter 및 HTML/PDF Renderer를
+지원합니다. KakaoTalk 자동 Key 획득·암호화 DB 복호화, Cloud Sync, Video 전체 Frame 분석,
+Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP 실행은 미지원입니다. OCR·STT와 외부 AI는
+Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사용할 수 없는 상태를 반환합니다.
 
 
 ### Phase 6 — GUI Context, Analysis Snapshot 및 View Runtime
@@ -687,7 +688,7 @@ Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP·AI 실행 및 실제
 - 기존 Chain of Custody Ledger를 수정하지 않는 불변 Custody Snapshot과 Ledger 검증
 - JSON-friendly Render Package, Export Manifest, Export Audit 및 Rendered Artifact Metadata 계약
 - Provider-neutral Renderer Port와 기본 `CAPABILITY_UNAVAILABLE`
-- PDF·HTML Format 계약은 제공하지만 실제 PDF·HTML Bytes 생성은 미구현
+- HTML 및 Optional ReportLab PDF Renderer와 Unicode/Korean Runtime Verifier
 - Export Filename의 Path Traversal·Absolute Path·Drive Prefix·UNC·Windows Reserved Name 차단
 - Derived Output Root 밖 Reference 거부와 Overwrite 기본 금지
 - Export Prepare 멱등성 및 Manifest 상태 전이 검증
@@ -697,7 +698,7 @@ Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP·AI 실행 및 실제
 
 - 실제 AI Report Draft 생성 미지원
 - 실제 LLM·Prompt·MCP Server·Tool Registration 미지원
-- 실제 PDF·HTML Renderer, HTML Template, CSS 및 GUI Report Preview 미지원
+- GUI Report Preview와 Network Renderer 미지원
 - 전자서명·실제 사용자 인증·RBAC·Billing 미지원
 - Rendered Output은 Original Evidence가 아닌 Derived Data Metadata로만 관리
 
@@ -723,11 +724,11 @@ Phase 1~8 기반 위에 다음 Runtime을 추가했습니다.
 
 현재 명시적 미지원 경계:
 
-- DPAPI·NSS 자동 복호화
+- Live Profile Credential 자동 획득
 - KakaoTalk 암호화 DB 복호화
-- Registry Binary Deleted-cell Carving
 - 형태소 기반 한국어 검색
-- 실제 OCR·STT·MCP·LLM·PDF·HTML Renderer
+- MCP·LLM Agent Runtime과 Desktop GUI
+- 설치되지 않은 OCR·STT·E01·VHD·VHDX Runtime은 `CAPABILITY_UNAVAILABLE`
 
 ### Phase 1~8 통합 감사 및 회귀 검증
 
@@ -744,14 +745,12 @@ Phase 1~8 통합 감사에서 발견된 2 High, 2 Medium, 2 Low Finding과 Core 
 - 삭제 File Recovery 실패 시 Partial·Temp Output 정리
 - Windows Event Message Renderer의 실제 PyHANDLE 전달 경로와 Host 검증 추가
 - 수정 사항별 집중 Regression Test 추가
-- Windows·Linux 전체 `pytest`, Ruff, mypy 91 Source File 및 52개 JSON Schema 설계 검증 통과
+- 현재 Release Hardening 회귀 검증은 Linux에서 수행하며 Windows 전용 결과를 별도 상태로 유지
 
-현재 Test·감사 범위의 미해결 Finding:
-
-- Critical: 0
-- High: 0
-- Medium: 0
-- Low: 0
+Release Hardening Bandit 감사는 High 0건, Medium 43건의 `B608` Finding을 보고합니다.
+43건은 모두 고정 SQL Fragment, 생성된 Placeholder 또는 명시적 Identifier Allowlist 경로로
+검토되어 `FALSE_POSITIVE_WITH_JUSTIFICATION`으로 분류했으며, Bandit Clean으로 표현하지 않습니다.
+분류는 `tools/security_findings.json`에 기록되고 Release Gate가 Scanner 결과와 일치하는지 확인합니다.
 
 ---
 
@@ -1641,7 +1640,7 @@ APEX/
 - [x] Windows-safe Export Filename 및 Derived Root 검증
 - [x] Export Manifest 상태 전이와 Prepare 멱등성 검증
 - [x] AI Revision Resolver 예외 처리 강화
-- [x] 수정 사항 Regression Test와 Windows·Linux 전체 회귀 검증
+- [x] 수정 사항 Linux Regression Test와 Windows Host-required 분리
 - [x] RAW·DD·IMG·E01·VHD·VHDX Reader와 Partition 분석
 - [x] `pytsk3` 기반 Image File System Tree
 - [x] 삭제 File Recovery, Unallocated Range 및 Slack Export
@@ -1651,20 +1650,22 @@ APEX/
 - [x] Email·Discord·Telegram Communication Analyzer
 - [x] Raster Thumbnail과 제한된 Video Frame Sampling
 - [x] 한국어 NFC·Casefold·Path·자모 Search 정규화
-- [x] Windows Event Message Renderer 실제 Host 검증
-- [x] mypy 91 Source File, Python·Node 52 Schema Validator 통과
+- [x] Windows Event Message Renderer Semantic Verifier (`HOST_VERIFICATION_REQUIRED` on Linux)
+- [x] Offline DPAPI·Firefox NSS Adapter와 Synthetic Runtime Verification
+- [x] Registry Binary Deleted-cell Carving
+- [x] HTML 및 Optional PDF Renderer
+- [x] Runtime Doctor와 Quick/Full Synthetic Benchmark Harness
+- [x] Recovery/Fault-injection 및 Bandit Finding Disposition Gate
+- [x] 재현 가능한 `tools/verify_engine_release.py` Release Gate
 
 ### 구현 예정
 
-- [ ] DPAPI Offline Master Key 자동 복구와 안전한 Secret Provider
-- [ ] Firefox NSS `key4.db` 자동 복호화
-- [ ] Registry HBIN Free Cell·Slack 기반 Binary Deleted-cell Carving
 - [ ] 지원 OS·앱 Version을 고정한 KakaoTalk 암호화 DB 복호화
 - [ ] 형태소 기반 한국어 Search 검토
-- [ ] 실제 OCR·STT Provider와 Candidate Extraction
+- [ ] OCR·STT Runtime/Model 배포와 실제 Host Fixture Matrix
 - [ ] 외부 AI Adapter 품질 평가와 실제 Provider 통합 검증
-- [ ] 실제 PDF·HTML Renderer Adapter와 GUI Report Preview
-- [ ] 성능·정확성 Benchmark 및 외부 전문가 검토
+- [ ] GUI Report Preview
+- [ ] 실제 Evidence 성능·정확성 Benchmark 및 외부 전문가 검토
 - [ ] Windows Desktop Packaging과 CI Matrix
 
 ### 별도 담당
@@ -1813,12 +1814,12 @@ APEX/
 
 ### Phase 9 — Advanced Recovery, Benchmark 및 배포
 
-- DPAPI·NSS Offline Secret Recovery
-- Registry Binary Deleted-cell Carving
+- [x] DPAPI·NSS Offline Secret Recovery Adapter와 Synthetic Verification
+- [x] Registry Binary Deleted-cell Carving
 - 지원 Version을 고정한 KakaoTalk DB 복호화
-- 동일 조건 기반 내부 Benchmark
-- Progressive Indexing 및 Cache Cold·Warm 비교
-- Evidence Reader·File System·Recovery 정확성 검증
+- [x] 동일 조건 기반 Synthetic Quick/Full Benchmark Harness
+- [x] Progressive Indexing 및 Cache Cold·Warm 측정
+- [x] Evidence Reader·File System·Recovery Fault-injection 검증
 - Timezone 정확성과 Timeline 재현성 검증
 - Chain of Custody 무결성 검증
 - 공개 또는 Synthetic Evidence 기반 외부 전문가 검토
@@ -1872,17 +1873,24 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 
 ## 설계 및 회귀 검증
 
-현재 통합 회귀 기준:
+Release Hardening의 단일 재현 경로는 다음 명령입니다.
 
-- Windows·Linux 전체 `pytest`: 통과
-- Optional Native Dependency가 없는 환경의 Test: 명시적 Skip
-- Windows Event Message Renderer: 실제 Host 검증 통과
-- Ruff: All checks passed
-- mypy: 91 source files, no issues
-- Python Design Validator: 1607 checks, 52 schemas, 103 requirements, 101 endpoints
-- Node Design Validator: 3586 checks, 52 schemas
-- `git diff --check`: 통과
-- 현재 Test·감사 범위의 미해결 Finding: Critical 0 / High 0 / Medium 0 / Low 0
+```bash
+python3 tools/verify_engine_release.py --json
+```
+
+이 Gate는 `pytest`, Ruff, mypy, `git diff --check`, Python·Node Design Validator, Runtime
+Semantic Verifier, Doctor, Recovery Test, Bandit Disposition, Benchmark Smoke, CLI 및 한글/Unicode
+동작, Evidence Read-only Invariant를 구분된 상태로 보고합니다. 현재 Linux Host에서 Windows 전용
+실행은 `HOST_VERIFICATION_REQUIRED`, 설치되지 않은 Optional Dependency는
+`CAPABILITY_UNAVAILABLE`, 외부 AI 설정은 `EXTERNAL_CONFIGURATION_REQUIRED`로 유지합니다.
+
+개별 진단과 Benchmark는 다음 명령으로 실행합니다.
+
+```bash
+python3 -m apex_forensic doctor --json
+python3 -m apex_forensic benchmark --runs 1 --search-iterations 2 --json
+```
 
 ### Python 기본 검증
 
