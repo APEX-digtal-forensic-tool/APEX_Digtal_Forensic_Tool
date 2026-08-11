@@ -12,10 +12,10 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 
 APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
 
-> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 기반 기능, Core Runtime 확장 및 Release Hardening 경로를 구현한 Goal-scope Feature Complete Candidate** 상태입니다.
-> 기존 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive Indexing, Windows Artifact, Search·Timeline, Browser·Media, Context, AI Assistance Contract 및 Report Contract에 더해 RAW·DD·IMG·E01·VHD·VHDX Reader, MBR·GPT·Extended Partition, `pytsk3` 기반 Image File System, 삭제 파일·Unallocated·Slack 처리, Registry Transaction Replay, Prefetch MAM, Windows Event Message Rendering, Browser Cache·삭제 Candidate, Communication Analyzer, 실제 Thumbnail 및 제한된 Video Frame Sampling을 구현했습니다.
+> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 기반 기능, Core Runtime 확장, Release Hardening 및 Windows Host Semantic Verification까지 완료한 Goal-scope Feature Complete Candidate** 상태입니다.
+> 기존 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive Indexing, Windows Artifact, Search·Timeline, Browser·Media, Context, AI Assistance Contract 및 Report Contract에 더해 RAW·DD·IMG·E01·VHD·VHDX Reader, MBR·GPT·Extended Partition, `pytsk3` 기반 Image File System, 삭제 파일·Unallocated·Slack 처리, Registry Transaction Replay 및 Binary Deleted-cell Carving, Prefetch MAM, Windows Event Message Rendering, Offline DPAPI·Chromium AES-GCM·Firefox NSS, Browser Cache·삭제 Candidate, Communication Analyzer, HTML·Optional PDF Renderer, 실제 Thumbnail 및 제한된 Video Frame Sampling을 구현했습니다.
 >
-> Linux Release Hardening에서는 합성 Fixture 기반 Runtime·Recovery·보안·Benchmark·Doctor·CLI 검증을 수행합니다. Windows 전용 DPAPI/NSS Host Smoke와 Event Message Rendering은 현재 Linux 결과에서 `HOST_VERIFICATION_REQUIRED`로 유지하며, OCR/STT 또는 Image Runtime Dependency가 없으면 `CAPABILITY_UNAVAILABLE`로 보고합니다. KakaoTalk Windows 2.0.8.990은 명시적 Offline Root 탐색, PE Version 검증 및 외부 Key 기반 합성 AES Contract 복호화까지만 구현했으며, 자동 Key 획득과 실제 KakaoTalk Fixture 검증은 `BLOCKED_EXTERNAL_FIXTURE`입니다. X-Ways·Autopsy 대비 성능 우위는 주장하지 않습니다.
+> Release Hardening Gate는 `pytest`, Ruff, mypy, Design/Schema Validation, Runtime Semantic Verification, Doctor, Recovery/Fault Injection, Bandit Finding Disposition, Benchmark, CLI/한글·Unicode, Evidence Read-only Invariant를 함께 검증합니다. Windows Host에서는 합성 Fixture를 사용한 DPAPI·Chromium Local State/AES-GCM 및 Firefox NSS 복호화, Windows Event Message Rendering, HTML·PDF Rendering을 실제 Runtime으로 검증했습니다. 최종 Windows Gate는 `PASSED_WITH_LIMITATIONS`이며 실패 Check는 없고, 설치되지 않은 Optional Dependency·Ajv Strict·일부 OCR/STT/AI Runtime은 별도 Capability 상태로 남습니다. KakaoTalk Windows 2.0.8.990은 명시적 Offline Root 탐색, PE Version 검증, 외부 Key 기반 AES-128-CBC 복호화, SQLite/`chatLogs` 검증과 추출까지 `IMPLEMENTED_UNVERIFIED`이며, 자동 Key 획득과 실제 KakaoTalk Fixture 검증은 `BLOCKED_EXTERNAL_FIXTURE`입니다. X-Ways·Autopsy 대비 성능 우위는 주장하지 않습니다.
 
 ---
 
@@ -521,7 +521,7 @@ Timezone 후보 출처:
 
 - Binary Registry Hive와 EVTX 분석은 `windows-artifacts` Optional Dependency가 필요
 - `regipy` 기반 Registry Transaction Log Replay와 Replayed View를 지원
-- Registry Export Directive·Replay 기반 삭제 Candidate를 제공하지만 Binary Deleted-cell Carving은 미지원
+- Registry Transaction Replay와 별도로 HBIN Free Cell·Slack 기반 Binary Deleted-cell Carving을 지원하며, 삭제 `nk`·`vk`·`sk` 후보는 손상·재사용 가능성을 고려해 Candidate로 보존
 - `dissect.util` 기반 Prefetch MAM 압축 해제와 Size Limit을 지원
 - Windows·`pywin32` 환경에서 Host 등록 Provider Metadata 기반 Event Message Rendering을 지원
 - Live Windows Artifact Acquisition, Remote Registry, SAM Hash·SECURITY Secret 추출은 미지원
@@ -569,10 +569,10 @@ Search Index와 Timeline Build Job은 Checkpoint·Resume, Cooperative Pause·Can
 - `apex-forensic keyword-set create|list|show|add|remove|activate|archive|version`
 - `apex-forensic timeline build|status|resume|cancel|list|show`
 
-Phase 4 비지원 범위는 File Body Full-text Indexing, Office·PDF Extraction, OCR·STT, YARA,
-실제 AI Keyword 생성, LLM·Agent Loop, GUI·Web·MCP Server, 실제 Report Renderer,
-Unallocated Raw Content Search, Live Acquisition, DPAPI·NSS 자동 복호화, 광범위한
-Windows Timezone 자동 확정, 침해 자동 확정 및 Benchmark 우위 주장입니다.
+Phase 4 자체 범위에서는 File Body Full-text Indexing, Office·PDF Extraction, OCR·STT, YARA,
+실제 AI Keyword 생성, LLM·Agent Loop, GUI·Web·MCP Server, Unallocated Raw Content Search,
+Live Acquisition, 광범위한 Windows Timezone 자동 확정, 침해 자동 확정 및 Benchmark 우위 주장을
+포함하지 않습니다. Offline DPAPI·Firefox NSS와 HTML·PDF Renderer는 이후 Core Runtime 확장에서 구현되었습니다.
 
 ### Phase 5 — Browser Communications & Media Metadata MVP
 
@@ -657,7 +657,7 @@ Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사�
 - MCP Server·SDK·Tool Registration 미포함
 - LLM Provider·Prompt·Agent Loop·API Key 미포함
 - LLM 기반 Keyword Recommendation과 Scope Summary 생성 미포함
-- Report Review·Approval Engine Contract는 Phase 8에서 구현되었으며 실제 PDF·HTML Renderer와 GUI Preview는 미구현
+- Report Review·Approval Engine Contract와 HTML·Optional PDF Renderer는 Phase 8/Core Runtime에서 구현되었으며 GUI Preview와 Network Renderer는 미구현
 - 임의 Local Path 직접 읽기 금지
 - Disk Image Raw Range·File System·삭제·Slack 경로는 Evidence·Node·Offset·Length·Provider 검증 후에만 접근
 - Role 기반 Raw View 권한 정책은 Backend·Frontend 통합 단계에서 구현
@@ -717,7 +717,7 @@ Phase 1~8 기반 위에 다음 Runtime을 추가했습니다.
 - Prefetch MAM 압축 해제와 Corrupt·Size-limit 방어
 - Windows Host Event Message Rendering
 - Browser AES-GCM 외부 Key 복호화, Cache, WAL·Freelist·Private-mode Candidate
-- Email·Discord·Telegram Communication Analyzer와 KakaoTalk 암호화 Store Discovery
+- Email·Discord·Telegram Communication Analyzer와 KakaoTalk Windows 2.0.8.990 Offline Discovery·Version 검증·외부 Key 복호화
 - Pillow Raster Thumbnail과 제한된 FFmpeg Frame Sampling
 - NFC·Casefold·Path·한글 자모·영문·숫자 혼합 Search 정규화
 - Recovery 실패 시 Partial·Temp Output 정리 및 외부 Process Error 노출 방어
@@ -745,7 +745,7 @@ Phase 1~8 통합 감사에서 발견된 2 High, 2 Medium, 2 Low Finding과 Core 
 - 삭제 File Recovery 실패 시 Partial·Temp Output 정리
 - Windows Event Message Renderer의 실제 PyHANDLE 전달 경로와 Host 검증 추가
 - 수정 사항별 집중 Regression Test 추가
-- 현재 Release Hardening 회귀 검증은 Linux에서 수행하며 Windows 전용 결과를 별도 상태로 유지
+- Linux Release Hardening과 Windows Host Semantic Verification을 분리해 수행하고, Windows DPAPI/NSS·Event Message·Report Renderer 결과를 실제 Host에서 검증
 
 Release Hardening Bandit 감사는 High 0건, Medium 43건의 `B608` Finding을 보고합니다.
 43건은 모두 고정 SQL Fragment, 생성된 Placeholder 또는 명시적 Identifier Allowlist 경로로
@@ -860,7 +860,7 @@ Reader 조건:
 현재 제한:
 
 - SAM Password Hash·SECURITY Secret 추출 미지원
-- HBIN Free Cell·Slack 직접 Carving과 삭제 `nk`·`vk`·`sk` 관계 복원 미지원
+- Binary Deleted-cell Carving은 지원하지만 손상·재사용된 Cell의 완전한 계층 관계 복원을 보장하지 않으며 결과는 Candidate로 취급
 - Live·Remote Registry 미지원
 - Optional Dependency가 없으면 해당 Capability는 `CAPABILITY_UNAVAILABLE`
 
@@ -933,11 +933,10 @@ Reader 조건:
 
 현재 제한:
 
-- Windows DPAPI Master Key 자동 획득 미지원
-- 사용자 SID·Password·NT Hash·Domain Backup Key 기반 Offline DPAPI 복구 미지원
-- Firefox NSS `key4.db` 자동 복호화 미지원
-- Live Host Credential Store를 암묵적으로 사용하지 않음
-- 복호화된 Password·Cookie를 일반 Log나 Error Message에 출력하지 않음
+- Live Windows 사용자 Context나 Credential Store에서 Secret을 자동 획득하지 않음
+- Offline DPAPI는 사용자 SID + Password/NT Hash 또는 외부 Master Key 기반 복구를 지원하지만 Domain Backup Key 자동 복구는 미지원
+- Firefox NSS는 Offline `key4.db` + `logins.json` 복호화를 지원하지만 현재 사용자의 Live Profile을 암묵적으로 탐색하거나 Secret을 자동 수집하지 않음
+- 복호화된 Password·Cookie·Key Material을 일반 Log나 Error Message에 출력하지 않음
 - WAL·Freelist·Private-mode 결과는 확정 복구가 아니라 Candidate로 보존
 - Cloud Sync 분석 미지원
 
@@ -946,7 +945,7 @@ Communication Analyzer:
 - Email
 - Discord
 - Telegram
-- KakaoTalk 암호화 Store Discovery
+- KakaoTalk Windows 2.0.8.990 암호화 Store Discovery·PE Version 검증·외부 Key 복호화·`chatLogs` 추출
 
 KakaoTalk Windows Desktop 2.0.8.990에 한해 명시적 Offline Root 아래의 `chatLogs*.edb`
 후보를 bounded/read-only 방식으로 탐색하고, `KakaoTalk.exe` PE Fixed File Version을 검증합니다.
@@ -1164,8 +1163,10 @@ Phase 6에서는 동일 Resource를 세 단계 Projection으로 조회할 수 �
 ### Machine-extracted Candidate
 
 OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
-Provider Port와 Candidate Review Workflow는 구현되어 있으며 기본 OCR·STT Provider는
-`CAPABILITY_UNAVAILABLE`을 반환합니다. 실제 OCR·STT Engine은 실행하지 않습니다.
+Provider Port와 Candidate Review Workflow는 구현되어 있으며, 기본 Provider는 Dependency 또는
+Model이 없을 때 `CAPABILITY_UNAVAILABLE` 또는 제한 상태를 반환합니다. Optional RapidOCR/ONNX
+Runtime과 faster-whisper Adapter가 구현되어 있으며 실제 추론은 해당 Runtime·Model·Fixture가
+준비된 환경에서만 실행·검증합니다.
 
 Review 상태:
 
@@ -1231,9 +1232,11 @@ Chain of Custody는 일반 Report 문장이 아니라 독립적인 Append-only L
 
 ## Report Review, Approval 및 Export Contract
 
-Forensic Core Engine은 보고서 문장을 직접 생성하거나 PDF·HTML을 직접 렌더링하지 않습니다.
+Forensic Core Engine은 보고서 문장을 스스로 생성하지 않습니다.
 
-외부 MCP·AI Layer 또는 Analyst가 작성한 Draft를 검증하여 Immutable Report Version으로 저장하고, Human Review·Approval·Custody Snapshot·Export 계약을 관리합니다.
+외부 MCP·AI Layer 또는 Analyst가 작성한 Draft를 검증하여 Immutable Report Version으로 저장하고,
+Human Review·Approval·Custody Snapshot·Export 계약을 관리합니다. 승인된 Render Package는 Core의
+HTML Renderer와 Optional ReportLab PDF Renderer 또는 교체 가능한 Renderer Adapter를 통해 파생 파일로 출력할 수 있습니다.
 
 ```text
 외부 AI Draft / Analyst Draft
@@ -1246,7 +1249,7 @@ Approval 또는 Reject
     ↓
 Custody Snapshot 및 Render Package
     ↓
-외부 PDF / HTML Renderer
+Core HTML / Optional PDF Renderer 또는 외부 Renderer Adapter
     ↓
 Rendered Artifact Metadata 검증·저장
 ```
@@ -1277,7 +1280,7 @@ Rendered Artifact Metadata 검증·저장
 - Invalid Custody Ledger는 기본 정책에서 Approval 차단
 - APPROVED Version만 Export Manifest 생성 가능
 - Export Filename과 Derived Output Root 경계 검증
-- 실제 Renderer가 없으면 `CAPABILITY_UNAVAILABLE`
+- 요청한 Renderer 또는 해당 Dependency가 없으면 `CAPABILITY_UNAVAILABLE`
 - Failed Renderer Result를 Completed 상태로 기록하지 않음
 - 동일 Export Prepare 요청은 멱등 처리
 
@@ -1314,7 +1317,7 @@ Report에 포함 가능한 Section:
 - PDF
 - HTML
 
-현재는 Render Package·Export Manifest·Renderer Port·Output Metadata 검증까지만 구현되어 있으며 실제 PDF·HTML 파일 생성은 별도 Renderer 담당입니다.
+HTML Renderer는 기본 Core Runtime으로 제공하고, ReportLab이 설치된 환경에서는 PDF Renderer를 사용할 수 있습니다. Render Package·Export Manifest·Rendered Artifact Metadata와 Output Hash를 함께 기록하며, GUI Report Preview와 Network Renderer는 별도 계층에서 담당합니다.
 
 ---
 
@@ -1368,8 +1371,8 @@ APEX는 다음 원칙에 따라 디지털 증거를 처리합니다.
 - Agent Loop
 - API Key
 - AI Token 과금
-- 실제 OCR/STT Provider
-- 실제 PDF/HTML Renderer
+- OCR/STT Model 배포·운영 및 Host Runtime Packaging
+- GUI Report Preview 및 Network Renderer
 
 ### MCP / AI Layer
 
@@ -1449,6 +1452,9 @@ APEX/
 │   │   │   ├── media.py
 │   │   │   ├── communication/
 │   │   │   └── windows/
+│   │   ├── decryption/
+│   │   │   ├── ...
+│   │   │   └── kakaotalk.py
 │   │   ├── evidence/
 │   │   │   ├── ewf.py
 │   │   │   ├── partitions.py
@@ -1476,12 +1482,16 @@ APEX/
 │   ├── config/
 │   ├── domain/
 │   ├── jobs/
+│   ├── runtime/
+│   │   ├── benchmark.py
+│   │   └── capabilities.py
 │   └── ports/
 │       ├── ai_assistance.py
 │       ├── artifact_analyzer.py
 │       ├── browser_analyzer.py
 │       ├── evidence_reader.py
 │       ├── filesystem_provider.py
+│       ├── kakaotalk_provider.py
 │       ├── machine_extraction.py
 │       ├── media_analyzer.py
 │       ├── raw_reader.py
@@ -1494,20 +1504,30 @@ APEX/
 │   ├── fixtures/registry/
 │   ├── integration/
 │   └── unit/
+│       ├── test_advanced_runtime_decryption.py
+│       ├── test_benchmark_harness.py
 │       ├── test_communication_artifacts.py
 │       ├── test_evidence_readers.py
 │       ├── test_image_filesystem_provider.py
 │       ├── test_phase5_media_browser.py
+│       ├── test_doctor_capabilities.py
+│       ├── test_engine_release_gate.py
+│       ├── test_kakaotalk_runtime.py
 │       ├── test_phase6_context_views.py
 │       ├── test_phase7_ai_assistance.py
 │       ├── test_phase8_report_contract.py
+│       ├── test_release_hardening_recovery.py
 │       └── test_windows_artifacts.py
 │
 └── tools/
+    ├── security_findings.json
     ├── validate_design.mjs
     ├── validate_design_basic.py
     ├── validate_design.sh
-    └── verify_windows_event_message_renderer.py
+    ├── verify_engine_release.py
+    ├── verify_kakaotalk_runtime.py
+    ├── verify_windows_event_message_renderer.py
+    └── verify_windows_host_runtime.py
 ```
 
 ## 설계 문서
@@ -1645,7 +1665,7 @@ APEX/
 - [x] Windows-safe Export Filename 및 Derived Root 검증
 - [x] Export Manifest 상태 전이와 Prepare 멱등성 검증
 - [x] AI Revision Resolver 예외 처리 강화
-- [x] 수정 사항 Linux Regression Test와 Windows Host-required 분리
+- [x] Linux Regression Test와 Windows Host Semantic Verification 분리·검증
 - [x] RAW·DD·IMG·E01·VHD·VHDX Reader와 Partition 분석
 - [x] `pytsk3` 기반 Image File System Tree
 - [x] 삭제 File Recovery, Unallocated Range 및 Slack Export
@@ -1662,17 +1682,19 @@ APEX/
 - [x] Runtime Doctor와 Quick/Full Synthetic Benchmark Harness
 - [x] Recovery/Fault-injection 및 Bandit Finding Disposition Gate
 - [x] 재현 가능한 `tools/verify_engine_release.py` Release Gate
+- [x] Windows DPAPI·Chromium Local State/AES-GCM·Firefox NSS Semantic Verification
+- [x] Windows Event Message Renderer 및 HTML·PDF Renderer Host Verification
+- [x] Windows Peak Working Set 기반 Benchmark RSS 측정
 
-### 구현 예정
+### 추가 검증·배포 예정
 
 - [x] Windows 2.0.8.990 KakaoTalk 외부 Key 합성 Contract 복호화와 Offline Discovery
-- [ ] KakaoTalk 자동 Key 획득 및 실제 KakaoTalk Fixture 검증
-- [ ] 형태소 기반 한국어 Search 검토
+- [ ] KakaoTalk 자동 Key 획득 및 실제 KakaoTalk Fixture 검증 — `BLOCKED_EXTERNAL_FIXTURE`, Core 완료 Gate 제외
 - [ ] OCR·STT Runtime/Model 배포와 실제 Host Fixture Matrix
-- [ ] 외부 AI Adapter 품질 평가와 실제 Provider 통합 검증
-- [ ] GUI Report Preview
 - [ ] 실제 Evidence 성능·정확성 Benchmark 및 외부 전문가 검토
-- [ ] Windows Desktop Packaging과 CI Matrix
+- [ ] Native Dependency Packaging·CI Matrix
+- [ ] Windows Desktop Packaging
+- [ ] 최종 Release 문서·배포 검증
 
 ### 별도 담당
 
@@ -1816,24 +1838,27 @@ APEX/
 - [x] Chain of Custody Snapshot / Verification Metadata
 - [x] Export Render Package / Manifest / Audit / Rendered Artifact Metadata 계약
 - [x] Provider-neutral Renderer Port와 기본 `CAPABILITY_UNAVAILABLE`
-- [x] 실제 AI Draft 생성, LLM/Prompt/MCP, GUI Preview, PDF/HTML Rendering 제외
+- [x] 실제 AI Draft 생성, LLM/Prompt/MCP, GUI Preview는 제외하고 HTML/Optional PDF Rendering Runtime은 구현
 
 ### Phase 9 — Advanced Recovery, Benchmark 및 배포
 
 - [x] DPAPI·NSS Offline Secret Recovery Adapter와 Synthetic Verification
+- [x] Windows Host DPAPI·Chromium Local State/AES-GCM·Firefox NSS Semantic Verification
 - [x] Registry Binary Deleted-cell Carving
-- [x] Windows 2.0.8.990 KakaoTalk 외부 Key 합성 Contract 복호화와 Schema 검증
-- [ ] KakaoTalk 자동 Key 획득 및 실제 암호화 DB Fixture 검증
+- [x] Windows 2.0.8.990 KakaoTalk Offline Discovery·PE Version 검증·외부 Key 합성 Contract 복호화·Schema/`chatLogs` 추출
+- [ ] KakaoTalk 자동 Key 획득 및 실제 암호화 DB Fixture 검증 — 외부 근거/Fixture 부족으로 Blocked
 - [x] 동일 조건 기반 Synthetic Quick/Full Benchmark Harness
+- [x] Windows Peak Working Set 기반 Peak RSS 측정
 - [x] Progressive Indexing 및 Cache Cold·Warm 측정
 - [x] Evidence Reader·File System·Recovery Fault-injection 검증
-- Timezone 정확성과 Timeline 재현성 검증
-- Chain of Custody 무결성 검증
-- 공개 또는 Synthetic Evidence 기반 외부 전문가 검토
-- 전문가 피드백 반영 및 재검증
-- Native Dependency Packaging·CI Matrix 검증
-- Windows Desktop Packaging
-- 최종 문서 및 Release 준비
+- [x] Release Gate 전체 회귀 검증과 `failed_checks=[]` 확인
+- [ ] 실제 Evidence Timezone 정확성과 Timeline 재현성 확대 검증
+- [ ] 실제 Evidence 기반 Chain of Custody 무결성 재검증
+- [ ] 공개 또는 Synthetic Evidence 기반 외부 전문가 검토
+- [ ] 전문가 피드백 반영 및 재검증
+- [ ] Native Dependency Packaging·CI Matrix 검증
+- [ ] Windows Desktop Packaging
+- [ ] 최종 문서 및 Release 준비
 
 ---
 
@@ -1886,11 +1911,19 @@ Release Hardening의 단일 재현 경로는 다음 명령입니다.
 python3 tools/verify_engine_release.py --json
 ```
 
+Windows에서 DPAPI/NSS 합성 Fixture까지 포함해 Semantic Verification을 수행할 때는 다음 형태를 사용합니다.
+
+```powershell
+python .\tools\verify_engine_release.py --fixture-manifest <windows-runtime-fixtures.manifest.json> --json
+```
+
 이 Gate는 `pytest`, Ruff, mypy, `git diff --check`, Python·Node Design Validator, Runtime
 Semantic Verifier, Doctor, Recovery Test, Bandit Disposition, Benchmark Smoke, CLI 및 한글/Unicode
-동작, Evidence Read-only Invariant를 구분된 상태로 보고합니다. 현재 Linux Host에서 Windows 전용
-실행은 `HOST_VERIFICATION_REQUIRED`, 설치되지 않은 Optional Dependency는
-`CAPABILITY_UNAVAILABLE`, 외부 AI 설정은 `EXTERNAL_CONFIGURATION_REQUIRED`로 유지합니다.
+동작, Evidence Read-only Invariant를 구분된 상태로 보고합니다. Windows Host에서는 DPAPI·Chromium
+Local State/AES-GCM, Firefox NSS, Event Message Renderer 및 HTML·PDF Renderer를 Semantic Fixture로
+검증했으며 최종 Gate는 `PASSED_WITH_LIMITATIONS`, `failed_checks=[]`를 확인했습니다. Linux에서는
+Windows 전용 Probe를 `HOST_VERIFICATION_REQUIRED`로, 설치되지 않은 Optional Dependency를
+`CAPABILITY_UNAVAILABLE`로, 외부 AI 설정 부재를 `EXTERNAL_CONFIGURATION_REQUIRED`로 구분합니다.
 
 개별 진단과 Benchmark는 다음 명령으로 실행합니다.
 
