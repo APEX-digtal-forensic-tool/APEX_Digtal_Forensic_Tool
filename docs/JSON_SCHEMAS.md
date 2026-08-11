@@ -1,372 +1,234 @@
-# JSON Schema 설계
-
-## 1. 목적
-
-`schemas/v1`은 API Client, Desktop UI, 향후 MCP Adapter와 선택적 AI Adapter가 APEX 결과를
-추측 없이 해석하도록 하는 기계 판독 계약이다. JSON Schema Draft 2020-12를 사용한다.
-
-## 2. Schema 목록
-
-| 파일 | Root 정의 | 용도 |
-| --- | --- | --- |
-| `common.schema.json` | Error, Locale, ResourceKey, PageInfo 등 | 공통 값 |
-| `api-response.schema.json` | SuccessResponse, ErrorResponse | 공통 HTTP Envelope |
-| `case.schema.json` | Case | Case 응답 |
-| `ui-context.schema.json` | UIContext | GUI Session 화면/선택/Filter |
-| `analysis-context.schema.json` | AnalysisContext | MCP/AI/Report용 불변 Result Bundle |
-| `citation.schema.json` | Citation | Evidence부터 Search Result까지 원본 Locator |
-| `report.schema.json` | Report, ReportSection, ReportExport | Draft/Review/Approval/Export |
-| `evidence.schema.json` | Evidence, EvidenceHash | 등록/무결성 결과 |
-| `file.schema.json` | FileEntry | Lazy File Tree |
-| `artifact.schema.json` | Artifact | 정규화 Fact와 Provenance |
-| `timeline-event.schema.json` | TimelineEvent | 통합 시간 이벤트 |
-| `search.schema.json` | SearchQuery, SearchHit, SearchResult | 검색 입력/출력 |
-| `job.schema.json` | Job, JobError | 비동기 작업 상태 |
-| `ai-enrichment.schema.json` | EnrichmentRequest, EnrichmentResult | Provider-neutral 선택 경계 |
-
-| `analysis-profile.schema.json` | AnalysisProfile | Quick/Selected/Full/Custom Profile |
-| `keyword-recommendation.schema.json` | KeywordCandidate, KeywordSet, KeywordApproval | AI/수동 Keyword 검토와 Set Version |
-| `chain-of-custody.schema.json` | CustodyEvent, HashVerification, CustodySnapshot, CustodyApproval | Append-only Evidence Custody Ledger |
-| `machine-extraction.schema.json` | MachineExtraction, ExtractionReview | 기존 Machine Extraction 계약 |
-| `browser-profile.schema.json` | BrowserProfile | Browser Profile 후보와 Source Revision / Locator |
-| `browser-artifact.schema.json` | BrowserArtifact | Browser History / Search / Download Projection |
-| `media-artifact.schema.json` | MediaArtifact | Image / Video / Audio Metadata Projection |
-| `machine-extracted-candidate.schema.json` | MachineExtractedCandidate, CandidateReviewEvent | Phase 5 OCR/STT Candidate와 Review 이력 |
-| `provider-capability.schema.json` | ProviderCapability | Optional OCR/STT / ffprobe / ffmpeg Capability 상태 |
-| `thumbnail.schema.json` | ThumbnailRecord | Hash 검증 가능한 Thumbnail Derivative Metadata |
-| `ai-assistance-request.schema.json` | AiAssistanceRequest | Snapshot 기반 AI Assistance 요청 |
-| `ai-keyword-recommendation-batch.schema.json` | AiKeywordRecommendationBatch | 외부 AI Keyword Recommendation Batch |
-| `ai-keyword-recommendation.schema.json` | AiKeywordRecommendation | 검증된 AI Keyword Candidate와 Review Projection |
-| `ai-scope-summary.schema.json` | AiScopeSummary | Scope Summary와 Citation/Warning |
-| `ai-verification-event.schema.json` | AiVerificationEvent | Human Verification Event Hash Chain |
-| `ai-keyword-promotion.schema.json` | AiKeywordPromotion | Reviewed Candidate의 Keyword Set 승격 기록 |
-| `ai-provider-capability.schema.json` | AiProviderCapability | AI Assistance Provider Capability 상태 |
-
-## 3. 공통 규칙
-
-1. `schema_version`은 Semantic Version 문자열이며 API Envelope에 항상 포함한다.
-2. ID는 UUID, 시간은 UTC RFC 3339 `date-time`, Hash는 소문자 Hex로 표현한다.
-   Phase 1 실행 구현은 MD5, SHA-1, SHA-256을 지원한다.
-3. 큰 정수 Offset/Size는 JSON 정수로 정의한다. JavaScript Client는 Safe Integer 검사를 한다.
-4. Enum은 안정적 대문자 `SNAKE_CASE`를 사용한다.
-5. 알 수 없음과 값 없음은 `null`로 명시하며 빈 문자열로 대체하지 않는다.
-6. Artifact `payload`는 Type별 Schema가 검증한다. 공통 Schema는 Object임을 보장한다.
-7. Provenance/Citation에는 최소 `evidence_id`, `source_kind`, `source_id`가 포함된다.
-8. Binary Data는 Base64 Payload가 아니라 Content API 또는 Cache Reference로 전달한다.
-9. 기본 Locale은 `ko-KR`, 기본 Timezone은 `Asia/Seoul`이며 Case에서 명시한다.
-10. Error/Warning은 번역 문장 대신 안정적인 `code`와 `message_key`를 반환한다.
-11. 원본 경로/Text와 검색 정규화 사본을 구분하고 Schema에는 원본 표시 값을 전달한다.
-
-## 4. Canonical JSON
-
-Hash/Fingerprint/Audit Chain을 계산할 때는 다음 정규화를 사용한다.
-
-- UTF-8
-- Object Key 사전순
-- 불필요한 공백 없음
-- 숫자의 결정적 직렬화
-- Unicode 문자열은 의미를 바꾸는 임의 정규화를 하지 않음
-- Hash 대상에서 전송 전용 `request_id` 등 비결정 필드를 제외
-
-`AnalysisContext.content_sha256`은 해당 필드 자체를 제외한 Context Projection을 Hash한다.
-`Report.approved_content_sha256`은 승인 대상 Version의 Section, 선택 Link, Citation, Locale,
-Timezone과 Template Version을 Hash하며 승인/Export 시각, Export 목록과 Hash 필드 자체는
-제외한다. 이 제외 규칙도 Canonicalization Profile Version에 포함한다.
-
-구현 단계에서는 RFC 8785 JSON Canonicalization Scheme 적용 가능성을 검증한다.
-
-## 5. Artifact Type 확장
-
-새 Analyzer는 다음을 함께 제공해야 한다.
-
-1. 안정적인 `artifact_type`
-2. Payload JSON Schema와 Version
-3. Timeline Projector 여부
-4. Search Document Mapper
-5. 실제/손상 Fixture 기반 Contract Test
-
-Phase 5는 Browser, Media, Thumbnail, Provider Capability, Machine-extracted Candidate를 별도
-Schema로 분리한다. 이 Schema들은 Raw Timestamp / UTC / Case Time을 구분하고, Source Revision과
-Provider Version을 요구하며, Unsupported Capability를 성공 결과처럼 표현하지 않는다. 기존
-`artifact.schema.json`과 `timeline-event.schema.json`은 `MEDIA_AUDIO`, `AUDIO_FILE`, Browser
-Download/Media Metadata Timeline Event를 포함하도록 확장한다.
-
-예를 들어 `windows.eventlog.record@1.0.0` Payload는 Event ID, Provider, Channel, Record ID,
-Computer, Event Data를 정의하며 공통 `Artifact`의 `payload`에 들어간다.
-
-## 6. Context와 Citation
-
-`ui-context`는 Session에서 갱신되는 가변 상태이며 `revision`과 만료 시각을 가진다.
-`analysis-context`는 기존 분석 결과 ID를 Resolve하고 Citation과 Content Hash를 고정한 불변
-Bundle이다. 두 Schema를 합치지 않는 이유는 Live GUI 상태를 Audit 보존 대상으로 오해하지
-않고, MCP/AI/Report 입력의 재현성을 보장하기 위해서다.
-
-`citation`은 공통 `source_kind/source_id`와 함께 `evidence_id`, `file_id`, `artifact_id`,
-`timeline_event_id`, `search_result_id`, 경로, Offset/Reference, Excerpt, Content Hash를 명시한다.
-존재하지 않거나 다른 Case의 Source를 가리키는 Citation은 Application Validation에서 거부한다.
-
-## 7. AI 결과 분리
-
-`ai-enrichment.schema.json`은 Provider-neutral 결과 교환용일 뿐 Core Fact Schema가 아니다.
-`observed_facts`, `analyst_annotations`, `inferences`, `recommendations`을 별도 배열로 구분한다.
-Inference와 Recommendation은 Citation, Confidence/우선순위, Limitation을 포함하며 AI 요약이나
-추론은 `artifacts.payload`를 변경할 수 없다. Provider/모델/Prompt/Credential 필드는 없다.
-
-## 8. Report
-
-`report.schema.json` 하나가 Report Aggregate와 `$defs/reportSection`, `$defs/reportExport`를
-정의한다. 별도 파일로 나누지 않아 Report Version/Status/Locale/Citation 계약이 흩어지는 것을
-막는다. `APPROVED` Version의 Canonical Hash가 Export 대상 Version과 일치해야 한다는 상태
-규칙은 Domain과 API Contract Test가 검증한다.
-
-## 9. 검증 Gate
-
-구현 CI는 다음을 실패 조건으로 둔다.
-
-- 모든 Schema JSON Parsing 실패
-- 해결되지 않는 로컬 `$ref`
-- API Fixture의 Schema 불일치
-- 같은 Version에서 호환성을 깨는 필수 필드/타입 변경
-- Artifact Payload가 등록된 Type Schema와 불일치
-- Schema 파일 간 순환 `$ref`
-- API Resource에 대응하는 Schema 누락
-- Context/AI/Report Citation의 다른 Case Source 참조
-
-## 10. 기존 Schema 확장 결정
-
-요구사항과 역할이 겹치는 구조는 새 파일을 만들지 않았다.
-
-| 요구사항 | 확장 Schema | 이유 |
-|---|---|---|
-| Timestamp/Timezone | `common.schema.json` | 모든 File/Artifact/Timeline/Report가 공유 |
-| Case Timezone 후보/Decision | `case.schema.json` | Case 설정 Aggregate |
-| Evidence Fingerprint | `evidence.schema.json` | Evidence 중복 분석 방지 Identity |
-| File 시간 해석 | `file.schema.json` | 기존 UTC 시간과 구조화 Interpretation 병행 |
-| Artifact Raw/시간 Provenance | `artifact.schema.json` | 기존 Artifact Provenance 확장 |
-| Progressive Progress/ETA | `job.schema.json` | Job 상태·Checkpoint 계약 확장 |
-| Search Options/Execution | `search.schema.json` | 검색 재현 정보가 Search Aggregate 소유 |
-| Scope별 Context | `analysis-context.schema.json` | 기존 불변 Context Snapshot 확장 |
-| Raw Locator | `citation.schema.json` | Citation과 Byte/Record Locator 연결 |
-| AI Partial/Scope/Human Gate | `ai-enrichment.schema.json` | Provider-neutral 결과 경계 유지 |
-| Report Provenance/Section | `report.schema.json` | 승인 Version Aggregate 내부 일관성 |
-| Simple/Detailed/Raw 상태 | `ui-context.schema.json` | Live GUI 선택 상태 |
-
-## 11. 신규 Schema 분리 근거
-
-`analysis-profile`은 실행 Job과 별개로 Versioned 분석 의도를 소유한다.
-`keyword-recommendation`은 AI/분석자 Candidate, Human Review와 Keyword Set 생명주기를
-소유한다. `chain-of-custody`는 일반 Audit와 다른 Evidence 중심 Append-only Ledger와 Snapshot을
-소유한다. `machine-extraction`은 Artifact Fact가 아닌 Machine Candidate와 Review를 소유한다.
-따라서 네 계약은 기존 Schema에 억지로 중첩하지 않고 독립 Aggregate로 분리했다.
-
-모든 신규 Root DTO는 `schema_version=1.0.0`을 포함하며 모든 파일은 Draft 2020-12 `$schema`,
-`/v1/` `$id`, 명시적 `required`와 `additionalProperties`를 사용한다. ID는 기존 UUID 규칙,
-시간은 RFC 3339, Timezone은 IANA ID를 사용한다.
-
-## 12. Timestamp와 Partial Result
-
-`common.timestampInterpretation`은 다음 필드를 분리한다.
-
-- `raw_timestamp`와 `raw_timezone`
-- `normalized_utc`
-- `display_timestamp`와 `display_timezone`
-- `timezone_source`와 `timezone_confidence`
-- `dst_status`와 `ambiguity`
-
-원본 Timestamp는 수정하지 않으며 정규화 실패 시 UTC가 `null`일 수 있다. IANA ID의 실제
-유효성은 Regex만으로 확정하지 않고 Runtime tzdb와 Fixture로 검증한다.
-
-`common.partialResult`은 `is_partial`, `as_of`, 완료/대기 Scope, 사용 가능한 Item 수와 Warning을
-제공한다. Job, Search, UI Context, Analysis Context와 Report Provenance가 같은 정의를 참조해
-전체 Index 완료 전 결과라는 사실을 AI와 사용자에게 전달한다.
-
-## 13. Custody Event Enum
-
-Schema와 문서가 공유하는 Canonical Enum은 다음과 같다.
-
-```text
-ACQUISITION
-RECEIVED
-TRANSFERRED
-STORED
-OPENED
-MOUNTED
-ANALYZED
-HASH_VERIFIED
-COPIED
-EXPORTED
-RETURNED
-RELEASED
-ARCHIVED
-DISPOSED
-CORRECTION
-```
-
-`CORRECTION`은 `correction_of_event_id`가 필수다. Event는 `immutable_revision`,
-`previous_event_hash`, `event_hash`, `ledger_algorithm`과 `ledger_version`을 가진다. Update나
-Delete 계약은 없다.
-
-## 14. Report Section Enum
-
-기존 Section을 유지하고 다음 Section을 추가한다.
-
-```text
-INDEXING_SCOPE
-TIMEZONE_POLICY
-KEYWORD_SEARCH
-CHAIN_OF_CUSTODY
-HASH_VERIFICATION
-MACHINE_EXTRACTION
-EXTERNAL_VALIDATION
-```
-
-Report Statement는 `OBSERVED_FACT`, `ANALYST_ANNOTATION`,
-`MACHINE_EXTRACTED_CANDIDATE`, `AI_INFERENCE`, `AI_RECOMMENDATION` 중 하나로 분류한다.
-Candidate와 AI 결과를 Observed Fact로 직렬화하지 않는다.
-
-## 15. Keyword와 Machine Candidate 검증
-
-AI `keywordCandidate`는 `reason`, 하나 이상의 `citations`, `scope`, `confidence`와
-`PENDING_REVIEW` 상태를 요구한다. `ANALYST` Candidate는 Confidence가 null일 수 있지만 같은
-Keyword Set Version 계약을 사용한다.
-
-`machineExtraction`은 `confidence`, `engine_id`, `engine_version`, `source_locator`,
-`citations`와 `analyst_status`를 요구한다. Review 상태는
-`UNREVIEWED/ACCEPTED/REJECTED/CORRECTED`이며 Correction은 원 Candidate Text를 변경하지 않는다.
-
-## 16. 검증 Gate 보강
-
-설계 검증은 다음을 실패 조건으로 추가한다.
-
-- Requirement ID 또는 Method+API Path 중복
-- API-to-Schema Mapping 누락
-- 신규 DB Table의 Module Owner 누락
-- Custody Event Enum의 문서/Schema 불일치
-- Report Section Enum의 문서/Schema 불일치
-- IANA Timezone 정책 문서 누락
-- AI Keyword의 Reason/Citation 필수 계약 누락
-- Machine Candidate의 Confidence/Review/Locator 누락
-- Job/Search/Context의 Partial Result 계약 누락
-- Phase 1 범위를 벗어난 `mcp`, `prompts` 또는 MCP/LLM/OCR/STT/PDF 실행 구현 추가
-- MCP/LLM/Prompt/OCR/STT/PDF 실행 의존성 추가
-
-Node/Ajv가 없는 환경에서는 Python 기본 검증으로 JSON Syntax, 파일, Markdown Link,
-Requirement 중복과 로컬 `$ref` 파일을 검사한다. Node가 있으면 구조/순환 참조 검사를 추가하고,
-로컬 Ajv가 설치된 경우에만 Strict Compile을 실행한다. Ajv가 없으면 기본 검증 성공을 유지하고
-생략 이유를 출력한다.
-
-## Phase 2 Schema Contracts
-
-Phase 2 extends existing Draft 2020-12 schemas rather than weakening validation.
-
-- `file.schema.json` now accepts legacy `fileEntry`, Phase 2 `fileSystemNode`, and `fileTreePage` contracts.
-- `job.schema.json` includes `INDEX`, pause/resume statuses, job revision, index revision, and filesystem progress counters.
-- `evidence.schema.json` includes DD and IMG format metadata registration.
-- `analysis-profile.schema.json` accepts the Phase 2 `CUSTOM` profile spelling while preserving `CUSTOM_PROFILE` compatibility.
-
-Filesystem nodes explicitly require provider id/version, original path strings, comparison path, node type, metadata, raw timestamp values, UTC-normalized timestamps, raw locator, partial flag, and index revision. Unsupported provider capability is represented as an error response, not as a successful result.
-
-## Phase 3 Schema Contracts
-
-`artifact.schema.json` now defines the concrete Windows, Media, and Browser artifact DTO. It requires
-`artifact_id`, `case_id`, `evidence_id`, `source_file_node_id`, artifact type/subtype,
-analyzer/backend IDs and versions, raw and UTC observed timestamps, timezone source/confidence,
-fields, raw locator, citations, warnings, parse status, confidence, partial flag, index revision,
-created/updated timestamps, and dedup key.
-
-Artifact type enum values are:
-
-- `REGISTRY_KEY`
-- `REGISTRY_VALUE`
-- `REGISTRY_AUTORUN`
-- `REGISTRY_USB_DEVICE`
-- `REGISTRY_TIMEZONE`
-- `REGISTRY_USERASSIST`
-- `EVENT_LOG_RECORD`
-- `PREFETCH_EXECUTION`
-- `MEDIA_IMAGE`
-- `MEDIA_VIDEO`
-- `BROWSER_PROFILE`
-- `BROWSER_VISIT`
-- `BROWSER_SEARCH`
-- `BROWSER_DOWNLOAD`
-- `UNKNOWN_WINDOWS_ARTIFACT`
-
-Parse status enum values are `SUCCESS`, `PARTIAL`, `UNSUPPORTED`, `CORRUPT`, and `FAILED`. Unsupported
-binary parser dependencies, Prefetch versions, and MAM compression are not represented as successful
-facts.
-
-`citation.schema.json` raw locators now allow logical locators with `offset: null` and `length: null`.
-The `locator_type`, `limitations`, and `details` fields make the difference between logical
-Registry/Event provenance and actual byte ranges explicit. This prevents non-existent byte offsets
-from being fabricated while preserving raw/source references for future raw views.
-
-## Phase 4 Schema Updates
-
-`search.schema.json` now represents:
-
-- Search Document, Search Query, Search Result, Search Execution, Search Cache
-- Keyword Set and Keyword version DTOs for manual keyword management
-- Search Result Page with cursor page metadata and runtime FTS5 capability state
-
-`timeline-event.schema.json` now represents:
-
-- Timeline Event with raw timestamp/timezone, UTC normalized timestamp, case timezone display,
-  timezone source/confidence, precision, source revision, raw locator, citations, and partial flag
-- Timestamp Normalization DTO
-- Timezone Candidate DTO
-- Timeline Page with cursor page metadata
-
-`job.schema.json` accepts `SEARCH_INDEX` jobs. `keyword-recommendation.schema.json` keeps AI
-recommendation contracts but its enum set also includes Phase 4 manual keyword status values
-`ACTIVE`/`ARCHIVED` and keyword type `OTHER`. All updated schemas remain Draft 2020-12 with explicit
-`additionalProperties` and no circular `$ref`.
-
-## 6. Phase 6 Schemas
-
-| 파일 | Root 정의 | 용도 |
-| --- | --- | --- |
-| `gui-session-context.schema.json` | GuiSessionContext | TTL과 Revision을 가진 Live GUI Context |
-| `analysis-context-snapshot.schema.json` | AnalysisContextSnapshot | Append-only 분석 Snapshot과 Fingerprint |
-| `analysis-scope-context.schema.json` | AnalysisScopeContext | Scope별 Resource Bundle과 Cursor |
-| `context-revision-state.schema.json` | RevisionState | Source Revision, Partial, Stale Reason |
-| `view-projection.schema.json` | ViewProjection | Simple/Detailed View Projection |
-| `raw-view.schema.json` | RawViewProjection | Raw Locator와 제한 정보 |
-| `raw-read-request.schema.json` | RawReadRequest | Bounded Raw Range 입력 |
-| `raw-read-response.schema.json` | RawReadResponse | Raw Chunk, EOF, Hash, Audit ID |
-| `engine-interface.schema.json` | EngineInterfaceVersion | Adapter용 Engine Version/Limit/Capability |
-| `engine-tool-descriptor.schema.json` | EngineToolDescriptor | Public Tool Descriptor와 Limit |
-
-Phase 6 schemas keep object extensibility explicit with `additionalProperties`, reject unbounded binary payload transfer, and carry warning/citation arrays so partial or stale context can be represented without inventing facts.
-
-## 7. Phase 7 AI Assistance Schemas
-
-| 파일 | Root 정의 | 용도 |
-| --- | --- | --- |
-| `ai-assistance-request.schema.json` | AiAssistanceRequest | Snapshot 기반 AI 요청, TTL, Fingerprint, Operation/Scope 제한 |
-| `ai-keyword-recommendation-batch.schema.json` | AiKeywordRecommendationBatch | 외부 Keyword Recommendation Batch와 Validation Warning |
-| `ai-keyword-recommendation.schema.json` | AiKeywordRecommendation | 검증된 AI Keyword Candidate, Citation, Review Projection |
-| `ai-scope-summary.schema.json` | AiScopeSummary | Scope Summary, Key Point, Citation, Partial/Stale Warning |
-| `ai-verification-event.schema.json` | AiVerificationEvent | Append-only Human Review Event와 Hash Chain |
-| `ai-keyword-promotion.schema.json` | AiKeywordPromotion | Reviewed Candidate에서 Keyword Set Draft Version으로의 승격 기록 |
-| `ai-provider-capability.schema.json` | AiProviderCapability | Provider-neutral Capability와 기본 `CAPABILITY_UNAVAILABLE` 상태 |
-
-Phase 7 schemas use Draft 2020-12, explicit `additionalProperties`, bounded arrays/strings, and existing citation/common definitions. AI recommendation and summary DTOs carry `result_kind`, `observed_fact_status=NOT_OBSERVED_FACT`, provenance warnings, and human review state so AI output cannot be serialized as an observed fact by accident.
-
-## 8. Phase 8 Report Schemas
-
-| 파일 | Root 정의 | 용도 |
-| --- | --- | --- |
-| `report-record.schema.json` | ReportRecord | Report aggregate header와 workflow state |
-| `report-version.schema.json` | ReportVersion | Immutable report version, previous link, fingerprint, provenance |
-| `report-section.schema.json` | ReportSection | Section content, source kind, citations, partial/stale/coverage |
-| `report-render-package.schema.json` | ReportRenderPackage | GUI/renderer용 JSON-friendly package |
-| `ai-report-draft-input.schema.json` | AiReportDraftInput | 외부 AI draft ingest 입력 |
-| `report-review-event.schema.json` | ReportReviewEvent | Append-only review event hash chain |
-| `report-approval-record.schema.json` | ReportApprovalRecord | Version/content-fingerprint-bound approval record |
-| `custody-snapshot.schema.json` | CustodySnapshot | Report-linked custody ledger verification snapshot |
-| `report-export-manifest.schema.json` | ReportExportManifest | Export request, renderer, package, approval, derived root contract |
-| `rendered-report-artifact.schema.json` | RenderedReportArtifact | External renderer output metadata/hash |
-| `report-renderer-capability.schema.json` | ReportRendererCapability | Provider-neutral renderer capability state |
-
-The Phase 8 schemas are Draft 2020-12 and keep report contracts granular because version, review, custody, export, and renderer capability DTOs are independently addressed by CLI and public interface operations. The legacy `report.schema.json` remains for earlier design compatibility; new runtime DTOs should use the granular Phase 8 schemas. These schemas avoid prompt, API key, chain-of-thought, raw provider body, and attachment-byte fields and use bounded strings/arrays plus explicit `additionalProperties`.
+# APEX JSON Schema Catalog
+
+## 1. Authority and Scope
+
+`schemas/v1/*.schema.json` is the versioned exchange-contract source of truth. This document describes the 66 schemas that are present in that directory; Python models, SQLite DDL, and planned transport examples do not override them.
+
+- Dialect: JSON Schema Draft 2020-12
+- Namespace: `https://schemas.apex-forensics.dev/v1/`
+- Versioning: the `v1` directory is the compatibility boundary
+- References: local `$ref` targets must resolve inside `schemas/v1`
+- Objects: schemas normally close known records with `additionalProperties: false`
+- Time: timestamps are RFC 3339 strings; source/raw time, normalized UTC time, IANA timezone, confidence, and precision remain distinct when the contract provides them
+- Validation: `tools/validate_design.mjs` checks the catalog and cross-document references; runtime validation is provided by `JsonSchemaValidator`
+
+A schema's existence proves a contract shape, not that every optional dependency, host capability, data source, or product transport is available.
+
+## 2. Canonical Core and Interface Schemas
+
+| Schema | Canonical purpose |
+|---|---|
+| `common.schema.json` | shared identifiers, timestamps, hashes, status/error fragments |
+| `api-response.schema.json` | transport-neutral success/error response envelope |
+| `case.schema.json` | case identity and metadata |
+| `evidence.schema.json` | evidence registration, source, size, type, and hash state |
+| `file.schema.json` | indexed filesystem record |
+| `artifact.schema.json` | normalized artifact record |
+| `citation.schema.json` | provenance locator used by findings and reports |
+| `job.schema.json` | background/index job state |
+| `engine-interface.schema.json` | public Engine Interface request/response operation envelope |
+| `engine-tool-descriptor.schema.json` | tool identity, operations, schemas, and capability disclosure |
+| `provider-capability.schema.json` | generic provider capability/status record |
+| `derived-output.schema.json` | derived-file provenance and hash contract |
+
+The implemented Engine Interface version is `1.0.0`. It is callable in process and through the CLI. These schemas do not imply an HTTP or MCP server.
+
+## 3. Context and View Schemas
+
+| Schema | Current role |
+|---|---|
+| `gui-session-context.schema.json` | current Phase 6 GUI/session context contract |
+| `context-revision-state.schema.json` | optimistic revision state |
+| `analysis-scope-context.schema.json` | selected evidence, files, artifacts, and search scope |
+| `analysis-context-snapshot.schema.json` | immutable analysis context snapshot |
+| `analysis-context.schema.json` | aggregate/compatibility analysis-context contract |
+| `view-projection.schema.json` | Simple/Detailed/Raw projection request/result |
+| `raw-read-request.schema.json` | bounded raw-read request |
+| `raw-read-response.schema.json` | bounded bytes plus provenance/audit result |
+| `raw-view.schema.json` | compatibility raw-view projection |
+| `ui-context.schema.json` | legacy Phase 6 compatibility schema |
+
+Runtime context uses an eight-hour default TTL, `expected_revision` optimistic concurrency, and immutable snapshots. Raw reads default to 4 KiB and are capped at 1 MiB by the public service. The schemas do not authorize unrestricted disk reads.
+
+## 4. Evidence, Custody, and Secret Schemas
+
+| Schema | Current role |
+|---|---|
+| `chain-of-custody.schema.json` | custody event contract |
+| `custody-snapshot.schema.json` | immutable custody-chain snapshot |
+| `decryption-request.schema.json` | bounded secret-provider request |
+| `decryption-result.schema.json` | redacted result/provenance contract |
+| `dpapi-key-source.schema.json` | externally supplied DPAPI key-source description |
+| `nss-profile.schema.json` | Firefox/NSS profile input |
+| `secret-provider-capability.schema.json` | provider support and limitation disclosure |
+| `kakaotalk-artifact.schema.json` | Windows KakaoTalk artifact discovery/decryption output |
+
+The custody event vocabulary maintained by the design is:
+
+`ACQUISITION`, `RECEIVED`, `TRANSFERRED`, `STORED`, `OPENED`, `MOUNTED`, `ANALYZED`, `HASH_VERIFIED`, `COPIED`, `EXPORTED`, `RETURNED`, `RELEASED`, `ARCHIVED`, `DISPOSED`, `CORRECTION`.
+
+Secrets are external inputs or host-provider results. API keys, raw provider bodies, decrypted secret material, and chain-of-thought are not normal persisted forensic records.
+
+## 5. Search, Timeline, and Analysis Schemas
+
+| Schema | Current role |
+|---|---|
+| `analysis-profile.schema.json` | QUICK_TRIAGE, SELECTED_SCOPE, FULL_ANALYSIS, or CUSTOM profile |
+| `search.schema.json` | query, match, reproduction, and result structures |
+| `timeline-event.schema.json` | normalized event with raw/UTC/timezone/confidence/precision separation |
+| `keyword-recommendation.schema.json` | compatibility keyword recommendation |
+| `registry-deleted-candidate.schema.json` | conservative Registry deleted-cell candidate |
+
+Search supports `TERM`, `PHRASE`, `PREFIX`, `EXACT`, and `REGEX_METADATA`. Normalization is Unicode NFC, case folding, slash normalization, SQLite FTS5 `unicode61` behavior, and canonical Hangul composition. Korean morphological analysis is not implemented.
+
+Candidate contracts must not be interpreted as confirmed facts. Deleted Registry cells, browser deleted-presence indicators, private-mode indicators, OCR/STT outputs, and AI suggestions require provenance and review.
+
+## 6. Browser and Media Schemas
+
+| Schema | Current role |
+|---|---|
+| `browser-profile.schema.json` | discovered Chromium/Firefox profile |
+| `browser-artifact.schema.json` | normalized browser record |
+| `media-artifact.schema.json` | media metadata/EXIF/GPS/probe output |
+| `thumbnail.schema.json` | derived thumbnail/frame output |
+| `machine-extraction-request.schema.json` | OCR/STT request |
+| `machine-extraction-result.schema.json` | OCR/STT result and execution metadata |
+| `machine-extracted-candidate.schema.json` | reviewable extracted candidate |
+| `machine-extraction.schema.json` | legacy aggregate machine-extraction contract |
+
+Pillow/EXIF and MP4 parsing have built-in paths. ffmpeg/ffprobe, Tesseract, RapidOCR/ONNX Runtime, whisper.cpp, and faster-whisper are capability-gated. Models are not downloaded automatically.
+
+## 7. AI Assistance Schemas
+
+| Schema | Current role |
+|---|---|
+| `ai-assistance-request.schema.json` | provider-neutral operation request |
+| `ai-provider-capability.schema.json` | provider availability and limits |
+| `ai-provider-config.schema.json` | redacted provider configuration |
+| `ai-provider-execution.schema.json` | execution status/provenance without secret/raw-body storage |
+| `ai-keyword-recommendation.schema.json` | one reviewable recommendation |
+| `ai-keyword-recommendation-batch.schema.json` | batch recommendation result |
+| `ai-keyword-promotion.schema.json` | reviewed promotion to a keyword set |
+| `ai-scope-summary.schema.json` | reviewable scope summary |
+| `ai-report-draft-input.schema.json` | constrained report-draft input |
+| `ai-verification-event.schema.json` | human verification/audit event |
+| `ai-enrichment.schema.json` | legacy compatibility enrichment contract |
+
+The default AI provider is unavailable. An optional OpenAI-compatible HTTP adapter can be configured with endpoint, model, API-key environment reference, and network access. AI output remains a candidate; it cannot create an Observed Fact by itself.
+
+## 8. Report Schemas
+
+| Schema | Current role |
+|---|---|
+| `report-record.schema.json` | mutable report identity/current state |
+| `report-version.schema.json` | immutable version snapshot |
+| `report-section.schema.json` | versioned section |
+| `report-review-event.schema.json` | review request/decision hash-chain event |
+| `report-approval-record.schema.json` | approval/revocation record |
+| `report-render-request.schema.json` | renderer request |
+| `report-render-package.schema.json` | deterministic renderer package |
+| `report-render-result.schema.json` | renderer result |
+| `report-renderer-capability.schema.json` | HTML/PDF capability disclosure |
+| `rendered-report-artifact.schema.json` | rendered output path/hash/magic/provenance |
+| `report-export-manifest.schema.json` | export contents and verification metadata |
+| `report.schema.json` | legacy aggregate report compatibility contract |
+
+The historical report section vocabulary retained for compatibility is `INDEXING_SCOPE`, `TIMEZONE_POLICY`, `KEYWORD_SEARCH`, `CHAIN_OF_CUSTODY`, `HASH_VERIFICATION`, `MACHINE_EXTRACTION`, and `EXTERNAL_VALIDATION`. Current Phase 8 runtime uses the granular record/version/section/review/approval/render schemas above.
+
+HTML rendering is built in. PDF rendering is optional through ReportLab. A schema-valid render result is not proof that a renderer exists on the current host.
+
+## 9. Complete 66-Schema Inventory
+
+This inventory is exhaustive for `schemas/v1` at the audited revision.
+
+| # | File |
+|---:|---|
+| 1 | `ai-assistance-request.schema.json` |
+| 2 | `ai-enrichment.schema.json` |
+| 3 | `ai-keyword-promotion.schema.json` |
+| 4 | `ai-keyword-recommendation-batch.schema.json` |
+| 5 | `ai-keyword-recommendation.schema.json` |
+| 6 | `ai-provider-capability.schema.json` |
+| 7 | `ai-provider-config.schema.json` |
+| 8 | `ai-provider-execution.schema.json` |
+| 9 | `ai-report-draft-input.schema.json` |
+| 10 | `ai-scope-summary.schema.json` |
+| 11 | `ai-verification-event.schema.json` |
+| 12 | `analysis-context-snapshot.schema.json` |
+| 13 | `analysis-context.schema.json` |
+| 14 | `analysis-profile.schema.json` |
+| 15 | `analysis-scope-context.schema.json` |
+| 16 | `api-response.schema.json` |
+| 17 | `artifact.schema.json` |
+| 18 | `browser-artifact.schema.json` |
+| 19 | `browser-profile.schema.json` |
+| 20 | `case.schema.json` |
+| 21 | `chain-of-custody.schema.json` |
+| 22 | `citation.schema.json` |
+| 23 | `common.schema.json` |
+| 24 | `context-revision-state.schema.json` |
+| 25 | `custody-snapshot.schema.json` |
+| 26 | `decryption-request.schema.json` |
+| 27 | `decryption-result.schema.json` |
+| 28 | `derived-output.schema.json` |
+| 29 | `dpapi-key-source.schema.json` |
+| 30 | `engine-interface.schema.json` |
+| 31 | `engine-tool-descriptor.schema.json` |
+| 32 | `evidence.schema.json` |
+| 33 | `file.schema.json` |
+| 34 | `gui-session-context.schema.json` |
+| 35 | `job.schema.json` |
+| 36 | `kakaotalk-artifact.schema.json` |
+| 37 | `keyword-recommendation.schema.json` |
+| 38 | `machine-extracted-candidate.schema.json` |
+| 39 | `machine-extraction-request.schema.json` |
+| 40 | `machine-extraction-result.schema.json` |
+| 41 | `machine-extraction.schema.json` |
+| 42 | `media-artifact.schema.json` |
+| 43 | `nss-profile.schema.json` |
+| 44 | `provider-capability.schema.json` |
+| 45 | `raw-read-request.schema.json` |
+| 46 | `raw-read-response.schema.json` |
+| 47 | `raw-view.schema.json` |
+| 48 | `registry-deleted-candidate.schema.json` |
+| 49 | `rendered-report-artifact.schema.json` |
+| 50 | `report-approval-record.schema.json` |
+| 51 | `report-export-manifest.schema.json` |
+| 52 | `report-record.schema.json` |
+| 53 | `report-render-package.schema.json` |
+| 54 | `report-render-request.schema.json` |
+| 55 | `report-render-result.schema.json` |
+| 56 | `report-renderer-capability.schema.json` |
+| 57 | `report-review-event.schema.json` |
+| 58 | `report-section.schema.json` |
+| 59 | `report-version.schema.json` |
+| 60 | `report.schema.json` |
+| 61 | `search.schema.json` |
+| 62 | `secret-provider-capability.schema.json` |
+| 63 | `thumbnail.schema.json` |
+| 64 | `timeline-event.schema.json` |
+| 65 | `ui-context.schema.json` |
+| 66 | `view-projection.schema.json` |
+
+## 10. Contract-to-Runtime Rules
+
+1. Validate inbound/outbound documents at the boundary, not after persistence.
+2. Persist the schema/version identifier with material derived records when the table supports it.
+3. Preserve raw/source values; normalized values are additive.
+4. Reject unknown enum values at a closed contract boundary.
+5. Treat capability status separately from schema validity. Valid input can still yield `CAPABILITY_UNAVAILABLE`, `AVAILABLE_WITH_LIMITATIONS`, `EXTERNAL_CONFIGURATION_REQUIRED`, `UNSUPPORTED_PLATFORM`, `BLOCKED_EXTERNAL_FIXTURE`, or `HOST_VERIFICATION_REQUIRED`.
+6. Never infer a successful optional provider run from the existence of its request/result schema.
+7. Keep legacy schemas for compatibility until an explicit migration removes their consumers; do not describe them as the current aggregate runtime when granular contracts are canonical.
+
+## 11. Change Discipline
+
+A schema change requires:
+
+- the schema file and all local references to remain valid;
+- Python model/adapter changes where applicable;
+- SQLite migration changes where persistence changes;
+- positive and negative contract tests;
+- catalog, API, database, module, roadmap, and traceability review;
+- explicit compatibility handling for renamed or retired fields.
+
+The design validators and schema tests are release gates, but passing them does not replace fixture, host, security, or forensic-method validation.

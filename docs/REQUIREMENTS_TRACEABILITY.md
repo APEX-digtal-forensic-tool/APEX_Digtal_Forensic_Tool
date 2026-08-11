@@ -1,385 +1,109 @@
-# 요구사항 추적표
+# APEX Requirements Traceability
 
-각 요구사항은 Architecture Component, Module Owner, API, Database, JSON Schema, 구현 Phase와
-검증 근거에 연결한다. `-`는 해당 Layer에 영속 상태나 공개 계약이 필요하지 않다는 뜻이다.
+## 1. Reading This Matrix
 
-## 1. Core
+This matrix maps current requirements to Architecture, Module Owner, API, Database, Schema, Phase, and concrete 검증 evidence. Status terms are deliberately narrow:
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CORE-001 | Case/Evidence와 Hash를 관리한다 | Evidence Manager | Evidence Manager | Case/Evidence API | `cases`, `evidence_*` | case, evidence | 1 | Known Hash/Reader Contract |
-| CORE-002 | Evidence는 읽기 전용이다 | Evidence Reader | Evidence Reader | Content Range | `read_only` | evidence | 1 | Write Attempt Test |
-| CORE-003 | File Tree/Metadata/삭제 항목을 조회한다 | FS Analyzer | FS Analyzer | File API | `objects`, `files`, `extents` | file | 2 | FS Fixture/Capability |
-| CORE-004 | Registry/Event Log/Prefetch를 독립 분석한다 | Artifact Analyzers | Artifact Analyzers | Artifact API | `artifacts`, `analyzer_runs` | artifact | 3 | 손상/정상 Fixture |
-| CORE-005 | Timeline과 Search를 제공한다 | Timeline/Search | Timeline/Search | Timeline/Search API | `timeline_events`, `search_*` | timeline, search | 4 | Projection/Query Test |
-| CORE-006 | 장시간 작업을 취소/재개한다 | Job Orchestrator | Job Orchestrator | Job API | `ingest_jobs`, `ingest_tasks` | job | 1-4 | Kill/Resume/Cancel |
+- **IMPLEMENTED / TESTED**: code and repository tests cover the stated contract.
+- **IMPLEMENTED / CAPABILITY-GATED**: the code path exists but the current host/dependency/configuration decides availability.
+- **CONTRACT ONLY**: schema/service contract exists; an external product transport is not implemented here.
+- **EXTERNAL VERIFICATION REMAINING**: synthetic or unit evidence exists, but representative licensed fixtures, target hosts, expert review, or retained benchmark results are still required.
+- **UNSUPPORTED**: explicitly outside the current implementation.
 
-## 2. GUI 및 Analysis Context
+A passing unit test does not establish legal admissibility, universal file-format support, a clean security report, or superiority over another forensic product.
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CTX-001 | 선택 Artifact와 현재 Filter를 Context로 전달한다 | Context Service | Context Service | `PUT/GET /sessions/.../ui-context` | Live 상태는 저장 안 함 | ui-context | 6 | Session Contract |
-| CTX-002 | File/Timeline/Search/Tag와 시간 범위를 전달한다 | Context Service | Context Service | UI Context API | Live 상태는 저장 안 함 | ui-context | 6 | DTO Fixture |
-| CTX-003 | Audit/AI/Report에 사용한 Context만 Snapshot으로 보존한다 | Snapshot Service | Snapshot Service | `POST /context-snapshots` | `ui_context_snapshots` | ui-context | 6 | 보존/만료 Test |
-| CTX-004 | 기존 분석 결과를 재분석 없이 Bundle로 조회한다 | Analysis Context Builder | Analysis Context Builder | `GET /analysis-bundle` | `analysis_context_snapshots` | analysis-context | 6 | Analyzer 미호출 E2E |
-| CTX-005 | Snapshot의 모든 ID는 같은 Case여야 한다 | Analysis Context Builder | Analysis Context Builder | Snapshot API | Snapshot FK/검증 | analysis-context, citation | 6 | Cross-case 거부 Test |
-| CTX-006 | GUI Update 충돌을 Revision으로 감지한다 | Session Context Port | Session Context Port | `If-Match` UI PUT | - | ui-context | 6 | Concurrent Update Test |
+## 2. Core, Evidence, and Indexing
 
-## 3. Localization
-
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LOC-001 | 기본 Locale은 `ko-KR`이다 | Localization | Localization | Case API | `cases.locale` | common, case | 1 | Default/Override Test |
-| LOC-002 | 기본 Timezone은 `Asia/Seoul`이다 | Localization | Localization | Case API | `cases.timezone` | common, case | 1 | UTC/Display Test |
-| LOC-003 | UI 문자열은 Resource 파일로 분리한다 | Frontend/Localization 경계 | Frontend/Localization 경계 | Resource Key 반환 | `*_name_key` | common resourceKey | 1-3 | Missing Key 검사 |
-| LOC-004 | 한글 파일명/경로를 손실 없이 처리한다 | FS/Localization | FS/Localization | File API | `name_raw`, `full_path_raw` | file | 2 | 한글/자모 Round-trip |
-| LOC-005 | 한국어 Keyword Search를 지원한다 | Search Adapter | Search Adapter | Search API | `normalization_profile` | search | 4 | 한국어 Corpus Test |
-| LOC-006 | 한국어 Report Template을 제공한다 | Template Manager | Template Manager | Report API | `template_id`, `locale` | report | 8 | PDF/HTML Golden Test |
-| LOC-007 | AI 출력 언어를 Case Locale에 맞춘다 | AI Layer | AI Layer | Enrichment API | `ai_enrichments.locale` | ai-enrichment | 7 | Fake Adapter Contract |
-| LOC-008 | UTC/원본 시간과 표시 Timezone을 구분한다 | Timeline/Localization | Timeline/Localization | Timeline/Report API | `timestamp_utc`, Raw/Offset | timeline, report | 4/8 | DST/Timezone Fixture |
-| LOC-009 | 오류는 언어 중립 Code/Key로 반환한다 | API/Localization | API/Localization | 모든 오류 응답 | - | common, api-response | 1 | 한국어 Resource Mapping |
-
-## 4. Report
-
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| RPT-001 | AI Draft는 승인 전 Export할 수 없다 | Approval Manager | Approval Manager | approve/export | `reports`, `report_exports` | report | 8 | 상태 전이 거부 Test |
-| RPT-002 | AI Draft 뒤 Human Review가 필수다 | Review Manager | Review Manager | request-review | `reports`, `report_sections` | report | 8 | AI 자동 승인 차단 |
-| RPT-003 | Evidence/Artifact/Timeline/Search/Tag를 선택한다 | Selectors | Selectors | Report CRUD | `report_*_links` | report | 8 | Cross-case Link 거부 |
-| RPT-004 | 17개 표준 Section을 지원한다 | Template Manager | Template Manager | Report GET/PATCH | `report_sections` | report | 8 | Section Completeness |
-| RPT-005 | 승인 Version과 Content Hash를 고정한다 | Approval Manager | Approval Manager | approve | `approved_content_sha256` | report | 8 | Optimistic Lock/Hash |
-| RPT-006 | 승인 후 수정은 재검토가 필요하다 | Report Domain | Report Domain | PATCH | `version`, `status` | report | 8 | Version Transition |
-| RPT-007 | PDF/HTML Export를 지원한다 | Exporter | Exporter | export/exports | `report_exports` | report `$defs/reportExport` | 8 | Format/Hash Test |
-| RPT-008 | AI Draft 호출은 Port로 격리한다 | ReportDraftPort | ReportDraftPort | generate-draft | `analysis_context_snapshot_id` | analysis-context, report | 8 | Fake Port Contract |
-
-## 5. MCP Integration Boundary
-
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| MCP-001 | Forensic Engine은 MCP SDK에 의존하지 않는다 | 배포/Port 경계 | 배포/Port 경계 | 공개 API만 제공 | - | 모든 공개 Schema | 0/9 | Dependency Scan |
-| MCP-002 | Built-in MCP는 제품에 포함하되 별도 Component다 | Desktop Distribution | Desktop Distribution | Engine API Consumer | - | Context/Result Schema | 별도/9 | Packaging Boundary |
-| MCP-003 | MCP는 GUI 결과와 Context를 조회한다 | Context Service | Context Service | Context/Analysis API | Snapshot/Search Result | ui/analysis-context | 6 | Fake MCP Consumer |
-| MCP-004 | MCP가 Analyzer/DB를 직접 호출하지 않는다 | Application Interface | Application Interface | `/api/v1` | - | API Schema | 6/9 | Architecture Rule |
-| MCP-005 | Engine에는 Prompt/Credential/Provider가 없다 | AI Port 경계 | AI Port 경계 | Provider-neutral DTO | `adapter_ref`만 허용 | ai-enrichment | 7/9 | 금지 의존성/Secret Scan |
-
-## 6. Performance
-
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PERF-001 | Lazy Loading | FS Analyzer | FS Analyzer | children + cursor | Parent Index | file | 2 | 100만 File RSS |
-| PERF-002 | Cursor Pagination | Query Plane | Query Plane | 목록 API | 정렬 복합 Index | common pageInfo | 2 | Page 안정성 Test |
-| PERF-003 | Process Pool | Job Orchestrator | Job Orchestrator | Job API | Task 상태 | job | 4 | CPU 처리량/Crash |
-| PERF-004 | Async I/O와 Streaming | Reader/API | Reader/API | Content Range | - | job progress | 2/4 | Backpressure Test |
-| PERF-005 | Artifact 병렬 분석 | Analyzer/Job | Analyzer/Job | Ingest Job | `ingest_tasks` | job | 4 | 결정성/격리 Test |
-| PERF-006 | 단일 DB Writer | Result Writer | Result Writer | - | WAL/Batch | - | 1/4 | Lock Contention |
-| PERF-007 | Full Text Index | Search | Search | Search API | FTS5/동등 Index | search | 4 | Query P95/정확도 |
-| PERF-008 | Cache Layer | Cache Port | Cache Port | - | `cache_entries` | - | 4 | Hit/손상/LRU |
-| PERF-009 | Checkpoint/Resume | Job Orchestrator | Job Orchestrator | retry | `checkpoint_json` | job | 4 | Process Kill Test |
-| PERF-010 | 중복 분석 방지 | Analyzer Run | Analyzer Run | Ingest Job | Fingerprint/Config Hash | job | 4 | Idempotency Test |
-| PERF-011 | 취소와 Progress | Job Orchestrator | Job Orchestrator | cancel/events | Job Progress | job | 1/4 | Cooperative Cancel |
-| PERF-012 | 검증 전 성능 우위를 주장하지 않는다 | Benchmark 정책 | Benchmark 정책 | - | - | - | 9 | 문서 표현/Benchmark |
-
-## 7. Communications와 Media
-
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| COMM-001 | Browser 방문/검색/다운로드 History를 분석한다 | Browser Communications | Browser Communications | Artifact/Search | `artifacts` | artifact | 5 | Browser DB Fixture |
-| COMM-002 | URL/File/Profile과 시간을 제공한다 | Browser Analyzer | Browser Analyzer | Artifact/Timeline | Artifact/Timeline | artifact, timeline | 5 | Provenance Fixture |
-| COMM-003 | Email/Messenger는 후순위 Plugin이다 | Analyzer Plugin 경계 | Analyzer Plugin 경계 | Capability | Artifact Type 등록 | artifact | 후순위 | Plugin Contract |
-| MEDIA-001 | Image/Video를 분류한다 | Media Analyzer | Media Analyzer | File/Artifact | File/Artifact | file, artifact | 5 | MIME/Magic Fixture |
-| MEDIA-002 | EXIF/GPS/Codec/Duration/시간을 제공한다 | Media Analyzer | Media Analyzer | Artifact/Timeline | Artifact/Timeline | artifact, timeline | 5 | Media Metadata Fixture |
-| MEDIA-003 | Thumbnail은 Cache 파생물이다 | Media/Cache | Media/Cache | Content API | `cache_entries` | artifact Citation | 5 | 원본 불변/Cache Test |
-| MEDIA-004 | 삭제 Media를 표시한다 | FS/Media | FS/Media | File API | `files.deleted` | file | 5 | Deleted Media Fixture |
-| MEDIA-005 | AI는 저장 Metadata만 요약하고 원본을 수정하지 않는다 | AI/Media 경계 | AI/Media 경계 | Enrichment | `ai_enrichments` | ai-enrichment | 7 | Read-only/Fake Adapter |
-
-## 8. AI, Audit와 Citation
-
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AI-001 | 기존 결과를 요약/설명/상관 분석한다 | AIEnrichmentPort | AIEnrichmentPort | Enrichment | `ai_enrichments` | ai-enrichment | 7 | Fake Adapter Contract |
-| AI-002 | 추가 Artifact/대응을 Recommendation으로 제안한다 | AI Layer | AI Layer | Enrichment | `ai_enrichments` | ai-enrichment | 7 | Category Validation |
-| AI-003 | Observed/Annotation/Inference/Recommendation을 구분한다 | AI Layer | AI Layer | Enrichment GET | 별도 Result JSON | ai-enrichment | 7 | Schema/혼합 거부 |
-| AI-004 | 특정 Provider에 종속되지 않는다 | Port 경계 | Port 경계 | Provider 필드 없음 | Provider 컬럼 없음 | ai-enrichment | 7 | Schema/Dependency Scan |
-| AI-005 | Token 과금은 Backend/Billing 책임이다 | Billing 경계 | Billing 경계 | Core API 범위 밖 | Core Table 없음 | Core Schema 없음 | 별도 | Boundary Review |
-| AUD-001 | AI 결과는 실제 Source Citation을 포함한다 | Citation Service | Citation Service | Context/AI/Report | `report_citations` | citation | 6-8 | Source Resolve Test |
-| AUD-002 | Citation은 경로와 Offset/Reference를 보존한다 | Provenance | Provenance | Result GET | Citation Snapshot | citation | 6 | Byte/Record 역추적 |
-| AUD-003 | 상태 변경은 Append-only Audit에 기록한다 | Audit Service | Audit Service | Command 전체 | `audit_events` | common Error/IDs | 1-8 | Hash Chain Test |
-| AUD-004 | AI/Report 입력 Context를 Hash로 고정한다 | Snapshot Service | Snapshot Service | Snapshot/approve | Context/Report Hash | analysis-context, report | 6/8 | Canonical Hash Test |
-
-## 9. 소유권 중복 검사
-
-| 데이터/행위 | 단일 소유 모듈 | 다른 모듈의 허용 동작 |
-| --- | --- | --- |
-| Evidence/Artifact Fact | Evidence/Artifact Analyzer | Context/AI/Report는 ID로 읽기만 함 |
-| Live UI Context | Backend Session Store | Engine은 DTO/Port와 Snapshot 생성만 제공 |
-| Context Snapshot | Context Service | AI/Report/MCP는 불변 조회만 함 |
-| Analyst Annotation/Tag | Annotation/Tag Service | Context/Report는 선택/인용 |
-| AI Enrichment | AI Layer Repository | Artifact/Timeline을 수정하지 않음 |
-| Report 상태/Version | Report Module | AI Draft Adapter는 Draft만 반환 |
-| Export 파일 | Report Exporter | GUI/MCP는 다운로드/조회 |
-| Token 사용량/과금 | Backend/Billing | Core는 상관관계 ID만 제공 |
-
-## 10. 설계 완료 판정
-
-- [x] Architecture, Directory, Module, Database, API 통합
-- [x] UI/Analysis Context, Citation, AI Enrichment Schema
-- [x] Report/Human Review/Export Schema와 상태 규칙
-- [x] Localization, Communications, Media, Performance 요구사항 추적
-- [x] MCP/LLM/Billing 분리 경계
-- [ ] 실제 Core/Backend/Frontend/MCP/AI 구현
-- [ ] Library Spike, Forensic Fixture와 성능 Baseline
-
-## Python-Native 하이브리드 요구사항
-
-| ID | 요구사항 | 담당 구조 | 검증 방법 |
-|---|---|---|---|
-| PERF-HYB-001 | Python은 Application 및 Orchestration Layer를 담당하고 성능 핵심 경로는 Native Adapter를 통해 실행해야 한다. | Architecture / Native Adapter | Architecture Review |
-| PERF-HYB-002 | Domain 및 Application Layer는 특정 Native Library API에 직접 의존하지 않아야 한다. | Ports / Adapters | Dependency Test |
-| PERF-HYB-003 | CPU 집약적 Analyzer는 Process 기반 병렬 처리를 지원해야 한다. | Process Pool | Multi-core Benchmark |
-| PERF-HYB-004 | Evidence 전체를 메모리에 적재하지 않고 Streaming 또는 Offset 기반 접근을 사용해야 한다. | Evidence Reader | Large Evidence Memory Test |
-| PERF-HYB-005 | Analyzer 결과는 Bounded Queue를 통해 Single DB Writer에 전달해야 한다. | Result Queue / DB Writer | SQLite Concurrency Test |
-| PERF-HYB-006 | Native Provider는 Windows 지원, License, 유지보수 상태, Packaging 및 Benchmark 결과를 기준으로 선정해야 한다. | Provider Selection | Technology Spike |
-| PERF-HYB-007 | 실제 병목이 확인되기 전에는 Native Extension을 도입하지 않아야 한다. | Performance Strategy | Profiling Report |
-
-## 11. 외부 요구사항 인터뷰 보강 Traceability
-
-대학원 연구자 및 디지털 포렌식·사이버 작전 경험자를 대상으로 한 요구사항 인터뷰를 통해
-기능 범위를 보완하였다. 다음 요구사항은 특정 기관의 공식 입장, 협력 또는 인증을 의미하지
-않는다.
-
-### Progressive Indexing
-
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
+| ID | Requirement | Architecture | Module Owner | API | Database | Schema | Phase | Status / 검증 |
 |---|---|---|---|---|---|---|---|---|
-| IDX-001 | 전체 Index 완료 전 File Tree와 Partial Result를 조회할 수 있어야 한다 | Progressive Indexing Coordinator | Progressive Indexing Coordinator | Partial Result/File API | `indexing_jobs`, `indexing_job_scopes` | job, common | 2 | Partial Batch/미완료 표시 Contract |
-| IDX-002 | Quick Triage, Selected Scope, Full Analysis, Custom Profile을 지원해야 한다 | Analysis Profile Manager | Analysis Profile Manager | Analysis Profile API | `analysis_profiles` | analysis-profile | 0/2 | 4 Profile Fixture/Schema |
-| IDX-003 | Index Job은 Pause, Resume, Cancel을 지원해야 한다 | Job State Machine | Job Orchestrator | Index Job Command | `indexing_jobs`, `indexing_checkpoints` | job | 2 | Pause/Resume/Cancel Recovery |
-| IDX-004 | 사용자 선택 Scope를 Background보다 우선 처리해야 한다 | Priority Job Scheduler | Job Orchestrator | priority PATCH | `indexing_job_scopes` | analysis-profile, job | 2 | Priority/Fairness Test |
-| IDX-005 | 처리량, ETA, 신뢰도, Analyzer, Worker, Cache 지표를 제공해야 한다 | Progress Estimator | Job Orchestrator | progress GET | `analyzer_progress` | job | 2/9 | ETA Unknown/Confidence Fixture |
+| CORE-001 | Create/list/get a case with locale and IANA timezone | Core/application | Case Service | CLI `case create`, `case list` | `cases` | `case.schema.json` | 1 | IMPLEMENTED / TESTED — `test_case_manager.py`, `test_sqlite_workflow.py` |
+| CORE-002 | Register evidence read-only and stream SHA-256 for supported file inputs | Evidence plane | Evidence Service | CLI evidence add/hash/verify | `evidence`, `evidence_hashes`, `hash_verifications` | `evidence.schema.json` | 1 | IMPLEMENTED / TESTED — `test_evidence_manager.py`, `test_hashing.py` |
+| CORE-003 | Preserve append-only custody events and verify their hash chain | Audit plane | Chain of Custody Ledger | Engine/CLI custody operations; planned `/cases/{case_id}/evidence/{evidence_id}/custody-events` | `custody_events` | `chain-of-custody.schema.json` | 1/8 | IMPLEMENTED / TESTED — `test_custody_and_schema.py`, `test_phase8_report_contract.py` |
+| CORE-004 | Read RAW/DD/IMG and probe partitions without writing evidence | Evidence plane | Evidence Image Service | CLI `evidence volumes`, `evidence read-range`, `evidence unallocated-ranges`, `evidence export-range` | `evidence_volumes` | `evidence.schema.json`, `provider-capability.schema.json` | 9 | IMPLEMENTED / TESTED — `test_evidence_readers.py` |
+| CORE-005 | Support E01, VHD, and VHDX only when their providers are available | Capability plane | Evidence reader adapters | Engine capability descriptor; doctor | capability snapshot, no dedicated reader table | `provider-capability.schema.json` | 9 | IMPLEMENTED / CAPABILITY-GATED — `test_evidence_readers.py`, `test_doctor_capabilities.py` |
+| CORE-006 | Treat directory evidence as bounded metadata-only input and unknown ordinary files as RAW | Evidence plane | Evidence Service | CLI evidence add | `evidence` | `evidence.schema.json` | 1/9 | IMPLEMENTED / TESTED — `test_evidence_manager.py` |
+| IDX-001 | Index NTFS/FAT/exFAT/ext2/3/4 through pytsk when available | Progressive analysis plane | Progressive Indexing Coordinator | CLI `evidence index` and `fs roots/list/show`; planned `/cases/{case_id}/index-jobs` | `fs_nodes`, `fs_providers`, `fs_index_jobs` | `analysis-profile.schema.json`, `file.schema.json` | 2/9 | IMPLEMENTED / CAPABILITY-GATED — `test_image_filesystem_provider.py` |
+| IDX-002 | Provide QUICK_TRIAGE, SELECTED_SCOPE, FULL_ANALYSIS, CUSTOM profiles | Progressive analysis plane | Analysis Profile Manager | planned `/cases/{case_id}/analysis-profiles` | profile/options in `fs_index_jobs` and job tables | `analysis-profile.schema.json` | 2 | IMPLEMENTED / TESTED — `test_file_system_indexing.py` |
+| IDX-003 | Queue, prioritize, checkpoint, pause, resume, cancel, and expose partial coverage | Progressive analysis plane | Priority Job Scheduler; Progress Estimator | CLI `evidence index-status/index-resume/index-cancel` and `fs prioritize`; planned pause/resume/cancel/priority/progress/partial-results routes | `fs_index_queue`, `fs_index_checkpoints`, `fs_index_coverage` | `job.schema.json` | 2 | IMPLEMENTED / TESTED — `test_filesystem_indexing_workflow.py` |
+| IDX-004 | Export bounded raw/unallocated/slack ranges and recover a stored run | Recovery plane | Raw Evidence Locator; indexing service | CLI raw/slack/export/recover | job/checkpoint/source records and `raw_read_audit_records` | `raw-read-request.schema.json`, `raw-read-response.schema.json` | 9 | IMPLEMENTED / TESTED — `test_release_hardening_recovery.py`; complete file recovery is not claimed |
 
-### Timezone
+## 3. Windows, Browser, Communications, and Media
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
+| ID | Requirement | Architecture | Module Owner | API | Database | Schema | Phase | Status / 검증 |
 |---|---|---|---|---|---|---|---|---|
-| TZ-001 | 원본 Timestamp를 보존하고 정규화 Timestamp는 UTC로 저장해야 한다 | Timestamp Normalizer | Localization/Timeline | Timestamp Interpretation API | `timestamp_interpretations` | common, file, timeline | 1/4 | Raw 불변/UTC Fixture |
-| TZ-002 | Case Timezone 후보를 자동 탐지할 수 있어야 한다 | Timezone Resolver | Localization | timezone detect/candidates | `timezone_candidates` | case | 0/1 | Registry/Linux/Browser Fixture |
-| TZ-003 | 후보는 출처와 Confidence를 제공하고 분석자가 결정해야 한다 | Timezone Decision Service | Localization/Backend | timezone PUT/GET | `timezone_decisions` | case, common | 1 | Human Decision/Low 자동확정 거부 |
-| TZ-004 | Report에 Timezone과 변환 정책을 기록해야 한다 | Report Provenance | Report Module | Report API | `report_timezone_decision_links` | report | 8 | Report Version/Timezone Contract |
-| TZ-005 | DST 중복·불가능 Local Time과 해석 변경을 경고·감사해야 한다 | Timezone Audit | Localization/Audit | interpretations GET | `timestamp_interpretations`, `audit_events` | common | 4 | DST Boundary Fixture |
+| CORE-007 | Parse Registry text fixtures and optional binary hives/transaction replay | Artifact plane | Windows Registry Analyzer | CLI artifacts analyze | `artifacts`, artifact job/coverage tables | `artifact.schema.json` | 3 | IMPLEMENTED / CAPABILITY-GATED — `test_windows_artifacts.py`; representative host/fixture verification remains |
+| CORE-008 | Carve bounded free/slack NK/VK Registry candidates | Artifact plane | Registry Deleted Cell Carver | analyzer operation | candidates in `artifacts` | `registry-deleted-candidate.schema.json` | 9 | IMPLEMENTED / TESTED — `test_registry_deleted_cell_carving.py`; candidate, not recovered fact |
+| CORE-009 | Parse bounded XML and optional binary EVTX; render messages only with host resources | Artifact plane | Windows Event Log Analyzer/Renderer | analyzer operation; doctor capability | `artifacts` | `artifact.schema.json`, `provider-capability.schema.json` | 3/9 | IMPLEMENTED / CAPABILITY-GATED — `test_windows_artifacts.py`; Windows host semantic verification remains |
+| CORE-010 | Parse Prefetch 17/23/26/30 with optional MAM decompression | Artifact plane | Windows Prefetch Analyzer | analyzer operation | `artifacts` | `artifact.schema.json` | 3 | IMPLEMENTED / CAPABILITY-GATED — `test_windows_artifacts.py` |
+| CORE-011 | Extract Chromium/Firefox history/search/download/cookie/credential metadata from safe snapshots | Artifact plane | Browser Analyzer | CLI browser analysis | `browser_profiles`, `browser_snapshot_records`, `browser_artifacts` | `browser-profile.schema.json`, `browser-artifact.schema.json` | 5 | IMPLEMENTED / TESTED — `test_phase5_media_browser.py` |
+| CORE-012 | Report browser freelist/WAL/cache/private candidates without claiming recovered deleted rows | Artifact plane | Browser Analyzer | browser result contract | `browser_artifacts` | `browser-artifact.schema.json` | 5/9 | IMPLEMENTED WITH LIMITATIONS — `test_phase5_media_browser.py` |
+| COMM-001 | Parse MBOX plus the defined Discord/Telegram SQLite fixture contract | Artifact plane | Communication Core Plugin | CLI artifact analysis | common `artifacts` pipeline | `artifact.schema.json` | 5/9 | IMPLEMENTED WITH LIMITATIONS — `test_communication_artifacts.py`; PST/OST, LevelDB, tdesktop unsupported |
+| COMM-002 | Discover and optionally decrypt bounded Windows KakaoTalk 2.0.8.990 stores using external key/IV | Secret/artifact plane | KakaoTalk Provider | CLI artifact/decryption operations | `artifacts`, `decryption_attempts`, `decryption_results` | `kakaotalk-artifact.schema.json`, `decryption-request.schema.json` | 9 | IMPLEMENTED / EXTERNAL VERIFICATION REMAINING — `test_kakaotalk_runtime.py`; automatic key acquisition false, real fixture not verified |
+| MEDIA-001 | Extract EXIF/GPS, image dimensions, MP4 metadata and create derived thumbnails/frames | Artifact plane | Media Analyzer | CLI `media analyze` and `media thumbnail` | `media_artifacts`, `thumbnail_records` | `media-artifact.schema.json`, `thumbnail.schema.json` | 5/9 | IMPLEMENTED / CAPABILITY-GATED — `test_phase5_media_browser.py` |
+| MEDIA-002 | Run OCR/STT through optional local providers and retain reviewable candidates | Machine extraction plane | Machine Extraction Port; Media Extraction Candidate Store | CLI OCR/STT; planned media/machine extraction jobs | `machine_extracted_candidates`, `candidate_review_events`, provider capability tables | `machine-extraction-request.schema.json`, `machine-extraction-result.schema.json`, `machine-extracted-candidate.schema.json` | 9 | IMPLEMENTED / CAPABILITY-GATED — `test_advanced_runtime_machine_extraction.py` |
+| CORE-013 | Attempt DPAPI, Firefox NSS, and external-key Chromium decryption without persisting secrets | Secret plane | Secret Provider adapters | CLI secret/decrypt operations | `secret_provider_capabilities`, immutable decryption attempt/result rows | `dpapi-key-source.schema.json`, `nss-profile.schema.json`, secret/decryption schemas | 9 | IMPLEMENTED / CAPABILITY-GATED — `test_advanced_runtime_decryption.py` |
 
-### AI Keyword Recommendation
+## 4. Search, Time, Context, and Views
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
+| ID | Requirement | Architecture | Module Owner | API | Database | Schema | Phase | Status / 검증 |
 |---|---|---|---|---|---|---|---|---|
-| KW-001 | AI Keyword Candidate는 Reason, Scope, Confidence와 Citation을 포함해야 한다 | Keyword Recommendation Port | AI Layer/Keyword Set Manager | recommendation POST/GET | `keyword_recommendations` | keyword-recommendation, citation | 7 | Missing Citation/Reason 거부 |
-| KW-002 | Candidate는 분석자 승인 전 검색에 사용해서는 안 된다 | Human Review Gate | Keyword Set Manager | approve/reject/execute | `keyword_approvals`, `keyword_set_items` | keyword-recommendation | 7 | 승인 전 Execute 409 |
-| KW-003 | Keyword Set, Search Scope와 Options를 저장해 동일 검색을 재현해야 한다 | Search Reproduction Manager | Search Engine | keyword-set execute/rerun | `search_executions`, `search_execution_options` | search, keyword-recommendation | 4/7 | 0건/Options/Index Version 재현 |
+| KW-001 | Support TERM, PHRASE, PREFIX, EXACT, REGEX_METADATA with reproducible options | Search plane | Search Service; Search Reproduction Manager | CLI search; planned `/cases/{case_id}/search-executions/{execution_id}/rerun` | `search_queries`, `search_executions`, `search_results`, `search_cache` | `search.schema.json` | 4 | IMPLEMENTED / TESTED — `test_phase4_search_timeline.py` |
+| KW-002 | Manage versioned keyword sets and reviewed AI promotion | Search/AI boundary | Keyword Set Manager; Keyword Recommendation Port | CLI keyword operations; planned keyword recommendation/set routes | `keyword_sets`, `keyword_set_versions`, `keywords`, `ai_keyword_promotions` | keyword and AI recommendation schemas | 4/7 | IMPLEMENTED / TESTED — phase 4/7 unit and CLI workflows |
+| LOC-001 | Normalize Unicode with NFC/casefold/slash rules and canonical Hangul composition | Canonical domain boundary | Localization | search/index operations | normalized fields in search/filesystem tables | `search.schema.json` | 4 | IMPLEMENTED / TESTED — `test_phase4_search_timeline.py` and release Unicode gate; morphology not implemented |
+| TZ-001 | Preserve raw time while adding UTC, IANA timezone, confidence, precision, and partial state | Timeline plane | Timezone Resolver; Timestamp Normalizer | timeline CLI; planned timezone detect/candidates and timestamp-interpretations routes | `timeline_events`, `timezone_mappings` | `timeline-event.schema.json` | 4 | IMPLEMENTED / TESTED — `test_phase4_search_timeline.py` |
+| CTX-001 | Maintain TTL session context with optimistic `expected_revision` | Context plane | Context Service | Engine/CLI context operations; planned `/sessions/{session_id}/ui-context` | `gui_session_contexts`, revisions/states | `gui-session-context.schema.json`, `context-revision-state.schema.json` | 6 | IMPLEMENTED / TESTED — `test_phase6_context_views.py`, `test_phase6_cli_workflow.py` |
+| CTX-002 | Create immutable analysis snapshots and bounded resource scopes | Context plane | Context Service | planned context-snapshots and analysis-bundle routes | `analysis_context_snapshots`, `analysis_scope_contexts`, `context_snapshot_resources` | `analysis-context-snapshot.schema.json`, `analysis-scope-context.schema.json` | 6 | IMPLEMENTED / TESTED — `test_phase6_context_views.py` |
+| VIEW-001 | Project Simple/Detailed/Raw views without changing forensic facts | View plane | View Projection Service | Engine/CLI view operations | `view_projections`, `view_projection_cache` | `view-projection.schema.json`, `raw-view.schema.json` | 6 | IMPLEMENTED / TESTED — `test_phase6_context_views.py` |
+| VIEW-002 | Bound raw reads to default 4 KiB/max 1 MiB and audit them immutably | View/audit plane | Raw Evidence Locator | planned file/artifact/raw-range routes | `raw_read_audit_records` | `raw-read-request.schema.json`, `raw-read-response.schema.json` | 6 | IMPLEMENTED / TESTED — `test_phase6_context_views.py` |
+| AUD-001 | Keep analyst annotations/tags distinct from extracted facts | Product/context boundary | Annotation/Tag | planned product mutation API | no current table; `analyst_annotations`, `tags`, `tagged_items` are legacy conceptual names | legacy analysis-context/AI compatibility schemas | Product | CONTRACT ONLY — current context can carry references, but no dedicated annotation/tag service exists |
 
-### Chain of Custody
+## 5. AI, Reports, and Public Interface
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
+| ID | Requirement | Architecture | Module Owner | API | Database | Schema | Phase | Status / 검증 |
 |---|---|---|---|---|---|---|---|---|
-| COC-001 | Custody Event는 Append-only로 관리해야 한다 | Chain of Custody Ledger | Chain of Custody Ledger | Event POST/GET | `custody_events` | chain-of-custody | 1/8 | DB Update/Delete 거부 |
-| COC-002 | 기존 Event 수정 대신 Correction Event를 추가해야 한다 | Custody Correction Rule | Chain of Custody Ledger | Event POST | `custody_events.correction_of_event_id` | chain-of-custody | 1/8 | Correction 대상/Revision Test |
-| COC-003 | Evidence Hash 검증 이력을 저장하고 불일치를 경고해야 한다 | Custody Verification Service | Custody Verification Service | hash-verifications | `custody_hash_verifications` | chain-of-custody | 1/8 | Match/Mismatch Known Hash |
-| COC-004 | Custody Snapshot을 Report Version과 연결해야 한다 | Custody Snapshot Service | Custody Verification/Report | custody-snapshots/report | `custody_snapshots`, `report_custody_snapshot_links` | chain-of-custody, report | 8 | Snapshot/Report Hash Test |
-| COC-005 | Ledger 순서와 Hash Chain 무결성을 검증해야 한다 | Custody Verification Service | Custody Verification Service | custody export | `custody_events` | chain-of-custody | 8 | Broken Previous Hash Test |
+| AI-001 | Keep AI provider-neutral, unavailable by default, and bind output to immutable context | AI assistance plane | AI Assistance Service | CLI AI operations | AI request/recommendation/summary/verification/promotion tables | granular `ai-*.schema.json` | 7 | IMPLEMENTED / TESTED — `test_phase7_ai_assistance.py`, `test_phase7_cli_workflow.py` |
+| AI-002 | Optionally call an OpenAI-compatible endpoint without storing prompts/API keys/raw bodies/CoT | Optional provider boundary | AI Provider Port | provider config/capability operation | redacted capability/execution metadata only | provider config/capability/execution schemas | 9 | IMPLEMENTED / CAPABILITY-GATED — `test_advanced_runtime_ai_provider.py` |
+| AI-003 | Prevent AI, OCR, or STT candidates from becoming Observed Facts without review | Review boundary | AI Assistance Service; Machine Extraction Service | verification/review operations | immutable candidate and review/promotion events | AI verification/promotion and machine candidate schemas | 7/9 | IMPLEMENTED / TESTED — AI and machine-extraction unit tests |
+| RPT-001 | Version reports immutably with sections/references and hash-chained review decisions | Report plane | Report Module | CLI report operations; planned report/generate-draft/request-review/approve/reject routes | `reports` plus version/section/reference/review/approval tables | granular report record/version/section/review/approval schemas | 8 | IMPLEMENTED / TESTED — `test_phase8_report_contract.py`, `test_phase8_cli_workflow.py` |
+| RPT-002 | Require approval and a custody snapshot before final export | Report/audit plane | Report Module; Chain of Custody Ledger | planned report export route | custody snapshot, render package, export manifest/audit tables | custody snapshot, render package, export manifest schemas | 8 | IMPLEMENTED / TESTED — `test_phase8_report_contract.py` |
+| RPT-003 | Render built-in HTML and optional PDF with collision/permission/hash/magic checks | Renderer boundary | Report Renderer | CLI render/export | `rendered_report_artifacts`, `report_renderer_capabilities` | report renderer/request/result/artifact schemas | 8/9 | IMPLEMENTED / CAPABILITY-GATED — `test_advanced_runtime_report_secret.py`; PDF requires ReportLab |
+| MCP-001 | Expose one stable Engine Interface for product transports | Public interface plane | Engine Interface | in-process/CLI version `1.0.0` and descriptor | `engine_interface_versions`, `engine_tool_descriptors` | `engine-interface.schema.json`, `engine-tool-descriptor.schema.json` | 6/9 | IMPLEMENTED CONTRACT / TESTED — `test_phase6_cli_workflow.py`; no MCP server/SDK is implemented |
+| CORE-014 | Keep planned REST endpoints transport-only over the Engine Interface | Product integration boundary | Future backend adapter | paths documented in `API_INTERFACE.md` | no HTTP persistence layer | `api-response.schema.json` and operation schemas | Product | CONTRACT ONLY — no FastAPI/Flask/server runtime in repository |
 
-### View와 Machine Extraction
+## 6. Runtime, Performance, Security, and External Validation
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
+| ID | Requirement | Architecture | Module Owner | API | Database | Schema | Phase | Status / 검증 |
 |---|---|---|---|---|---|---|---|---|
-| VIEW-001 | 동일 Finding에 Simple, Detailed, Raw View를 제공해야 한다 | View Contract | Frontend/API Interface | Existing Result + Raw API | Live UI Context | ui-context | 6 | 동일 Source/View 전환 Contract |
-| VIEW-002 | Raw View는 Source Offset, Length와 Citation을 제공해야 한다 | Raw Evidence Locator | Raw Evidence Locator | raw endpoints | Artifact/File Provenance | citation, artifact | 3/6 | Locator Bounds/Resolve Test |
-| VIEW-003 | Raw View는 원본을 수정하거나 전체 파일을 적재해서는 안 된다 | Read-only Range Reader | Evidence Manager | raw-ranges | `audit_events` | citation | 6 | Write Attempt/1 MiB Limit/RSS |
-| MEDIA-006 | OCR/STT 결과는 Machine-extracted Candidate로 분류해야 한다 | Machine Extraction Port | Media Extraction Candidate Store | candidate list/show | `machine_extracted_candidates` | machine-extracted-candidate | 5 | Fact 혼합 거부 |
-| MEDIA-007 | Candidate는 Confidence, Provider Version, Source Locator와 Citation을 포함해야 한다 | Candidate Contract | Media Extraction Candidate Store | candidate show | `machine_extracted_candidates` | machine-extracted-candidate, citation | 5 | Required Field Contract |
-| MEDIA-008 | 분석자는 Candidate를 Accept, Reject, Correct할 수 있어야 한다 | Candidate Review | Media Extraction Candidate Store | candidate review/correct | `candidate_review_events` | machine-extracted-candidate | 5 | 원 Candidate 불변/Review Test |
+| PERF-001 | Run deterministic Quick/Full cold/warm benchmarks with throughput and Peak RSS | Runtime hardening | Benchmark Runner | CLI `benchmark` | not persisted by current DDL | tool JSON output, not a `schemas/v1` contract | 9 | IMPLEMENTED / TESTED — `test_benchmark_harness.py`; no comparative superiority claim |
+| AUD-002 | Probe exact host capabilities and distinguish unavailable/configuration/unsupported/blocked/host-verification states | Runtime hardening | Capability Registry | CLI `doctor`, Engine descriptor | optional capability snapshots only | provider capability schemas | 9 | IMPLEMENTED / TESTED — `test_doctor_capabilities.py` |
+| COC-001 | Freeze custody snapshots for approved report versions and exports | Audit/report boundary | Custody Verification Service | custody/report operations | `custody_snapshots`, `custody_snapshot_events` | `custody-snapshot.schema.json` | 8 | IMPLEMENTED / TESTED — phase 8 report tests |
+| VAL-001 | Run design, runtime, recovery, pytest, Ruff, mypy, Bandit, benchmark, CLI, and Unicode gates | Release hardening | Release Gate | developer tool, not product API | not persisted by current DDL | schemas are inputs, no release-result schema | 9 | IMPLEMENTED — `test_engine_release_gate.py`, `test_advanced_runtime_verification_tools.py`; actual release run still must be retained externally |
+| VAL-002 | Classify known security findings without claiming a clean scan | Release hardening | Security Gate | developer tool | not persisted | `tools/security_findings.json` | 9 | IMPLEMENTED — test manifest classifies 43 medium findings; disposition must be reviewed per release |
+| VAL-003 | Validate representative licensed evidence on target hosts with expected results and false-positive/negative analysis | External validation | External Validation Plan | external process | no current `external_validation_reviews` table | future validation artifact | External | EXTERNAL VERIFICATION REMAINING |
+| VAL-004 | Verify Windows message resources, DPAPI/NSS providers, and optional native dependencies on supported hosts | External validation | External Validation Plan plus provider owners | doctor/provider tests | capability snapshots when invoked | provider/secret capability schemas | External | EXTERNAL VERIFICATION REMAINING |
+| VAL-005 | Verify genuine supported KakaoTalk store semantics and version assumptions | External validation | External Validation Plan plus KakaoTalk Provider | provider fixture run | decryption attempt/result records when invoked | `kakaotalk-artifact.schema.json` | External | BLOCKED_EXTERNAL_FIXTURE / `real_kakaotalk_fixture_verified=false` |
+| VAL-006 | Retain representative benchmark and release-gate artifacts for a release decision | Release process | Release owner | external CI/artifact store | no current benchmark/release result tables | tool outputs | External | PRODUCT/RELEASE INTEGRATION REMAINING |
 
-### AI Scope와 Human Verification
+## 7. Explicitly Unsupported or Deferred Scope
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
+| ID | Requirement disposition | Architecture | Module Owner | API | Database | Schema | Phase | Status / 검증 |
 |---|---|---|---|---|---|---|---|---|
-| AI-006 | AI Context는 Scope별 독립 Revision으로 분리해야 한다 | Scope Context Service | Context Service | Context Snapshot API | `analysis_context_snapshots` | analysis-context | 6/7 | Scope Revision/Hash Test |
-| AI-007 | Partial Result 기반 AI 답변은 미완료임을 표시해야 한다 | AI Partial Gate | Context/AI Layer | Analysis Bundle/Enrichment | `analysis_context_snapshots`, `ai_enrichments` | common, analysis-context, ai-enrichment | 7 | Partial 경고 누락 거부 |
-| AI-008 | AI는 Citation 없이 새 Observed Fact를 생성해서는 안 된다 | Citation Gate | AI Layer/Citation Service | Enrichment | `ai_enrichments` | ai-enrichment, citation | 7 | Engine Quoted Fact/Citation Test |
-| AI-009 | AI 추천 Keyword를 자동 실행하거나 Scope 외 데이터를 포함하면 안 된다 | Human/Scope Gate | AI Layer/Keyword Set Manager | Recommendation/Execute | `keyword_approvals` | analysis-context, keyword-recommendation | 7 | 미승인/Scope 외 거부 |
+| COMM-003 | PST/OST, Discord LevelDB, Telegram tdesktop are not current parsers | Artifact plane | Communication analyzers | none | none | none | Future | UNSUPPORTED |
+| MEDIA-003 | OCR/STT model download is not automatic | Machine extraction plane | Provider adapters | local configured provider only | provider capability snapshot | provider schemas | 9 | BY DESIGN |
+| KW-003 | Korean morphological analysis is not implemented | Search plane | Localization/Search | no morphology option | no morphology table | none | Future | UNSUPPORTED |
+| CORE-015 | Complete deleted/unallocated file recovery is not claimed | Recovery plane | Evidence/indexing owners | bounded export/stored-run recovery only | current index/audit state | raw-read schemas | Future | UNSUPPORTED BEYOND CURRENT BOUNDED CONTRACT |
+| COMM-004 | KakaoTalk Android/iOS and automatic key acquisition are not supported | Secret/artifact plane | KakaoTalk Provider | none | none | none | Future | UNSUPPORTED |
+| RPT-004 | Legal admissibility and product-comparison conclusions are not automated outputs | Governance boundary | External expert/product owner | none | none | none | External | OUTSIDE AUTOMATED VERIFICATION |
 
-### External Validation과 Report
+## 8. 소유권 중복 검사
 
-| ID | 요구사항 | Architecture | Module Owner | API | Database | Schema | Phase | 검증 |
-|---|---|---|---|---|---|---|---|---|
-| VAL-001 | 성능 비교는 동일 Hardware/Evidence/Scope/Option/Cache/Worker/Storage에서만 수행해야 한다 | Benchmark Plan | External Validation Plan | 내부 Tool/Port | `benchmark_runs`, `benchmark_measurements` | - | 9 | Benchmark Metadata Completeness |
-| VAL-002 | 외부 평가는 공개/Synthetic/법적 Test Dataset만 사용해야 한다 | Validation Data Policy | External Validation Plan | 내부 Tool/Port | `external_validation_reviews` | - | 9 | Dataset/PII Policy Review |
-| VAL-003 | 승인 없는 기관명을 인증·협력 기관으로 표시하면 안 된다 | Publication Policy | External Validation Plan/Backend | 공개 API 미정 | `external_validation_reviews` | - | 9 | 금지 표현/동의 검사 |
-| RPT-009 | Report는 Index/Timezone/Keyword/Custody/Raw/Machine Candidate Provenance를 고정해야 한다 | Report Provenance | Report Module | Report API | `report_*_links` | report | 8 | 승인 Version Provenance |
-| RPT-010 | Report 문장은 Fact/Annotation/Candidate/Inference/Recommendation을 구분해야 한다 | Report Statement Classification | Report Module | Report GET/PATCH | `report_sections` | report | 8 | Category 혼합 거부 |
+The ownership matrix and this traceability table enforce the following checks:
 
-## 12. 보강 소유권 중복 검사
+1. CLI, a future REST adapter, GUI, or MCP adapter calls the Engine Interface instead of SQLite/analyzers directly.
+2. SQLite persists records but does not decide artifact meaning, AI truth, report approval, or host capability.
+3. An analyzer emits facts or explicitly labeled candidates; candidate review/promotion belongs to application services.
+4. Report rendering does not grant approval, and approval does not fabricate renderer availability.
+5. Capability probes describe the current host; schemas describe valid shapes; tests describe only covered scenarios.
+6. Product identity/RBAC/billing remains separate from forensic evidence, provenance, custody, and report semantics.
 
-| 데이터/행위 | 단일 소유 모듈 | 다른 모듈의 허용 동작 |
-|---|---|---|
-| Analysis Profile | Analysis Profile Manager | Job은 ID/Revision 참조 |
-| Index 실행/Progress | Job Orchestrator | GUI/AI는 Partial 상태 조회 |
-| Timezone Candidate/Decision | Timezone Resolver/Decision Service | Timeline/Report는 불변 Decision 참조 |
-| Keyword Candidate/Set | Keyword Set Manager | AI는 Candidate 생성, Search는 승인 Set만 실행 |
-| Search Execution Snapshot | Search Reproduction Manager | Context/Report는 불변 조회 |
-| Custody Event | Chain of Custody Ledger | Report는 Snapshot만 연결 |
-| Machine Candidate/Review | Media Extraction Candidate Store | Search/AI/Report는 상태 포함 조회 |
-| Raw Byte Range | Evidence Manager/Raw Locator | Frontend는 제한된 Chunk 표시 |
-| Benchmark/External Review | External Validation Plan | Backend는 공개·동의 정책 협의 |
-
-## Phase 2 Traceability Update
-
-Phase 2 implementation now maps the progressive indexing requirements to concrete artifacts:
-
-- Domain contract: `FileSystemNode`, `IndexCoverage`, provider capability DTOs, index/pause/resume/cancel job states.
-- Provider: Logical directory/file metadata provider with Unicode path preservation and no default symlink/reparse traversal.
-- Persistence: `fs_nodes`, provider metadata, index job metadata, queue/checkpoint, coverage, and scan event tables.
-- Interface: CLI commands for indexing, status, resume, cancel, root/list/show, and prioritization.
-- Schema: `file.schema.json`, `job.schema.json`, `evidence.schema.json`, and `analysis-profile.schema.json` extensions.
-- Verification: unit and integration coverage for partial/resume, selected scope priority, stable cursor pagination, unsupported disk images, schema validation, and Phase 1 regressions.
-
-Unsupported Phase 2 boundaries remain explicit and are not traced as completed: disk image internal parsing, native filesystem parsers, deleted file recovery, full text search, artifact/timeline integrations, GUI, MCP, LLM, OCR/STT, and report rendering.
-
-## Phase 3 Traceability Update
-
-- Requirement scope: CORE-004 and VIEW-002 now have runtime coverage for Windows Registry, Event Log,
-  Prefetch, raw locators, citations, artifact persistence, and cursor queries.
-- Implementation: `ArtifactAnalysisService`, `ArtifactAnalyzer`/`ArtifactRepository` ports,
-  `WindowsRegistryAnalyzer`, `WindowsEventLogAnalyzer`, `WindowsPrefetchAnalyzer`, and
-  `SQLiteRepository` Phase 3 tables.
-- Interface: CLI commands for artifact discover/analyze/status/resume/cancel/list/show/warnings and
-  registry/eventlog/prefetch helper queries.
-- Schema: `artifact.schema.json` and `citation.schema.json` now validate Phase 3 artifact facts and
-  logical/byte raw locators.
-- Verification: unit and integration coverage for `.reg` encoding, autorun, USB, timezone,
-  UserAssist ROT13/safe counters, Event XML namespace fields, event subtype mapping, corrupt XML,
-  Prefetch bounds/unsupported/MAM handling, discovery from `fs_nodes`, SQLite reopen/resume, stable
-  cursor mismatch rejection, duplicate prevention, CLI E2E, and schema validation.
-
-Unsupported Phase 3 boundaries remain explicit and are not traced as completed: live Windows
-acquisition, remote Registry, credential/secret extraction, Registry transaction log recovery,
-deleted key recovery, Event Message DLL rendering, full EVTX fixture coverage when `python-evtx` is
-absent, full binary hive fixture coverage when `python-registry` is absent, Prefetch MAM
-decompression, timeline integration, FTS/search engine, GUI, MCP, LLM, OCR/STT, browser/media
-analyzers, and report rendering.
-
-### Phase 4 Search, Keyword Set, Timeline Trace
-
-- Implementation: `SearchService`, `TimelineService`, `SearchIndexProvider`, `SearchRepository`,
-  `TimelineRepository`, and SQLite Phase 4 tables implement metadata/artifact search, keyword set
-  versioning, reproduction, cache, timestamp normalization, and timeline query.
-- Verification: `tests/unit/test_phase4_search_timeline.py` covers FTS5 capability, term/phrase/prefix/
-  exact/metadata-regex search, SQL-injection-like query safety, cache hit, 0-result reproduction,
-  keyword duplicate/version/regex validation, explicit offset normalization, naive timestamp unknown
-  handling, timeline build, stable cursor pagination, Asia/Seoul display, and schema validation.
-- Integration: CLI smoke was exercised for search index/query, keyword set activate, and timeline
-  build/list. Existing Phase 1-3 tests remain passing.
-- Persistence: new tables include `search_documents`, `search_index_metadata`, `search_jobs`,
-  `search_checkpoints`, `search_queries`, `search_executions`, `search_results`, `search_cache`,
-  `keyword_sets`, `keyword_set_versions`, `keywords`, `timeline_events`, `timeline_jobs`,
-  `timeline_checkpoints`, `timeline_revisions`, `timeline_coverage`, and `timezone_mappings`.
-- Unsupported boundaries: file body FTS, Office/PDF extraction, OCR/STT, YARA, AI keyword
-  recommendation, LLM/agent loops, GUI/web/MCP, report rendering, disk image internals,
-  deleted/slack/unallocated search, live acquisition, credential/secret extraction, full Windows
-  timezone auto-confirmation, compromise assertions, and benchmark superiority remain unimplemented.
-
-### Phase 5 Browser and Media Trace
-
-- Implementation: `MediaMetadataAnalyzer`, `BrowserHistoryAnalyzer`, and `MachineExtractionService`
-  are registered in `build_services()` and reuse existing artifact/job/search/timeline persistence.
-- Media coverage: image/video/audio source detection, JPEG EXIF/GPS raw and normalized values,
-  filesystem created/modified/deleted metadata, MP4 codec/duration, optional `ffprobe` video/audio
-  metadata, corrupt media warnings, `cache_entries`, and `thumbnail_records` derivative metadata.
-- Browser coverage: browser profile/database artifacts plus Chromium visit/search/download rows,
-  Firefox visit/download candidate rows, native timestamp normalization, SQLite Snapshot/WAL/SHM
-  fingerprints, and profile/database/table/row provenance.
-- Candidate coverage: immutable machine-extracted candidates, unavailable OCR/STT provider
-  capabilities, stable candidate cursor pagination, append-only review events, and required
-  correction text for `CORRECTED` decisions.
-- Interface: existing `artifact discover/analyze/list/show/warnings` JSON commands, legacy
-  `artifact media` / `artifact browser` helpers, and top-level `browser`, `media`, and `candidate`
-  command groups.
-- Verification: `tests/unit/test_phase5_media_browser.py` covers synthetic media metadata, audio
-  capability/corrupt handling, GPS/time raw+normalized preservation, thumbnail cache rows, browser
-  visit/search/download provenance queries, corrupt media/browser resilience, candidate review
-  immutability, and top-level CLI smoke coverage.
-- Later Core Runtime extensions add raster thumbnails, optional OCR/STT adapters, Email/Discord/
-  Telegram analyzers, deleted/slack/unallocated recovery, and local HTML/PDF rendering. Live browser
-  acquisition, GUI/web/MCP, AI/LLM agent flows, and KakaoTalk automatic key acquisition remain out of scope.
-
-### Phase 6 Implementation Trace
-
-| Area | Implemented contract | Verification |
-|---|---|---|
-| Context snapshot | Immutable `AnalysisContextSnapshot` builds resolved bundles without re-running analyzers. | `tests/unit/test_phase6_context_views.py` snapshot persistence and reopen checks |
-| View projection | Simple, Detailed, and Raw projections are generated from the same source context. | `tests/unit/test_phase6_context_views.py` view projection checks |
-| Raw locator | Raw projections and reads include locator, citation, offset, length, and bounds validation. | Raw read valid/EOF/negative/oversize tests |
-| Raw audit | Raw reads are read-only, max-length bounded, evidence-root checked, and audited. | Raw reader and CLI workflow tests |
-| Scope context | Scope contexts preserve independent scope fingerprints, revision states, partial state, and cursors. | Scope snapshot and paging tests |
-
-Phase 6 stops at the public engine/interface boundary. MCP transport, AI provider invocation, prompts, and human-verification AI behavior are intentionally deferred to later phases.
-
-### Phase 7 Implementation Trace
-
-- Services: `AiAssistanceService`, `AiAssistanceProviderPort`, `EngineInterfaceService` AI operations, and existing `SearchService` keyword-set versioning implement the engine-side AI assistance path.
-- Persistence: `ai_assistance_requests`, `ai_keyword_recommendation_batches`, `ai_keyword_recommendations`, `ai_scope_summaries`, `ai_verification_events`, `ai_keyword_promotions`, and `ai_provider_capabilities`.
-- Schemas: `ai-assistance-request`, `ai-keyword-recommendation-batch`, `ai-keyword-recommendation`, `ai-scope-summary`, `ai-verification-event`, `ai-keyword-promotion`, and `ai-provider-capability`.
-- CLI: `ai request-*`, `ai keyword-*`, `ai summary-*`, `ai review-history`, plus public interface `ai.*` tool descriptors and mutation invocation.
-- Verification: Phase 7 unit/integration tests cover deterministic request fingerprints, repository reopen, citation rejection, Unicode candidates, append-only review immutability, stale/partial warning propagation, accepted-only promotion, duplicate/idempotent promotion, default provider unavailability, and structured interface errors.
-- Boundary: runtime MCP/LLM/prompt/API-key/provider execution, automatic search execution, automatic keyword-set activation, and AI-to-observed-fact promotion are not implemented.
-
-| ID | 요구사항 | 구현 | 검증 |
-|---|---|---|---|
-| P7-AI-001 | Snapshot 기반 AI 요청을 생성하고 재현 가능해야 한다 | `AiAssistanceRequest` fingerprint/TTL/source revision | Request determinism and reopen tests |
-| P7-AI-002 | AI 결과는 Citation과 Scope 밖 데이터를 검증해야 한다 | Keyword/Summary ingest validators | Missing/cross-case/out-of-snapshot citation tests |
-| P7-AI-003 | AI 결과는 Observed Fact와 분리되어야 한다 | AI tables and `NOT_OBSERVED_FACT` status | Schema and DTO assertions |
-| P7-AI-004 | Human Verification은 불변 이력이어야 한다 | `ai_verification_events` hash chain and triggers | Append-only trigger and revision tests |
-| P7-AI-005 | 승인/수정된 Keyword만 승격되어야 한다 | Promotion preview/promote gate | Accepted-only and idempotency tests |
-| P7-AI-006 | 승격은 검색 실행을 자동 수행하지 않아야 한다 | Existing keyword-set draft version path only | CLI workflow and search execution absence checks |
-| P7-AI-007 | Runtime AI Provider 부재를 명확히 알려야 한다 | Default provider `CAPABILITY_UNAVAILABLE` | Capability and interface tests |
-| P7-AI-008 | Prompt, Secret, Raw Body, Chain-of-thought를 저장하지 않아야 한다 | Forbidden-key and payload validators | Ingest validation and boundary review |
-
-### Phase 8 Implementation Trace
-
-- Services: `ReportService`, `ReportRendererPort`, `EngineInterfaceService` report operations, and existing Context/AI/Custody/Evidence/Search/Timeline services implement the engine-side report contract.
-- Persistence: `reports`, `report_versions`, `report_version_sections`, `report_version_references`, `report_review_events`, `report_approval_records`, `custody_snapshots`, `custody_snapshot_events`, `report_render_packages`, `report_export_manifests`, `rendered_report_artifacts`, `report_export_audit_events`, and `report_renderer_capabilities`.
-- Schemas: `report-record`, `report-version`, `report-section`, `report-render-package`, `ai-report-draft-input`, `report-review-event`, `report-approval-record`, `custody-snapshot`, `report-export-manifest`, `rendered-report-artifact`, and `report-renderer-capability`.
-- CLI: `report create/list/show/archive`, version commands, AI draft ingest, review/approval/custody/package/export commands, plus public interface `report.*` descriptors and invocation.
-- Verification: Phase 8 unit/integration tests cover report/version persistence and reopen, deterministic replay, cross-case rejection, script/raw response rejection, AI draft provenance, review conflicts, approval hash chain/revoke, new-version approval separation, custody verification, default renderer unavailable, fake renderer success/failure/cancel, rendered artifact metadata, export audit append-only behavior, descriptors, interface invocation, CLI E2E, and schema validation.
-- Boundary: actual AI report draft generation, LLM/prompt/MCP runtime, GUI preview, renderer network adapters, arbitrary local output paths, electronic signature, RBAC/authentication, and observed-fact promotion from report text are not implemented. Local HTML and optional ReportLab PDF adapters implement approved-package rendering.
-
-| ID | 요구사항 | 구현 | 검증 |
-|---|---|---|---|
-| P8-RPT-001 | Report aggregate와 immutable version을 분리해야 한다 | `ReportRecord`, `ReportVersion`, SQLite report tables | create/list/reopen and trigger tests |
-| P8-RPT-002 | Analyst/AI draft provenance를 구분해야 한다 | `source_kind`, `ingest_ai_draft()` | analyst and AI draft source assertions |
-| P8-RPT-003 | Citation/Snapshot/Evidence Cross-case 참조를 차단해야 한다 | Report validation via Context/Evidence/AI services | cross-case rejection tests |
-| P8-RPT-004 | Review/Approval은 append-only hash chain이어야 한다 | review/approval event records and triggers | conflict, revoke, trigger tests |
-| P8-RPT-005 | Approval은 version/content fingerprint에 고정되어야 한다 | approval content fingerprint check | approval/new-version separation tests |
-| P8-RPT-006 | Custody snapshot 검증 실패 시 approval/export를 차단해야 한다 | custody snapshot verification gate | custody approval tests |
-| P8-RPT-007 | Export는 승인된 version만 허용해야 한다 | `_require_approved_version()` | unapproved export rejection tests |
-| P8-RPT-008 | Renderer는 provider-neutral이고 기본 unavailable이어야 한다 | `ReportRendererPort`, `UnavailableReportRenderer` | capability and manifest tests |
-| P8-RPT-009 | Output path traversal/root escape를 막아야 한다 | filename and `derived://` validators | traversal/root rejection tests |
-| P8-RPT-010 | Prompt/API key/raw response/chain-of-thought 저장을 막아야 한다 | forbidden payload validators | AI/report security tests |
-
-## Release Hardening Traceability Update
-
-| ID | 요구사항 | 구현 | 검증/상태 |
-|---|---|---|---|
-| RH-RUN-001 | Runtime 성공은 Semantic 결과로 판정해야 한다 | `verify_windows_host_runtime.py` Probe Classifier와 Event Message Renderer 판정 | Linux Probe는 실제 실행, Windows 전용은 `HOST_VERIFICATION_REQUIRED` |
-| RH-REC-001 | DB Corruption/Lock/Writer Contention을 구조화해야 한다 | SQLite Adapter `PersistenceError` 변환 | `test_release_hardening_recovery.py`의 deterministic temp DB tests |
-| RH-SEC-001 | Catastrophic Regex와 Oversized XML을 제한해야 한다 | Search Regex Policy, bounded Event XML Reader/Record Size | Search/Windows Artifact regression tests |
-| RH-SEC-002 | Bandit Medium 이상을 모두 분류해야 한다 | `tools/security_findings.json` | Release Gate가 현재 Finding과 Manifest의 누락/Drift를 실패 처리 |
-| RH-BENCH-001 | 재현 가능한 Quick/Full Benchmark와 Read-only 증명이 필요하다 | `apex_forensic.runtime.benchmark` | Synthetic Fixture hash, fresh DB, Cold/Warm, resource/throughput metrics, before/after snapshot |
-| RH-CAP-001 | Optional Dependency를 가짜 성공으로 표시하지 않아야 한다 | `apex_forensic.runtime.capabilities` | `python3 -m apex_forensic doctor --json` actual Import/Executable/Runtime probes |
-| RH-GATE-001 | 하나의 재현 가능한 Release 검증 경로가 필요하다 | `tools/verify_engine_release.py` | pytest/Ruff/mypy/diff/design/runtime/recovery/Bandit/benchmark/CLI/Unicode/read-only checks |
-| RH-DOC-001 | 현재 Host 결과와 외부 Blocker를 구분해야 한다 | Required status documents | Linux verified, Windows host, optional dependency, external configuration states separated |
-| KAKAO-OFFLINE-001 | 명시적 Offline Root만 bounded/read-only 탐색해야 한다 | KakaoTalk provider의 containment, depth/entry/size limit, symlink/reparse 차단 | `test_kakaotalk_runtime.py` discovery/security tests |
-| KAKAO-VERSION-001 | 지원 Version을 Evidence로 검증해야 한다 | `KakaoTalk.exe` PE Fixed File Version resource parser | supported, unsupported, unverified version tests |
-| KAKAO-DB-001 | 외부 Key 복호화 결과를 SQLite/Schema로 검증해야 한다 | AES-128-CBC, read-only `quick_check(1)`, `chatLogs` column-aware extraction | synthetic contract, corruption, wrong key/IV/schema tests |
-| KAKAO-BLOCK-001 | 자동 획득과 실제 Fixture를 검증 없이 성공 처리하지 않아야 한다 | `BLOCKED_EXTERNAL_FIXTURE`, `real_kakaotalk_fixture_verified=false` | verifier redaction and require-flag tests |
-
-KakaoTalk automatic key acquisition, Android/iOS support, new cryptographic research and real
-encrypted-fixture claims remain excluded from the Release Gate. The external-key synthetic contract
-does not establish real KakaoTalk compatibility.
+No duplicate requirement ID is intentional. A future requirement must add a unique prefix/number and update its implementation, schema/database implications, tests, and status together.
