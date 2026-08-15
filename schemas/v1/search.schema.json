@@ -273,6 +273,21 @@
     "searchQuery": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "query_mode": { "const": "REGEX_METADATA" }
+            },
+            "required": ["query_mode"]
+          },
+          "then": {
+            "properties": {
+              "query_text": { "type": "string", "maxLength": 512 }
+            }
+          }
+        }
+      ],
       "required": [
         "query_id",
         "query_text",

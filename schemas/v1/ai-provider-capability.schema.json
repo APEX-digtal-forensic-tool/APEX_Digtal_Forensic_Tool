@@ -16,10 +16,25 @@
     },
     "warning": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": { "$ref": "common.schema.json#/$defs/restrictedContractJsonValue" },
       "required": ["code"],
       "properties": {
-        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "api_key_env": {
+          "type": "string",
+          "pattern": "^[A-Z_][A-Z0-9_]*$",
+          "maxLength": 128
+        }
+      },
+      "propertyNames": {
+        "anyOf": [
+          { "const": "api_key_env" },
+          {
+            "not": {
+              "pattern": "(?:[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Rr][Oo][Mm][Pp][Tt]|[Cc][Hh][Aa][Ii][Nn][-_]?[Oo][Ff][-_]?[Tt][Hh][Oo][Uu][Gg][Hh][Tt]|[Rr][Ee][Aa][Ss][Oo][Nn][Ii][Nn][Gg][-_]?[Tt][Rr][Aa][Cc][Ee]|[Rr][Aa][Ww][-_]?[Rr][Ee][Ss][Pp][Oo][Nn][Ss][Ee]|[Rr][Aa][Ww][-_]?[Bb][Oo][Dd][Yy]|^(?:[Rr][Aa][Ww][-_]?[Bb][Ll][Oo][Bb]|[Bb][Ll][Oo][Bb]|[Bb][Ii][Nn][Aa][Rr][Yy]|[Bb][Yy][Tt][Ee][Ss]|[Bb][Aa][Ss][Ee]64|[Aa][Tt][Tt][Aa][Cc][Hh][Mm][Ee][Nn][Tt][-_]?[Bb][Yy][Tt][Ee][Ss])$)"
+            }
+          }
+        ]
       }
     },
     "aiProviderCapability": {

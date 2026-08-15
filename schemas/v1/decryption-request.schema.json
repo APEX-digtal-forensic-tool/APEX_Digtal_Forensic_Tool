@@ -32,7 +32,7 @@
         "source_path": { "type": ["string", "null"] },
         "source_revision": { "type": ["integer", "null"], "minimum": 0 },
         "fingerprint": { "type": ["string", "null"] },
-        "raw_locator": { "type": "object", "additionalProperties": true },
+        "raw_locator": { "$ref": "common.schema.json#/$defs/redactedObject" },
         "created_at": {
           "oneOf": [
             { "$ref": "common.schema.json#/$defs/timestamp" },
@@ -61,7 +61,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/secretReference" }
         },
-        "parameters": { "type": "object", "additionalProperties": true }
+        "parameters": { "$ref": "common.schema.json#/$defs/redactedObject" }
       }
     }
   }

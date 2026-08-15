@@ -171,10 +171,10 @@
       }
     },
     "source_revision": {
-      "type": [
-        "string",
-        "integer",
-        "null"
+      "oneOf": [
+        { "type": "string" },
+        { "type": "integer" },
+        { "type": "null" }
       ]
     },
     "created_at": {

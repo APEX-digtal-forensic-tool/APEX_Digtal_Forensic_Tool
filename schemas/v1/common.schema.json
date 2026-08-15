@@ -38,6 +38,50 @@
       "type": "object",
       "additionalProperties": true
     },
+    "redactedJsonValue": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/redactedJsonValue" }
+        },
+        { "$ref": "#/$defs/redactedObject" }
+      ]
+    },
+    "redactedObject": {
+      "type": "object",
+      "patternProperties": {
+        "(?:[Aa][Pp][Ii]_[Kk][Ee][Yy]|[Aa][Pp][Ii][Kk][Ee][Yy]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]_[Vv][Aa][Ll][Uu][Ee]|[Kk][Ee][Yy]_[Mm][Aa][Tt][Ee][Rr][Ii][Aa][Ll](?:$|_(?:[Bb]64|[Hh][Ee][Xx]|[Bb][Yy][Tt][Ee][Ss]))|[Kk][Ee][Yy]_[Vv][Aa][Ll][Uu][Ee]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee]_[Kk][Ee][Yy]|[Rr][Aa][Ww]_[Kk][Ee][Yy](?:$|_(?:[Bb]64|[Hh][Ee][Xx]|[Bb][Yy][Tt][Ee][Ss]))|[Ss][Ee][Cc][Rr][Ee][Tt]_[Mm][Aa][Tt][Ee][Rr][Ii][Aa][Ll](?:$|_(?:[Bb]64|[Hh][Ee][Xx]|[Bb][Yy][Tt][Ee][Ss]))|[Ss][Ee][Cc][Rr][Ee][Tt]_[Vv][Aa][Ll][Uu][Ee](?:$|_(?:[Bb]64|[Hh][Ee][Xx]|[Bb][Yy][Tt][Ee][Ss]))|[Tt][Oo][Kk][Ee][Nn]|[Nn][Tt]_[Hh][Aa][Ss][Hh]_(?:[Hh][Ee][Xx]|[Bb]64)|[Mm][Aa][Ss][Tt][Ee][Rr][Kk][Ee][Yy]_(?:[Hh][Ee][Xx]|[Bb]64)|[Dd][Bb]_[Kk][Ee][Yy]_(?:[Hh][Ee][Xx]|[Bb]64)|[Dd][Bb]_[Ii][Vv]_(?:[Hh][Ee][Xx]|[Bb]64)|[Pp][Rr][Aa][Gg][Mm][Aa]_[Kk][Ee][Yy]|(?:[Ss][Ee][Rr][Vv][Ee][Rr]|[Uu][Ss][Ee][Rr])_[Nn][Oo][Nn][Cc][Ee]|^[Cc][Oo][Oo][Kk][Ii][Ee]$|^[Kk][Ee][Yy]$|^[Pp][Ll][Aa][Ii][Nn][Tt][Ee][Xx][Tt](?:_[Bb]64)?$|^[Ss][Ee][Cc][Rr][Ee][Tt](?:_(?:[Bb]64|[Hh][Ee][Xx]|[Bb][Yy][Tt][Ee][Ss]))?$)": {
+          "const": "<redacted>"
+        }
+      },
+      "additionalProperties": { "$ref": "#/$defs/redactedJsonValue" }
+    },
+    "restrictedContractJsonValue": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/restrictedContractJsonValue" }
+        },
+        { "$ref": "#/$defs/restrictedContractObject" }
+      ]
+    },
+    "restrictedContractObject": {
+      "type": "object",
+      "propertyNames": {
+        "not": {
+          "pattern": "(?:[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Rr][Oo][Mm][Pp][Tt]|[Cc][Hh][Aa][Ii][Nn][-_]?[Oo][Ff][-_]?[Tt][Hh][Oo][Uu][Gg][Hh][Tt]|[Rr][Ee][Aa][Ss][Oo][Nn][Ii][Nn][Gg][-_]?[Tt][Rr][Aa][Cc][Ee]|[Rr][Aa][Ww][-_]?[Rr][Ee][Ss][Pp][Oo][Nn][Ss][Ee]|[Rr][Aa][Ww][-_]?[Bb][Oo][Dd][Yy]|^(?:[Rr][Aa][Ww][-_]?[Bb][Ll][Oo][Bb]|[Bb][Ll][Oo][Bb]|[Bb][Ii][Nn][Aa][Rr][Yy]|[Bb][Yy][Tt][Ee][Ss]|[Bb][Aa][Ss][Ee]64|[Aa][Tt][Tt][Aa][Cc][Hh][Mm][Ee][Nn][Tt][-_]?[Bb][Yy][Tt][Ee][Ss])$)"
+        }
+      },
+      "additionalProperties": { "$ref": "#/$defs/restrictedContractJsonValue" }
+    },
     "error": {
       "type": "object",
       "additionalProperties": false,

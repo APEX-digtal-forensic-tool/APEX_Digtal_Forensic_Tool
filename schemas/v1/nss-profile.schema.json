@@ -7,6 +7,7 @@
     "warning": {
       "type": "object",
       "additionalProperties": true,
+      "allOf": [{ "$ref": "common.schema.json#/$defs/redactedObject" }],
       "required": ["code"],
       "properties": {
         "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
@@ -62,7 +63,7 @@
         "fingerprint": {
           "oneOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
         },
-        "raw_locator": { "type": "object", "additionalProperties": true },
+        "raw_locator": { "$ref": "common.schema.json#/$defs/redactedObject" },
         "warnings": {
           "type": "array",
           "items": { "$ref": "#/$defs/warning" }

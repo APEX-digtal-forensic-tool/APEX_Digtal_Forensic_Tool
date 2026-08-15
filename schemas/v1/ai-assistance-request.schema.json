@@ -44,6 +44,7 @@
     "warning": {
       "type": "object",
       "additionalProperties": true,
+      "allOf": [{ "$ref": "common.schema.json#/$defs/restrictedContractObject" }],
       "required": ["code"],
       "properties": {
         "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
@@ -51,10 +52,7 @@
     },
     "coverageSummary": {
       "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": true
-      }
+      "additionalProperties": { "$ref": "common.schema.json#/$defs/restrictedContractObject" }
     },
     "aiAssistanceRequest": {
       "type": "object",
@@ -117,10 +115,12 @@
         "coverage_summary": { "$ref": "#/$defs/coverageSummary" },
         "warnings": {
           "type": "array",
+          "maxItems": 200,
           "items": { "$ref": "#/$defs/warning" }
         },
         "citations": {
           "type": "array",
+          "maxItems": 200,
           "items": { "$ref": "citation.schema.json#/$defs/citation" }
         },
         "max_keyword_candidates": { "type": "integer", "minimum": 1, "maximum": 1000 },
@@ -130,7 +130,7 @@
         "request_version": { "type": "string", "minLength": 1 },
         "correlation_id": { "type": ["string", "null"], "minLength": 1 },
         "request_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
-        "resource_count": { "type": "integer", "minimum": 0 }
+        "resource_count": { "type": "integer", "minimum": 0, "maximum": 10000 }
       }
     }
   }

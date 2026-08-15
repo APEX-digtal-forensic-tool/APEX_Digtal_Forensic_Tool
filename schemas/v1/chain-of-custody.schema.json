@@ -10,6 +10,9 @@
       "$ref": "#/$defs/hashVerification"
     },
     {
+      "$ref": "#/$defs/runtimeHashVerification"
+    },
+    {
       "$ref": "#/$defs/custodySnapshot"
     },
     {
@@ -20,6 +23,44 @@
     "hashValue": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "algorithm": { "const": "MD5" } },
+            "required": ["algorithm"]
+          },
+          "then": {
+            "properties": {
+              "digest_hex": { "$ref": "common.schema.json#/$defs/md5" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "algorithm": { "const": "SHA1" } },
+            "required": ["algorithm"]
+          },
+          "then": {
+            "properties": {
+              "digest_hex": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "algorithm": { "const": "SHA256" } },
+            "required": ["algorithm"]
+          },
+          "then": {
+            "properties": {
+              "digest_hex": { "$ref": "common.schema.json#/$defs/sha256" }
+            }
+          }
+        }
+      ],
       "required": [
         "algorithm",
         "digest_hex"
@@ -28,14 +69,13 @@
         "algorithm": {
           "enum": [
             "SHA256",
-            "SHA512",
             "SHA1",
             "MD5"
           ]
         },
         "digest_hex": {
           "type": "string",
-          "pattern": "^[0-9a-f]{32,128}$"
+          "pattern": "^[0-9a-f]+$"
         }
       }
     },
@@ -349,6 +389,126 @@
         },
         "custody_event_id": {
           "$ref": "common.schema.json#/$defs/uuid"
+        }
+      }
+    },
+    "runtimeHashVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "algorithm": { "const": "MD5" } },
+            "required": ["algorithm"]
+          },
+          "then": {
+            "properties": {
+              "expected_digest": { "$ref": "common.schema.json#/$defs/md5" },
+              "observed_digest": {
+                "oneOf": [
+                  { "$ref": "common.schema.json#/$defs/md5" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "algorithm": { "const": "SHA1" } },
+            "required": ["algorithm"]
+          },
+          "then": {
+            "properties": {
+              "expected_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "observed_digest": {
+                "oneOf": [
+                  { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "algorithm": { "const": "SHA256" } },
+            "required": ["algorithm"]
+          },
+          "then": {
+            "properties": {
+              "expected_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+              "observed_digest": {
+                "oneOf": [
+                  { "$ref": "common.schema.json#/$defs/sha256" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "ERROR" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "observed_digest": { "type": "null" },
+              "error": { "$ref": "common.schema.json#/$defs/error" }
+            }
+          },
+          "else": {
+            "properties": {
+              "observed_digest": { "type": "string" },
+              "error": { "type": "null" }
+            }
+          }
+        }
+      ],
+      "required": [
+        "id",
+        "evidence_id",
+        "algorithm",
+        "expected_digest",
+        "observed_digest",
+        "status",
+        "verified_at",
+        "tool_version",
+        "job_id",
+        "custody_event_id",
+        "error"
+      ],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "case_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "evidence_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "algorithm": { "enum": ["MD5", "SHA1", "SHA256"] },
+        "expected_digest": { "type": "string", "pattern": "^[0-9a-f]+$" },
+        "observed_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]+$" },
+        "status": { "enum": ["MATCH", "MISMATCH", "ERROR"] },
+        "verified_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "tool_version": { "type": "string", "minLength": 1 },
+        "job_id": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        },
+        "custody_event_id": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/uuid" },
+            { "type": "null" }
+          ]
+        },
+        "error": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/error" },
+            { "type": "null" }
+          ]
         }
       }
     },

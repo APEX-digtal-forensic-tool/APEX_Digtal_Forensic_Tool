@@ -65,26 +65,6 @@
               }
             }
           }
-        },
-        {
-          "if": {
-            "properties": {
-              "algorithm": {
-                "const": "SHA512"
-              }
-            },
-            "required": [
-              "algorithm"
-            ]
-          },
-          "then": {
-            "properties": {
-              "digest_hex": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{128}$"
-              }
-            }
-          }
         }
       ],
       "required": [
@@ -100,8 +80,7 @@
           "enum": [
             "SHA256",
             "MD5",
-            "SHA1",
-            "SHA512"
+            "SHA1"
           ]
         },
         "digest_hex": {

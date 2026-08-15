@@ -36,17 +36,17 @@
       "$ref": "#/$defs/id"
     },
     "expected_revision": {
-      "type": [
-        "string",
-        "integer",
-        "null"
+      "oneOf": [
+        { "type": "string" },
+        { "type": "integer" },
+        { "type": "null" }
       ]
     },
     "current_revision": {
-      "type": [
-        "string",
-        "integer",
-        "null"
+      "oneOf": [
+        { "type": "string" },
+        { "type": "integer" },
+        { "type": "null" }
       ]
     },
     "status": {

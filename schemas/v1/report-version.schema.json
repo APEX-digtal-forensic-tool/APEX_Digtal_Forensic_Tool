@@ -7,13 +7,7 @@
     "id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "nullableId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
     "metadata": {
-      "type": "object",
-      "additionalProperties": true,
-      "propertyNames": {
-        "not": {
-          "pattern": "(?:[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Rr][Oo][Mm][Pp][Tt]|[Cc][Hh][Aa][Ii][Nn][-_]?[Oo][Ff][-_]?[Tt][Hh][Oo][Uu][Gg][Hh][Tt]|[Rr][Aa][Ww][-_]?[Rr][Ee][Ss][Pp][Oo][Nn][Ss][Ee]|[Rr][Aa][Ww][-_]?[Bb][Oo][Dd][Yy]|[Bb][Aa][Ss][Ee]64|[Aa][Tt][Tt][Aa][Cc][Hh][Mm][Ee][Nn][Tt][-_]?[Bb][Yy][Tt][Ee][Ss])"
-        }
-      }
+      "$ref": "common.schema.json#/$defs/restrictedContractObject"
     },
     "idArray": {
       "type": "array",

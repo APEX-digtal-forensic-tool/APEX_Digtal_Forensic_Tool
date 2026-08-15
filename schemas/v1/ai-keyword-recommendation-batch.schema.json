@@ -5,12 +5,12 @@
   "$ref": "#/$defs/aiKeywordRecommendationBatch",
   "$defs": {
     "state": {
-      "type": "object",
-      "additionalProperties": true
+      "$ref": "common.schema.json#/$defs/restrictedContractObject"
     },
     "warning": {
       "type": "object",
       "additionalProperties": true,
+      "allOf": [{ "$ref": "common.schema.json#/$defs/restrictedContractObject" }],
       "required": ["code"],
       "properties": {
         "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
@@ -55,6 +55,7 @@
         "stale_state": { "$ref": "#/$defs/state" },
         "warnings": {
           "type": "array",
+          "maxItems": 200,
           "items": { "$ref": "#/$defs/warning" }
         },
         "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },

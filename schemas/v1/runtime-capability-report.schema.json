@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/runtime-capability-report.schema.json",
+  "title": "APEX Runtime Capability Report",
+  "$ref": "#/$defs/runtimeCapabilityReport",
+  "$defs": {
+    "capabilityStatus": {
+      "enum": [
+        "AVAILABLE",
+        "AVAILABLE_WITH_LIMITATIONS",
+        "CAPABILITY_UNAVAILABLE",
+        "EXTERNAL_CONFIGURATION_REQUIRED",
+        "UNSUPPORTED_PLATFORM",
+        "BLOCKED_EXTERNAL_FIXTURE",
+        "HOST_VERIFICATION_REQUIRED"
+      ]
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "version", "reason", "probe", "details"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/capabilityStatus" },
+        "version": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"] },
+        "probe": { "type": "string", "minLength": 1 },
+        "details": {
+          "type": "object",
+          "additionalProperties": true,
+          "propertyNames": {
+            "not": {
+              "pattern": "(?:[Aa][Pp][Ii][-_]?[Kk][Ee][Yy]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt][-_]?[Vv][Aa][Ll][Uu][Ee]|[Ee][Nn][Vv](?:[Ii][Rr][Oo][Nn][Mm][Ee][Nn][Tt])?[-_]?(?:[Nn][Aa][Mm][Ee]|[Vv][Aa][Ll][Uu][Ee]))"
+            }
+          }
+        }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "platform", "python_version", "python_implementation", "cpu_count"],
+      "properties": {
+        "os": { "type": "string" },
+        "platform": { "type": "string" },
+        "python_version": { "type": "string", "minLength": 1 },
+        "python_implementation": { "type": "string", "minLength": 1 },
+        "cpu_count": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_count",
+        "unavailable_count",
+        "host_verification_required_count",
+        "secret_values_emitted",
+        "environment_values_emitted",
+        "environment_names_emitted"
+      ],
+      "properties": {
+        "capability_count": { "type": "integer", "minimum": 0 },
+        "unavailable_count": { "type": "integer", "minimum": 0 },
+        "host_verification_required_count": { "type": "integer", "minimum": 0 },
+        "secret_values_emitted": { "const": false },
+        "environment_values_emitted": { "const": false },
+        "environment_names_emitted": { "const": false }
+      }
+    },
+    "runtimeCapabilityReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "engine_version",
+        "status",
+        "host",
+        "summary",
+        "capabilities"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "engine_version": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["AVAILABLE", "AVAILABLE_WITH_LIMITATIONS"] },
+        "host": { "$ref": "#/$defs/host" },
+        "summary": { "$ref": "#/$defs/summary" },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/capability" }
+        }
+      }
+    }
+  }
+}

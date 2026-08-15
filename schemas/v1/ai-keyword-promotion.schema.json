@@ -5,8 +5,7 @@
   "$ref": "#/$defs/aiKeywordPromotion",
   "$defs": {
     "metadata": {
-      "type": "object",
-      "additionalProperties": true
+      "$ref": "common.schema.json#/$defs/restrictedContractObject"
     },
     "promotionStatus": {
       "enum": ["PROMOTED", "SKIPPED_DUPLICATE"]

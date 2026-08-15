@@ -4,6 +4,34 @@
   "title": "APEX Machine-extracted Candidate",
   "$ref": "#/$defs/machineExtractedCandidate",
   "$defs": {
+    "machineRawLocator": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source_node_id", "locator_type"],
+      "properties": {
+        "source_path": { "type": "string", "minLength": 1 },
+        "source_node_id": { "type": "string", "minLength": 1 },
+        "candidate_index": { "type": "integer", "minimum": 0 },
+        "locator_type": {
+          "enum": ["OCR", "STT", "SUBTITLE", "SCREEN_TEXT", "OTHER", "SYNTHETIC"]
+        },
+        "source_sha256": { "$ref": "common.schema.json#/$defs/sha256" }
+      }
+    },
+    "machineCitation": {
+      "anyOf": [
+        { "$ref": "citation.schema.json#/$defs/citation" },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["evidence_id", "source_id"],
+          "properties": {
+            "evidence_id": { "type": "string", "minLength": 1 },
+            "source_id": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
     "machineExtractedCandidate": {
       "type": "object",
       "additionalProperties": false,
@@ -56,8 +84,10 @@
         "source_type": {
           "enum": [
             "IMAGE",
+            "IMAGE_FILE",
             "VIDEO_FRAME",
             "AUDIO",
+            "AUDIO_FILE",
             "DOCUMENT",
             "OTHER"
           ]
@@ -136,12 +166,15 @@
           ]
         },
         "raw_locator": {
-          "$ref": "citation.schema.json#/$defs/rawLocator"
+          "anyOf": [
+            { "$ref": "citation.schema.json#/$defs/rawLocator" },
+            { "$ref": "#/$defs/machineRawLocator" }
+          ]
         },
         "citations": {
           "type": "array",
           "items": {
-            "$ref": "citation.schema.json#/$defs/citation"
+            "$ref": "#/$defs/machineCitation"
           }
         },
         "review_status": {
@@ -176,7 +209,7 @@
         },
         "source_revision": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 0
         },
         "is_partial": {
           "type": "boolean"

@@ -1,12 +1,38 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.apex-forensics.dev/v1/kakaotalk-artifact.schema.json",
-  "title": "APEX KakaoTalk Runtime Artifact",
-  "$ref": "#/$defs/kakaoTalkArtifact",
+  "title": "APEX KakaoTalk Runtime Artifact and Discovery",
+  "oneOf": [
+    { "$ref": "#/$defs/kakaoTalkArtifact" },
+    { "$ref": "#/$defs/kakaoTalkDiscovery" }
+  ],
   "$defs": {
+    "researchReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "doi", "validated_redistributable_fixture"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "doi": { "const": "10.1016/j.diin.2019.01.011" },
+        "validated_redistributable_fixture": { "const": false }
+      }
+    },
+    "runtimeEvidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "automatic_key_acquisition_status": { "const": "BLOCKED_EXTERNAL_FIXTURE" },
+        "redistributable_fixture_status": { "const": "BLOCKED_EXTERNAL_FIXTURE" },
+        "algorithm_contract_fixture_status": { "const": "CONTRACT_ONLY" },
+        "validated_redistributable_fixture": { "const": false },
+        "real_kakaotalk_fixture_verified": { "const": false },
+        "research_reference": { "$ref": "#/$defs/researchReference" }
+      }
+    },
     "kakaoTalkArtifact": {
       "type": "object",
       "additionalProperties": true,
+      "allOf": [{ "$ref": "#/$defs/runtimeEvidence" }],
       "required": [
         "case_id",
         "evidence_id",
@@ -26,9 +52,14 @@
             "KEY_UNAVAILABLE",
             "SOURCE_UNAVAILABLE",
             "UNSUPPORTED_PLATFORM",
+            "VERSION_UNVERIFIED",
             "UNSUPPORTED_VERSION",
+            "UNSUPPORTED_SCHEMA",
+            "CORRUPT_DB",
             "AUTHENTICATION_FAILED",
-            "CAPABILITY_UNAVAILABLE"
+            "CAPABILITY_UNAVAILABLE",
+            "BLOCKED_EXTERNAL_FIXTURE",
+            "FAILED"
           ]
         },
         "reason": { "type": "string", "minLength": 1, "maxLength": 256 },
@@ -37,12 +68,129 @@
         "store_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
         "raw_store_emitted": { "const": false },
         "plaintext_emitted": { "const": false },
-        "success_without_key": { "const": false }
+        "success_without_key": { "const": false },
+        "automatic_key_acquisition": { "const": false },
+        "secret_values_emitted": { "const": false }
       },
       "propertyNames": {
-        "not": {
-          "pattern": "(?:[Pp][Ll][Aa][Ii][Nn][Tt][Ee][Xx][Tt]_[Bb][Oo][Dd][Yy]|[Mm][Ee][Ss][Ss][Aa][Gg][Ee]_[Bb][Oo][Dd][Yy]|[Kk][Ee][Yy]_[Vv][Aa][Ll][Uu][Ee]|[Ss][Ee][Cc][Rr][Ee][Tt])"
+        "anyOf": [
+          { "const": "secret_values_emitted" },
+          {
+            "not": {
+              "pattern": "(?:[Pp][Ll][Aa][Ii][Nn][Tt][Ee][Xx][Tt]_[Bb][Oo][Dd][Yy]|[Mm][Ee][Ss][Ss][Aa][Gg][Ee]_[Bb][Oo][Dd][Yy]|[Kk][Ee][Yy]_[Vv][Aa][Ll][Uu][Ee]|[Ss][Ee][Cc][Rr][Ee][Tt])"
+            }
+          }
+        ]
+      }
+    },
+    "kakaoTalkDiscovery": {
+      "type": "object",
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "platform": { "enum": ["WINDOWS_DESKTOP", "WINDOWS"] }
+            },
+            "required": ["platform"]
+          },
+          "else": {
+            "properties": { "status": { "const": "UNSUPPORTED_PLATFORM" } }
+          }
         }
+      ],
+      "required": [
+        "schema_version",
+        "case_id",
+        "evidence_id",
+        "profile_root",
+        "platform",
+        "automatic_key_acquisition",
+        "secret_values_emitted",
+        "discovery_status",
+        "version_status",
+        "key_material_status",
+        "key_derivation_status",
+        "store_candidates",
+        "version_artifacts",
+        "skipped_entries",
+        "missing_derivation_evidence",
+        "automatic_key_acquisition_status",
+        "redistributable_fixture_status",
+        "algorithm_contract_fixture_status",
+        "validated_redistributable_fixture",
+        "real_kakaotalk_fixture_verified",
+        "research_reference",
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "case_id": { "type": "string", "minLength": 1 },
+        "evidence_id": { "type": ["string", "null"] },
+        "profile_root": { "type": ["string", "null"] },
+        "platform": { "type": "string", "minLength": 1 },
+        "automatic_key_acquisition": { "const": false },
+        "secret_values_emitted": { "const": false },
+        "discovery_status": { "enum": ["NOT_STARTED", "EMPTY", "DISCOVERED"] },
+        "version_status": { "enum": ["VERSION_UNVERIFIED", "VERSION_VERIFIED", "UNSUPPORTED_VERSION"] },
+        "key_material_status": { "enum": ["KEY_UNAVAILABLE", "BLOCKED_EXTERNAL_FIXTURE"] },
+        "key_derivation_status": { "const": "NOT_ATTEMPTED" },
+        "store_candidates": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "rejected_store_candidates": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "version_artifacts": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "skipped_entries": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "missing_derivation_evidence": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "automatic_key_acquisition_status": { "const": "BLOCKED_EXTERNAL_FIXTURE" },
+        "redistributable_fixture_status": { "const": "BLOCKED_EXTERNAL_FIXTURE" },
+        "algorithm_contract_fixture_status": { "const": "CONTRACT_ONLY" },
+        "validated_redistributable_fixture": { "const": false },
+        "real_kakaotalk_fixture_verified": { "const": false },
+        "research_reference": { "$ref": "#/$defs/researchReference" },
+        "status": {
+          "enum": [
+            "SOURCE_UNAVAILABLE",
+            "UNSUPPORTED_PLATFORM",
+            "VERSION_UNVERIFIED",
+            "UNSUPPORTED_VERSION",
+            "BLOCKED_EXTERNAL_FIXTURE"
+          ]
+        },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "application_version": { "type": ["string", "null"] },
+        "entries_examined": { "type": "integer", "minimum": 0, "maximum": 20000 },
+        "hash_bytes_examined": { "type": "integer", "minimum": 0, "maximum": 2147483648 },
+        "traversal_truncated": { "type": "boolean" },
+        "profile_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" }
+      },
+      "propertyNames": {
+        "anyOf": [
+          { "const": "secret_values_emitted" },
+          {
+            "not": {
+              "pattern": "(?:[Pp][Ll][Aa][Ii][Nn][Tt][Ee][Xx][Tt]_[Bb][Oo][Dd][Yy]|[Mm][Ee][Ss][Ss][Aa][Gg][Ee]_[Bb][Oo][Dd][Yy]|[Kk][Ee][Yy]_[Vv][Aa][Ll][Uu][Ee]|[Ss][Ee][Cc][Rr][Ee][Tt])"
+            }
+          }
+        ]
       }
     }
   }

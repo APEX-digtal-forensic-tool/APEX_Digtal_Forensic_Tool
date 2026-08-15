@@ -109,6 +109,7 @@
         },
         "citations": {
           "type": "array",
+          "maxItems": 200,
           "items": { "$ref": "citation.schema.json#/$defs/citation" }
         },
         "is_partial": { "type": "boolean" },
