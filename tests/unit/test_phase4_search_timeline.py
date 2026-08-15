@@ -63,6 +63,40 @@ def _result_document_ids(page) -> list[str]:
     return [item.document_id for item in page.results]
 
 
+def test_search_query_length_boundaries_precede_persistence(services) -> None:
+    case = services.cases.create_case(name="Search boundaries")
+
+    generic = services.search.query(case_id=case.case_id, query_text="가" * 4096)
+    assert generic.query.query_text == "가" * 4096
+    before_rejected = services.repository.connection.execute(
+        "SELECT COUNT(*) AS count FROM search_queries"
+    ).fetchone()["count"]
+    with pytest.raises(ValidationError):
+        services.search.query(case_id=case.case_id, query_text="가" * 4097)
+    assert services.repository.connection.execute(
+        "SELECT COUNT(*) AS count FROM search_queries"
+    ).fetchone()["count"] == before_rejected
+
+    regex = services.search.query(
+        case_id=case.case_id,
+        query_text="a" * 512,
+        query_mode=SearchQueryMode.REGEX_METADATA,
+    )
+    assert regex.query.query_text == "a" * 512
+    before_rejected = services.repository.connection.execute(
+        "SELECT COUNT(*) AS count FROM search_queries"
+    ).fetchone()["count"]
+    with pytest.raises(ValidationError):
+        services.search.query(
+            case_id=case.case_id,
+            query_text="a" * 513,
+            query_mode=SearchQueryMode.REGEX_METADATA,
+        )
+    assert services.repository.connection.execute(
+        "SELECT COUNT(*) AS count FROM search_queries"
+    ).fetchone()["count"] == before_rejected
+
+
 def test_search_modes_cache_reproduction_and_schema(
     services,
     tmp_path: Path,

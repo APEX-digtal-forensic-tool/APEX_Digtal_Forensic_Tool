@@ -8,9 +8,11 @@ import pytest
 
 from apex_forensic.cli.commands import main
 from apex_forensic.config import build_services
+from apex_forensic.domain.errors import PersistenceError
 from apex_forensic.domain.models import (
     DecryptionAttempt,
     DecryptionResult,
+    HashVerification,
     SecretProviderCapability,
 )
 
@@ -123,6 +125,131 @@ def test_secret_decryption_audit_persists_redacted_result(
                 "UPDATE decryption_results SET status = 'COMPLETED' WHERE attempt_id = ?",
                 ("attempt-1",),
             )
+    finally:
+        reopened.close()
+
+
+def test_hash_verification_case_scope_migrates_and_rejects_cross_case(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "hash-case-migration.db"
+    sample = tmp_path / "hash-source.bin"
+    sample.write_bytes(b"hash verification case scope")
+    services = build_services(db_path)
+    case = services.cases.create_case(name="Hash case")
+    other_case = services.cases.create_case(name="Other hash case")
+    evidence = services.evidence.register_evidence(
+        case_id=case.case_id,
+        source_path=sample,
+    )
+    verification = HashVerification(
+        {
+            "id": "verification-migrated",
+            "case_id": case.case_id,
+            "evidence_id": evidence.evidence_id,
+            "algorithm": "SHA256",
+            "expected_digest": "0" * 64,
+            "observed_digest": "0" * 64,
+            "status": "MATCH",
+            "verified_at": "2026-01-01T00:00:00Z",
+            "tool_version": "test",
+            "job_id": None,
+            "custody_event_id": None,
+            "error": None,
+        }
+    )
+    services.repository.save_hash_verification(verification)
+    services.close()
+
+    legacy = sqlite3.connect(db_path)
+    try:
+        legacy.executescript(
+            """
+            CREATE TABLE hash_verifications_legacy (
+                verification_id TEXT PRIMARY KEY,
+                evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
+                algorithm TEXT NOT NULL,
+                expected_digest TEXT NOT NULL,
+                observed_digest TEXT,
+                status TEXT NOT NULL,
+                verified_at TEXT NOT NULL,
+                tool_version TEXT NOT NULL,
+                job_id TEXT REFERENCES jobs(job_id),
+                custody_event_id TEXT,
+                error_json TEXT
+            );
+            INSERT INTO hash_verifications_legacy
+            SELECT verification_id, evidence_id, algorithm, expected_digest,
+                   observed_digest, status, verified_at, tool_version, job_id,
+                   custody_event_id, error_json
+            FROM hash_verifications;
+            DROP TABLE hash_verifications;
+            ALTER TABLE hash_verifications_legacy RENAME TO hash_verifications;
+            """
+        )
+        legacy.commit()
+    finally:
+        legacy.close()
+
+    reopened = build_services(db_path)
+    try:
+        reopened.repository.initialize()
+        columns = {
+            row["name"]
+            for row in reopened.repository.connection.execute(
+                "PRAGMA table_info(hash_verifications)"
+            )
+        }
+        stored = reopened.repository.connection.execute(
+            "SELECT case_id FROM hash_verifications WHERE verification_id = ?",
+            ("verification-migrated",),
+        ).fetchone()
+        reloaded = reopened.repository.list_hash_verifications(evidence.evidence_id)[0]
+        assert "case_id" in columns
+        assert stored["case_id"] == case.case_id
+        assert reloaded.to_schema_dict()["case_id"] == case.case_id
+        assert {
+            key: reloaded.to_schema_dict()[key]
+            for key in (
+                "id",
+                "evidence_id",
+                "algorithm",
+                "expected_digest",
+                "observed_digest",
+                "status",
+                "verified_at",
+                "tool_version",
+            )
+        } == {
+            key: verification.to_schema_dict()[key]
+            for key in (
+                "id",
+                "evidence_id",
+                "algorithm",
+                "expected_digest",
+                "observed_digest",
+                "status",
+                "verified_at",
+                "tool_version",
+            )
+        }
+
+        cross_case = HashVerification(
+            {
+                **verification.to_schema_dict(),
+                "id": "verification-cross-case",
+                "case_id": other_case.case_id,
+            }
+        )
+        before_count = reopened.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM hash_verifications"
+        ).fetchone()["count"]
+        with pytest.raises(PersistenceError) as mismatch:
+            reopened.repository.save_hash_verification(cross_case)
+        assert mismatch.value.code == "CASE_SCOPE_MISMATCH"
+        assert reopened.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM hash_verifications"
+        ).fetchone()["count"] == before_count
     finally:
         reopened.close()
 

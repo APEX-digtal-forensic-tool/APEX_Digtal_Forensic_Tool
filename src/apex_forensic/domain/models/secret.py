@@ -6,7 +6,6 @@ hold ephemeral bytes while API, CLI, repository, and audit paths receive redacte
 
 from __future__ import annotations
 
-import base64
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,12 +20,30 @@ _SENSITIVE_FIELD_NAMES = {
     "apikey",
     "authorization",
     "cookie",
+    "db_iv_hex",
+    "db_key_hex",
     "key",
+    "masterkey_hex",
+    "nt_hash_hex",
     "password",
     "plaintext",
     "plaintext_b64",
+    "pragma_key",
     "secret",
     "token",
+    "user_nonce",
+}
+_SAFE_INDICATOR_FIELD_NAMES = {
+    "key_material_status",
+    "password_plaintext_emitted",
+    "password_value_present",
+    "primary_password_emitted",
+    "primary_password_required",
+    "primary_password_supplied",
+    "raw_key_material_emitted",
+    "secret_fields_emitted",
+    "secret_value_emitted",
+    "secret_values_emitted",
 }
 _SENSITIVE_KEY_MARKERS = (
     "api_key",
@@ -113,7 +130,7 @@ class SecretReference:
             "source_path": self.source_path,
             "source_revision": self.source_revision,
             "fingerprint": self.fingerprint,
-            "raw_locator": self.raw_locator,
+            "raw_locator": _redact_mapping(self.raw_locator),
             "created_at": _ts(self.created_at),
         }
 
@@ -147,15 +164,13 @@ class SecretMaterial:
         )
 
     def to_schema_dict(self, *, include_secret: bool = False) -> dict[str, Any]:
-        data = {
+        del include_secret
+        return {
             "reference": self.reference.to_schema_dict(),
             "redacted": self.redacted.to_schema_dict(),
             "algorithm": self.algorithm,
             "created_at": _ts(self.created_at),
         }
-        if include_secret:
-            data["secret_b64"] = base64.b64encode(self.value).decode("ascii")
-        return data
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,7 +239,7 @@ class DecryptionAttempt:
 
 @dataclass(frozen=True, slots=True)
 class DecryptionResult:
-    """Provider result that redacts plaintext unless an explicit caller opts in."""
+    """Provider result whose schema serialization always redacts plaintext."""
 
     attempt: DecryptionAttempt
     status: str
@@ -247,20 +262,18 @@ class DecryptionResult:
             object.__setattr__(self, "content_length", self.content_length or len(self.plaintext))
 
     def to_schema_dict(self, *, include_plaintext: bool = False) -> dict[str, Any]:
-        data = {
+        del include_plaintext
+        return {
             "schema_version": self.result_version,
             "attempt": self.attempt.to_schema_dict(),
             "status": self.status,
             "output_kind": self.output_kind,
             "content_sha256": self.content_sha256,
             "content_length": self.content_length,
-            "citations": self.citations,
+            "citations": _redact_list(self.citations),
             "partial": self.partial,
             "metadata": _redact_mapping(self.metadata),
         }
-        if include_plaintext and self.plaintext is not None:
-            data["plaintext_b64"] = base64.b64encode(self.plaintext).decode("ascii")
-        return data
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,10 +337,14 @@ def _redact_value(value: Any) -> Any:
         return _redact_mapping(value)
     if isinstance(value, list):
         return _redact_list(value)
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item) for item in value)
     return value
 
 
 def _is_sensitive_field_name(lowered: str) -> bool:
+    if lowered in _SAFE_INDICATOR_FIELD_NAMES:
+        return False
     return lowered in _SENSITIVE_FIELD_NAMES or any(
         marker in lowered for marker in _SENSITIVE_KEY_MARKERS
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apex_forensic.constants import DEFAULT_LOCALE, DEFAULT_TIMEZONE, SCHEMA_VERSION
@@ -11,6 +12,9 @@ from apex_forensic.domain.models import Case, Evidence
 from apex_forensic.ports.case_repository import CaseRepository
 from apex_forensic.ports.clock import Clock
 from apex_forensic.ports.id_generator import IdGenerator
+
+MAX_CASE_NAME_LENGTH = 255
+_LOCALE_RE = re.compile(r"[a-z]{2,3}(?:-[A-Z]{2})?")
 
 
 class CaseManager:
@@ -37,8 +41,8 @@ class CaseManager:
     ) -> Case:
         """Create and persist a new case."""
 
-        if not name.strip():
-            raise ValidationError("Case name is required.", target="name")
+        self._validate_name(name, blank_message="Case name is required.")
+        self._validate_locale(locale)
         self._validate_timezone(timezone)
         now = self._clock.now()
         case = Case(
@@ -82,8 +86,7 @@ class CaseManager:
 
         case = self.get_case(case_id)
         if name is not None:
-            if not name.strip():
-                raise ValidationError("Case name cannot be blank.", target="name")
+            self._validate_name(name, blank_message="Case name cannot be blank.")
             case.name = name
         if description is not None:
             case.description = description
@@ -110,8 +113,7 @@ class CaseManager:
     def change_locale(self, case_id: str, locale: str) -> Case:
         """Change the case locale."""
 
-        if not locale:
-            raise ValidationError("Locale is required.", target="locale")
+        self._validate_locale(locale)
         case = self.get_case(case_id)
         case.locale = locale
         case.updated_at = self._clock.now()
@@ -144,3 +146,21 @@ class CaseManager:
                 target="timezone",
                 details={"timezone": timezone},
             ) from error
+
+    @staticmethod
+    def _validate_name(name: str, *, blank_message: str) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise ValidationError(blank_message, target="name")
+        if len(name) > MAX_CASE_NAME_LENGTH:
+            raise ValidationError(
+                f"Case name cannot exceed {MAX_CASE_NAME_LENGTH} characters.",
+                target="name",
+            )
+
+    @staticmethod
+    def _validate_locale(locale: str) -> None:
+        if not isinstance(locale, str) or _LOCALE_RE.fullmatch(locale) is None:
+            raise ValidationError(
+                "Locale must use a supported language or language-region identifier.",
+                target="locale",
+            )

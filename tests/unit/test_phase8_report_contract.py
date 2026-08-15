@@ -346,6 +346,158 @@ def test_cross_case_payload_security_and_ai_draft_ingest(services: Any, tmp_path
             report_id=base["report"].report_id,
         )
 
+    invalid_new_report = dict(ai_payload)
+    invalid_new_report["title"] = "가" * 501
+    before_reports = services.repository.connection.execute(
+        "SELECT COUNT(*) AS count FROM reports"
+    ).fetchone()["count"]
+    with pytest.raises(ApexError):
+        services.reports.ingest_ai_draft(payload=invalid_new_report, report_id=None)
+    assert services.repository.connection.execute(
+        "SELECT COUNT(*) AS count FROM reports"
+    ).fetchone()["count"] == before_reports
+
+
+def test_report_record_schema_boundaries_reject_before_persistence(
+    services: Any,
+) -> None:
+    case = services.cases.create_case(name="Report record boundaries")
+    accepted = services.reports.create_report(
+        case_id=case.case_id,
+        title="가" * 500,
+        description="설" * 4000,
+        created_by="a" * 256,
+    )
+    assert len(accepted.title) == 500
+    assert len(accepted.description) == 4000
+    before_count = services.repository.connection.execute(
+        "SELECT COUNT(*) AS count FROM reports"
+    ).fetchone()["count"]
+
+    invalid_inputs = (
+        {"title": "가" * 501, "description": None, "created_by": "analyst"},
+        {"title": "Report", "description": "설" * 4001, "created_by": "analyst"},
+        {"title": "Report", "description": None, "created_by": "a" * 257},
+    )
+    for values in invalid_inputs:
+        with pytest.raises(ApexError):
+            services.reports.create_report(case_id=case.case_id, **values)
+        assert services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM reports"
+        ).fetchone()["count"] == before_count
+
+
+def test_report_version_collection_boundaries_do_not_partially_mutate(
+    services: Any,
+    tmp_path: Path,
+) -> None:
+    base = _base_fixture(services, tmp_path)
+    payload = _version_payload(base)
+    payload["title"] = "가" * 500
+    payload["sections"][0]["title"] = "나" * 500
+    payload["sections"][0]["warnings"] = [
+        {"code": f"W{index:04d}"} for index in range(1000)
+    ]
+    payload["sections"][0]["source_resource_ids"] = []
+    payload["sections"][0]["context_snapshot_ids"] = []
+    payload["sections"][0]["citations"] = []
+    payload["context_snapshot_ids"] = []
+    payload["evidence_ids"] = []
+    payload["citations"] = []
+    payload["limitations"] = ["제" * 4000]
+
+    def create(values: dict[str, Any]):
+        return services.reports.create_version(
+            report_id=base["report"].report_id,
+            source_kind="ANALYST_DRAFT",
+            created_by="a" * 256,
+            **values,
+        )
+
+    accepted = create(payload)
+    assert len(accepted.title) == 500
+    assert len(accepted.sections[0].title) == 500
+    assert len(accepted.sections[0].warnings) == 1000
+    before_count = len(services.reports.list_versions(base["report"].report_id))
+
+    invalid_payloads: list[dict[str, Any]] = []
+    too_long_title = _version_payload(base, content="title overflow")
+    too_long_title["title"] = "가" * 501
+    invalid_payloads.append(too_long_title)
+    too_long_section = _version_payload(base, content="section title overflow")
+    too_long_section["sections"][0]["title"] = "나" * 501
+    invalid_payloads.append(too_long_section)
+    too_long_limitation = _version_payload(base, content="limitation overflow")
+    too_long_limitation["limitations"] = ["제" * 4001]
+    invalid_payloads.append(too_long_limitation)
+    too_many_warnings = _version_payload(base, content="warning overflow")
+    too_many_warnings["sections"][0]["warnings"] = [
+        {"code": f"W{index:04d}"} for index in range(1001)
+    ]
+    invalid_payloads.append(too_many_warnings)
+    too_many_citations = _version_payload(base, content="citation overflow")
+    too_many_citations["sections"][0]["citations"] = [
+        too_many_citations["sections"][0]["citations"][0]
+    ] * 1001
+    invalid_payloads.append(too_many_citations)
+
+    for invalid in invalid_payloads:
+        with pytest.raises(ApexError):
+            create(invalid)
+        report = services.reports.get_report(base["report"].report_id)
+        assert len(services.reports.list_versions(report.report_id)) == before_count
+        assert report.latest_version_number == 1
+        assert report.active_version_id == accepted.report_version_id
+
+
+def test_report_review_boundaries_reject_without_append(
+    services: Any,
+    tmp_path: Path,
+) -> None:
+    base = _base_fixture(services, tmp_path)
+    version = _create_version(services, base)
+    submitted = services.reports.submit_review(
+        report_version_id=version.report_version_id,
+        actor_id="r" * 256,
+        reason="s" * 4000,
+    )
+    assert len(submitted.actor_id) == 256
+    services.reports.comment_review(
+        report_version_id=version.report_version_id,
+        actor_id="reviewer",
+        reason="Boundary comment.",
+        comment="c" * 4000,
+        expected_review_revision=1,
+    )
+    before_count = len(services.reports.review_history(version.report_version_id))
+
+    with pytest.raises(ApexError):
+        services.reports.comment_review(
+            report_version_id=version.report_version_id,
+            actor_id="reviewer",
+            reason="Rejected comment.",
+            comment="c" * 4001,
+            expected_review_revision=2,
+        )
+    with pytest.raises(ApexError):
+        services.reports.comment_review(
+            report_version_id=version.report_version_id,
+            actor_id="r" * 257,
+            reason="Rejected actor.",
+            comment="bounded",
+            expected_review_revision=2,
+        )
+    with pytest.raises(ApexError):
+        services.reports.request_changes(
+            report_version_id=version.report_version_id,
+            actor_id="reviewer",
+            reason="Rejected changes.",
+            requested_changes=[f"change-{index}" for index in range(101)],
+            expected_review_revision=2,
+        )
+
+    assert len(services.reports.review_history(version.report_version_id)) == before_count
+
 
 def test_custody_export_renderer_and_audit_contract(
     services: Any, tmp_path: Path, schema_validator: Any

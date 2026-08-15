@@ -53,6 +53,23 @@ MAX_JSON_DEPTH = 8
 MAX_JSON_BYTES = 512 * 1024
 MAX_REASON_LENGTH = 4000
 MAX_FILENAME_LENGTH = 180
+MAX_ID_LENGTH = 128
+MAX_ACTOR_ID_LENGTH = 256
+MAX_REPORT_TITLE_LENGTH = 500
+MAX_REPORT_DESCRIPTION_LENGTH = 4000
+MAX_SECTION_TITLE_LENGTH = 500
+MAX_LIMITATION_LENGTH = 4000
+MAX_CONTEXT_SNAPSHOT_COUNT = 1000
+MAX_CITATION_COUNT = 1000
+MAX_WARNING_COUNT = 1000
+MAX_WARNING_MESSAGE_LENGTH = 2000
+MAX_STALE_REASON_COUNT = 1000
+MAX_STALE_REASON_LENGTH = 500
+MAX_REQUESTED_CHANGE_COUNT = 100
+MAX_REQUESTED_CHANGE_LENGTH = 4000
+MAX_RENDERER_ID_LENGTH = 256
+MAX_RENDERER_VERSION_LENGTH = 80
+MAX_REDACTION_POLICY_LENGTH = 80
 _FORBIDDEN_KEY_PARTS = (
     "api_key",
     "apikey",
@@ -152,9 +169,15 @@ class ReportService:
         locale: str | None = None,
         timezone: str | None = None,
     ) -> ReportRecord:
+        title = _bounded_non_empty(title, "title", MAX_REPORT_TITLE_LENGTH)
+        created_by = _bounded_non_empty(created_by, "created_by", MAX_ACTOR_ID_LENGTH)
+        description = _bounded_optional_text(
+            description,
+            "description",
+            MAX_REPORT_DESCRIPTION_LENGTH,
+        )
         case = self._require_case(case_id)
-        title = _safe_text(_required_non_empty(title, "title"), "title")
-        created_by = _required_non_empty(created_by, "created_by")
+        title = _safe_text(title, "title")
         description = None if description is None else _safe_text(description, "description")
         report_type_value = _enum_value(ReportType, report_type, "report_type")
         now = self._clock.now()
@@ -222,9 +245,9 @@ class ReportService:
         }
 
     def archive_report(self, *, report_id: str, actor_id: str, reason: str) -> ReportRecord:
-        del reason
+        _bounded_non_empty(actor_id, "actor_id", MAX_ACTOR_ID_LENGTH)
+        _required_reason(reason)
         report = self.get_report(report_id)
-        _required_non_empty(actor_id, "actor_id")
         now = self._clock.now()
         report.status = ReportStatus.ARCHIVED.value
         report.archived_at = now
@@ -260,8 +283,16 @@ class ReportService:
                 target="report_id",
             )
         source_kind_value = _enum_value(ReportSourceKind, source_kind, "source_kind")
-        created_by = _required_non_empty(created_by, "created_by")
-        title = _safe_text(_required_non_empty(title, "title"), "title")
+        created_by = _bounded_non_empty(created_by, "created_by", MAX_ACTOR_ID_LENGTH)
+        title = _safe_text(
+            _bounded_non_empty(title, "title", MAX_REPORT_TITLE_LENGTH),
+            "title",
+        )
+        source_reference_id = _bounded_optional_text(
+            source_reference_id,
+            "source_reference_id",
+            MAX_ID_LENGTH,
+        )
         executive_summary = _safe_text(
             _required_non_empty(executive_summary, "executive_summary"),
             "executive_summary",
@@ -278,15 +309,41 @@ class ReportService:
                 "Report version must contain a bounded non-empty section list.",
                 target="sections",
             )
-        snapshots = self._require_snapshots(report.case_id, context_snapshot_ids or [])
-        evidence_ids = self._validate_evidence_ids(report.case_id, evidence_ids or [])
+        context_snapshot_ids = _string_list(
+            context_snapshot_ids or [],
+            "context_snapshot_ids",
+            max_items=MAX_CONTEXT_SNAPSHOT_COUNT,
+        )
+        snapshots = self._require_snapshots(report.case_id, context_snapshot_ids)
+        evidence_ids = self._validate_evidence_ids(
+            report.case_id,
+            _string_list(evidence_ids or [], "evidence_ids", max_items=10_000),
+        )
         search_execution_ids = self._validate_search_execution_ids(
-            report.case_id, search_execution_ids or []
+            report.case_id,
+            _string_list(
+                search_execution_ids or [],
+                "search_execution_ids",
+                max_items=10_000,
+            ),
         )
         ai_assistance_request_ids = self._validate_ai_request_ids(
-            report.case_id, ai_assistance_request_ids or []
+            report.case_id,
+            _string_list(
+                ai_assistance_request_ids or [],
+                "ai_assistance_request_ids",
+                max_items=10_000,
+            ),
         )
-        ai_result_ids = self._validate_ai_result_ids(report.case_id, ai_result_ids or [])
+        ai_result_ids = self._validate_ai_result_ids(
+            report.case_id,
+            _string_list(ai_result_ids or [], "ai_result_ids", max_items=10_000),
+        )
+        timeline_revisions = _integer_list(
+            timeline_revisions or [],
+            "timeline_revisions",
+            max_items=10_000,
+        )
         normalized_citations = self._validate_citations(
             case_id=report.case_id,
             snapshots=snapshots,
@@ -294,13 +351,22 @@ class ReportService:
             require_direct=False,
             target="citations",
         )
-        limitations = _string_list(limitations or [], "limitations", max_items=MAX_LIMITATION_COUNT)
+        limitations = _string_list(
+            limitations or [],
+            "limitations",
+            max_items=MAX_LIMITATION_COUNT,
+        )
         if not limitations:
             raise ReportError(
                 "REPORT_LIMITATIONS_REQUIRED",
                 "Report versions must record limitations.",
                 target="limitations",
             )
+        _validate_string_lengths(
+            limitations,
+            "limitations",
+            MAX_LIMITATION_LENGTH,
+        )
         analyzer_versions = dict(analyzer_versions or {})
         _validate_contract_payload(analyzer_versions, target="analyzer_versions")
         section_objects = [
@@ -335,7 +401,7 @@ class ReportService:
             "context_snapshot_ids": [item.context_snapshot_id for item in snapshots],
             "evidence_ids": sorted(evidence_ids),
             "search_execution_ids": sorted(search_execution_ids),
-            "timeline_revisions": sorted(timeline_revisions or []),
+            "timeline_revisions": sorted(timeline_revisions),
             "ai_assistance_request_ids": sorted(ai_assistance_request_ids),
             "ai_result_ids": sorted(ai_result_ids),
             "citations": normalized_citations,
@@ -368,7 +434,7 @@ class ReportService:
             context_snapshot_ids=[item.context_snapshot_id for item in snapshots],
             evidence_ids=sorted(evidence_ids),
             search_execution_ids=sorted(search_execution_ids),
-            timeline_revisions=sorted(timeline_revisions or []),
+            timeline_revisions=sorted(timeline_revisions),
             ai_assistance_request_ids=sorted(ai_assistance_request_ids),
             ai_result_ids=sorted(ai_result_ids),
             citation_ids=sorted(
@@ -439,6 +505,7 @@ class ReportService:
         context_snapshot_ids = _string_list(
             payload.get("context_snapshot_ids", [request.context_snapshot_id]),
             "context_snapshot_ids",
+            max_items=MAX_CONTEXT_SNAPSHOT_COUNT,
         )
         if request.context_snapshot_id not in context_snapshot_ids:
             context_snapshot_ids.append(request.context_snapshot_id)
@@ -455,11 +522,34 @@ class ReportService:
             "generated_at": payload.get("generated_at"),
             "correlation_id": payload.get("correlation_id"),
         }
-        title = _required_non_empty(payload.get("title"), "title")
-        executive_summary = _required_non_empty(
-            payload.get("executive_summary"), "executive_summary"
+        created_by = _bounded_non_empty(
+            created_by,
+            "created_by",
+            MAX_ACTOR_ID_LENGTH,
+        )
+        title = _safe_text(
+            _bounded_non_empty(
+                payload.get("title"),
+                "title",
+                MAX_REPORT_TITLE_LENGTH,
+            ),
+            "title",
+        )
+        executive_summary = _safe_text(
+            _bounded_non_empty(
+                payload.get("executive_summary"),
+                "executive_summary",
+                MAX_REPORT_TEXT_LENGTH,
+            ),
+            "executive_summary",
         )
         raw_sections = _required_list(payload, "sections")
+        if not raw_sections or len(raw_sections) > MAX_SECTION_COUNT:
+            raise ReportError(
+                "REPORT_CONTENT_LIMIT_EXCEEDED",
+                "Report version must contain a bounded non-empty section list.",
+                target="sections",
+            )
         if any(not isinstance(item, Mapping) for item in raw_sections):
             raise ValidationError("Sections must be JSON objects.", target="sections")
         sections = [dict(item) for item in raw_sections]
@@ -468,6 +558,32 @@ class ReportService:
         citations: list[Mapping[str, Any]] = [
             dict(item) for item in _list_or_empty(payload.get("citations"))
         ]
+        limitations = _string_list(
+            payload.get("limitations", ["AI draft requires human review."]),
+            "limitations",
+            max_items=MAX_LIMITATION_COUNT,
+        )
+        _validate_string_lengths(limitations, "limitations", MAX_LIMITATION_LENGTH)
+        snapshots = self._require_snapshots(case_id, context_snapshot_ids)
+        for index, section in enumerate(sections, start=1):
+            self._section_from_input(
+                case_id=case_id,
+                snapshots=snapshots,
+                raw=section,
+                index=index,
+            )
+        self._validate_citations(
+            case_id=case_id,
+            snapshots=snapshots,
+            citations=[dict(item) for item in citations],
+            require_direct=False,
+            target="citations",
+        )
+        source_reference = _bounded_non_empty(
+            provider_metadata.get("external_request_id") or request.assistance_request_id,
+            "source_reference_id",
+            MAX_ID_LENGTH,
+        )
         if report_id is None:
             report = self.create_report(
                 case_id=case_id,
@@ -477,9 +593,6 @@ class ReportService:
                 created_by=created_by,
             )
             report_id = report.report_id
-        source_reference = str(
-            provider_metadata.get("external_request_id") or request.assistance_request_id
-        )
         return self.create_version(
             report_id=report_id,
             source_kind=ReportSourceKind.AI_DRAFT,
@@ -492,10 +605,7 @@ class ReportService:
             ai_assistance_request_ids=[request.assistance_request_id],
             ai_result_ids=ai_result_ids,
             citations=citations,
-            limitations=_string_list(
-                payload.get("limitations", ["AI draft requires human review."]),
-                "limitations",
-            ),
+            limitations=limitations,
             analyzer_versions=provider_metadata,
         )
 
@@ -568,7 +678,8 @@ class ReportService:
     def set_active_version(
         self, *, report_id: str, report_version_id: str, actor_id: str, reason: str
     ) -> ReportRecord:
-        del reason
+        _bounded_non_empty(actor_id, "actor_id", MAX_ACTOR_ID_LENGTH)
+        _required_reason(reason)
         report = self.get_report(report_id)
         version = self.get_version(report_version_id)
         if version.report_id != report.report_id:
@@ -577,7 +688,6 @@ class ReportService:
                 "Report version belongs to another report.",
                 target="report_version_id",
             )
-        _required_non_empty(actor_id, "actor_id")
         report.active_version_id = version.report_version_id
         report.status = ReportStatus.REVIEW_REQUIRED.value
         report.updated_at = self._clock.now()
@@ -731,9 +841,13 @@ class ReportService:
         expected_review_revision: int | None = None,
         expected_approval_revision: int | None = None,
     ) -> ReportApprovalRecord:
-        version = self.get_version(report_version_id)
-        _required_non_empty(approver_id, "approver_id")
+        approver_id = _bounded_non_empty(
+            approver_id,
+            "approver_id",
+            MAX_ACTOR_ID_LENGTH,
+        )
         reason = _required_reason(reason)
+        version = self.get_version(report_version_id)
         review_revision = int(version.review_state.get("review_revision", 0))
         if expected_review_revision is not None and expected_review_revision != review_revision:
             raise ReportError(
@@ -832,10 +946,19 @@ class ReportService:
         captured_by: str,
         evidence_ids: list[str] | None = None,
     ) -> CustodySnapshotRecord:
+        captured_by = _bounded_non_empty(
+            captured_by,
+            "captured_by",
+            MAX_ACTOR_ID_LENGTH,
+        )
         version = self.get_version(report_version_id)
-        captured_by = _required_non_empty(captured_by, "captured_by")
         evidence_ids = self._validate_evidence_ids(
-            version.case_id, evidence_ids if evidence_ids is not None else version.evidence_ids
+            version.case_id,
+            _string_list(
+                evidence_ids if evidence_ids is not None else version.evidence_ids,
+                "evidence_ids",
+                max_items=10_000,
+            ),
         )
         events: list[Any] = []
         verification_errors: list[dict[str, Any]] = []
@@ -861,6 +984,12 @@ class ReportService:
         else:
             status = CustodySnapshotVerificationStatus.VERIFIED.value
         event_ids = [event.event_id for event in events]
+        if len(event_ids) > 100_000 or len(verification_errors) > 10_000:
+            raise ReportError(
+                "REPORT_CONTENT_LIMIT_EXCEEDED",
+                "Custody snapshot collections exceed the schema limits.",
+                target="custody_snapshot",
+            )
         event_times = [
             parse_timestamp(str(event.to_schema_dict()["occurred_at_utc"])) for event in events
         ]
@@ -920,6 +1049,11 @@ class ReportService:
         custody_snapshot_id: str | None = None,
         stale_confirmed: bool = False,
     ) -> ReportRenderPackage:
+        created_by = _bounded_non_empty(
+            created_by,
+            "created_by",
+            MAX_ACTOR_ID_LENGTH,
+        )
         version = self.get_version(report_version_id)
         if for_export:
             approval = self._require_approved_version(version)
@@ -930,11 +1064,16 @@ class ReportService:
                 "Stale report export requires explicit confirmation.",
                 target="stale_confirmed",
             )
-        _required_non_empty(created_by, "created_by")
         evidence_manifest = [self._evidence_manifest_item(eid) for eid in version.evidence_ids]
         citations = _stable_citations(
             [citation for section in version.sections for citation in section.citations]
         )
+        if len(citations) > MAX_CITATION_COUNT:
+            raise ReportError(
+                "REPORT_CONTENT_LIMIT_EXCEEDED",
+                "Render package exceeds the maximum citation count.",
+                target="citations",
+            )
         package_payload = {
             "report_id": version.report_id,
             "report_version_id": version.report_version_id,
@@ -1022,11 +1161,25 @@ class ReportService:
         stale_confirmed: bool = False,
         renderer: ReportRendererPort | None = None,
     ) -> ReportExportManifest:
+        created_by = _bounded_non_empty(
+            created_by,
+            "created_by",
+            MAX_ACTOR_ID_LENGTH,
+        )
+        redaction_policy = _bounded_non_empty(
+            redaction_policy,
+            "redaction_policy",
+            MAX_REDACTION_POLICY_LENGTH,
+        )
+        _bounded_non_empty(
+            self._derived_output_root_id,
+            "derived_output_root_id",
+            MAX_ID_LENGTH,
+        )
         version = self.get_version(report_version_id)
         approval = self._require_approved_version(version)
         format_value = _enum_value(ReportExportFormat, format, "format")
         filename = _safe_filename(filename, format_value)
-        created_by = _required_non_empty(created_by, "created_by")
         if overwrite_policy != "DENY":
             raise ReportError(
                 "REPORT_OUTPUT_INVALID",
@@ -1061,6 +1214,7 @@ class ReportService:
         active_renderer = renderer or self._renderer
         capability = active_renderer.capabilities()
         capability.generated_at = capability.generated_at or self._clock.now()
+        _validate_renderer_capability(capability)
         self._repository.save_report_renderer_capability(capability)
         renderer_available = (
             capability.is_available and format_value in capability.supported_formats
@@ -1070,7 +1224,11 @@ class ReportService:
             if renderer_available
             else ReportExportStatus.CAPABILITY_UNAVAILABLE.value
         )
-        warnings = [] if renderer_available else capability.warnings
+        warnings = (
+            []
+            if renderer_available
+            else _bounded_warnings(capability.warnings, "warnings")
+        )
         manifest = ReportExportManifest(
             export_manifest_id=self._id_generator.new_id(),
             report_id=version.report_id,
@@ -1144,9 +1302,14 @@ class ReportService:
             )
         active_renderer = renderer or self._renderer
         capability = active_renderer.capabilities()
+        _validate_renderer_capability(capability)
         if not capability.is_available or manifest.format not in capability.supported_formats:
+            warnings = _bounded_warnings(
+                [*manifest.warnings, *capability.warnings],
+                "warnings",
+            )
             manifest.status = ReportExportStatus.CAPABILITY_UNAVAILABLE.value
-            manifest.warnings = _stable_warnings([*manifest.warnings, *capability.warnings])
+            manifest.warnings = warnings
             self._repository.update_report_export_manifest(manifest)
             self._append_export_audit(manifest, "RENDER_UNAVAILABLE", None, manifest.status, {})
             return manifest
@@ -1167,13 +1330,15 @@ class ReportService:
                 payload=result,
             )
         except ReportError as error:
-            manifest.status = ReportExportStatus.FAILED.value
-            manifest.warnings = _stable_warnings(
+            warnings = _bounded_warnings(
                 [
                     *manifest.warnings,
                     {"code": error.code, "developer_message": error.developer_message},
-                ]
+                ],
+                "warnings",
             )
+            manifest.status = ReportExportStatus.FAILED.value
+            manifest.warnings = warnings
             self._repository.update_report_export_manifest(manifest)
             self._append_export_audit(
                 manifest, "RENDER_FAILED", None, manifest.status, error.to_api_error()
@@ -1188,12 +1353,15 @@ class ReportService:
     ) -> RenderedReportArtifact | ReportExportManifest:
         manifest = self.get_export_manifest(export_manifest_id)
         _validate_contract_payload(payload, target="render_result")
+        result_warnings = _bounded_warnings(payload.get("warnings", []), "warnings")
         status = str(payload.get("status", ReportExportStatus.COMPLETED.value))
         if status in {ReportExportStatus.FAILED.value, ReportExportStatus.CANCELLED.value}:
-            manifest.status = status
-            manifest.warnings = _stable_warnings(
-                [*manifest.warnings, *list(payload.get("warnings", []))]
+            merged_warnings = _bounded_warnings(
+                [*manifest.warnings, *result_warnings],
+                "warnings",
             )
+            manifest.status = status
+            manifest.warnings = merged_warnings
             self._repository.update_report_export_manifest(manifest)
             self._append_export_audit(manifest, "RENDER_RESULT", None, status, dict(payload))
             return manifest
@@ -1229,8 +1397,16 @@ class ReportService:
                 "Renderer output hash is invalid.",
                 target="sha256",
             )
-        renderer_id = str(payload.get("renderer_id", manifest.renderer_id))
-        renderer_version = str(payload.get("renderer_version", manifest.renderer_version))
+        renderer_id = _bounded_non_empty(
+            payload.get("renderer_id", manifest.renderer_id),
+            "renderer_id",
+            MAX_RENDERER_ID_LENGTH,
+        )
+        renderer_version = _bounded_non_empty(
+            payload.get("renderer_version", manifest.renderer_version),
+            "renderer_version",
+            MAX_RENDERER_VERSION_LENGTH,
+        )
         mime_type = str(payload.get("mime_type") or _mime_type(manifest.format))
         artifact_payload: dict[str, str | int] = {
             "export_manifest_id": manifest.export_manifest_id,
@@ -1257,11 +1433,14 @@ class ReportService:
             size_bytes=size_bytes,
             sha256=sha256,
             rendered_at=self._clock.now(),
-            warnings=_stable_warnings(list(payload.get("warnings", []))),
+            warnings=result_warnings,
             artifact_fingerprint=canonical_sha256(artifact_payload),
         )
         manifest.status = ReportExportStatus.COMPLETED.value
-        manifest.warnings = _stable_warnings([*manifest.warnings, *artifact.warnings])
+        manifest.warnings = _bounded_warnings(
+            [*manifest.warnings, *artifact.warnings],
+            "warnings",
+        )
         report = self.get_report(manifest.report_id)
         report.status = ReportStatus.EXPORTED.value
         report.updated_at = self._clock.now()
@@ -1278,6 +1457,7 @@ class ReportService:
     def renderer_capabilities(self) -> ReportRendererCapability:
         capability = self._renderer.capabilities()
         capability.generated_at = capability.generated_at or self._clock.now()
+        _validate_renderer_capability(capability)
         self._repository.save_report_renderer_capability(capability)
         return capability
 
@@ -1295,11 +1475,23 @@ class ReportService:
     ) -> ReportReviewEvent:
         version = self.get_version(report_version_id)
         action_value = _enum_value(ReportReviewAction, action, "action")
-        actor_id = _required_non_empty(actor_id, "actor_id")
+        actor_id = _bounded_non_empty(actor_id, "actor_id", MAX_ACTOR_ID_LENGTH)
         reason = _required_reason(reason)
         if comment is not None:
-            comment = _safe_text(comment, "comment")
-        requested_changes = _string_list(requested_changes or [], "requested_changes")
+            comment = _safe_text(
+                _bounded_optional_text(comment, "comment", MAX_REQUESTED_CHANGE_LENGTH) or "",
+                "comment",
+            )
+        requested_changes = _string_list(
+            requested_changes or [],
+            "requested_changes",
+            max_items=MAX_REQUESTED_CHANGE_COUNT,
+        )
+        _validate_string_lengths(
+            requested_changes,
+            "requested_changes",
+            MAX_REQUESTED_CHANGE_LENGTH,
+        )
         events = self._repository.list_report_review_events(
             report_version_id=version.report_version_id
         )
@@ -1412,7 +1604,8 @@ class ReportService:
         custody_snapshot_id: str | None,
         expected_approval_revision: int | None,
     ) -> ReportApprovalRecord:
-        actor_id = _required_non_empty(actor_id, "actor_id")
+        actor_id = _bounded_non_empty(actor_id, "approver_id", MAX_ACTOR_ID_LENGTH)
+        reason = _required_reason(reason)
         approvals = self._repository.list_report_approval_records(report_id=version.report_id)
         latest_revision = approvals[-1].approval_revision if approvals else 0
         if expected_approval_revision is not None and expected_approval_revision != latest_revision:
@@ -1535,7 +1728,14 @@ class ReportService:
             raw.get("content_kind", ReportContentKind.PLAIN_TEXT.value),
             "content_kind",
         )
-        title = _safe_text(_required_non_empty(raw.get("title"), "title"), "section.title")
+        title = _safe_text(
+            _bounded_non_empty(
+                raw.get("title"),
+                "section.title",
+                MAX_SECTION_TITLE_LENGTH,
+            ),
+            "section.title",
+        )
         content = _safe_text(str(raw.get("content", "")), "section.content")
         if len(content) > MAX_SECTION_CONTENT_LENGTH:
             raise ReportError(
@@ -1554,6 +1754,7 @@ class ReportService:
         context_snapshot_ids = _string_list(
             raw.get("context_snapshot_ids", [item.context_snapshot_id for item in snapshots]),
             "context_snapshot_ids",
+            max_items=MAX_CONTEXT_SNAPSHOT_COUNT,
         )
         section_snapshots = [
             snapshot
@@ -1574,9 +1775,14 @@ class ReportService:
         is_partial = bool(raw.get("is_partial", False)) or any(
             _snapshot_is_partial(snapshot) for snapshot in section_snapshots
         )
+        raw_stale_reasons = _string_list(
+            raw.get("stale_reasons", []),
+            "section.stale_reasons",
+            max_items=MAX_STALE_REASON_COUNT,
+        )
         stale_reasons = _dedupe(
             [
-                *[str(item) for item in raw.get("stale_reasons", [])],
+                *raw_stale_reasons,
                 *[
                     str(reason)
                     for snapshot in section_snapshots
@@ -1584,24 +1790,37 @@ class ReportService:
                 ],
             ]
         )
+        if len(stale_reasons) > MAX_STALE_REASON_COUNT:
+            raise ReportError(
+                "REPORT_CONTENT_LIMIT_EXCEEDED",
+                "Section stale reasons exceed the maximum item count.",
+                target="section.stale_reasons",
+            )
+        _validate_string_lengths(
+            stale_reasons,
+            "section.stale_reasons",
+            MAX_STALE_REASON_LENGTH,
+        )
         coverage = dict(raw.get("coverage") or {})
         coverage.setdefault("status", "UNKNOWN" if not section_snapshots else "SNAPSHOT_DERIVED")
-        warnings = _stable_warnings(
+        raw_warnings = _required_optional_list(raw.get("warnings", []), "section.warnings")
+        warnings = _bounded_warnings(
             [
-                *list(raw.get("warnings", [])),
+                *raw_warnings,
                 *(
                     [{"code": "REPORT_SECTION_PARTIAL"}]
                     if is_partial
-                    and not _has_warning(raw.get("warnings", []), "REPORT_SECTION_PARTIAL")
+                    and not _has_warning(raw_warnings, "REPORT_SECTION_PARTIAL")
                     else []
                 ),
                 *(
                     [{"code": "REPORT_SECTION_STALE"}]
                     if stale_reasons
-                    and not _has_warning(raw.get("warnings", []), "REPORT_SECTION_STALE")
+                    and not _has_warning(raw_warnings, "REPORT_SECTION_STALE")
                     else []
                 ),
-            ]
+            ],
+            "section.warnings",
         )
         fingerprint_payload = {
             "section_type": section_type,
@@ -1620,8 +1839,13 @@ class ReportService:
             "warnings": warnings,
         }
         section_fingerprint = canonical_sha256(fingerprint_payload)
+        section_id = _bounded_non_empty(
+            raw.get("section_id") or f"section-{section_fingerprint[:32]}",
+            "section.section_id",
+            MAX_ID_LENGTH,
+        )
         return ReportSection(
-            section_id=str(raw.get("section_id") or f"section-{section_fingerprint[:32]}"),
+            section_id=section_id,
             section_type=section_type,
             title=title,
             order=order,
@@ -1656,8 +1880,15 @@ class ReportService:
                     target=target,
                 )
             return []
+        if len(citations) > MAX_CITATION_COUNT:
+            raise ReportError(
+                "REPORT_CONTENT_LIMIT_EXCEEDED",
+                "Citation collection exceeds the maximum item count.",
+                target=target,
+            )
         normalized: list[dict[str, Any]] = []
         for citation in citations:
+            _validate_citation_fields(citation, target)
             if citation.get("case_id") != case_id:
                 raise ReportError(
                     "REPORT_REFERENCE_CASE_MISMATCH",
@@ -1928,6 +2159,33 @@ def _required_non_empty(value: Any, target: str) -> str:
     return str(value).strip()
 
 
+def _bounded_non_empty(value: Any, target: str, maximum: int) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValidationError("Field must be a non-empty string.", target=target)
+    normalized = value.strip()
+    if len(value) > maximum:
+        raise ReportError(
+            "REPORT_CONTENT_LIMIT_EXCEEDED",
+            "Text field exceeds the maximum length.",
+            target=target,
+        )
+    return normalized
+
+
+def _bounded_optional_text(value: Any, target: str, maximum: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError("Field must be a string.", target=target)
+    if len(value) > maximum:
+        raise ReportError(
+            "REPORT_CONTENT_LIMIT_EXCEEDED",
+            "Text field exceeds the maximum length.",
+            target=target,
+        )
+    return value
+
+
 def _required_reason(value: Any) -> str:
     reason = _required_non_empty(value, "reason")
     if len(reason) > MAX_REASON_LENGTH:
@@ -1950,6 +2208,12 @@ def _list_or_empty(value: Any) -> list[Any]:
     return value
 
 
+def _required_optional_list(value: Any, target: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValidationError("Field must be a list.", target=target)
+    return value
+
+
 def _string_list(value: Any, target: str, *, max_items: int = 10_000) -> list[str]:
     if value is None:
         return []
@@ -1964,11 +2228,40 @@ def _string_list(value: Any, target: str, *, max_items: int = 10_000) -> list[st
     return _dedupe(value)
 
 
+def _integer_list(value: Any, target: str, *, max_items: int) -> list[int]:
+    if not isinstance(value, list) or any(
+        not isinstance(item, int) or isinstance(item, bool) for item in value
+    ):
+        raise ValidationError("Field must be a list of integers.", target=target)
+    if len(value) > max_items:
+        raise ReportError(
+            "REPORT_CONTENT_LIMIT_EXCEEDED",
+            "List field exceeds the maximum item count.",
+            target=target,
+        )
+    return list(value)
+
+
+def _validate_string_lengths(values: list[str], target: str, maximum: int) -> None:
+    if any(len(value) > maximum for value in values):
+        raise ReportError(
+            "REPORT_CONTENT_LIMIT_EXCEEDED",
+            "List item exceeds the maximum length.",
+            target=target,
+        )
+
+
 def _metadata_string(value: Any, target: str) -> str:
     if value is None:
         return "UNKNOWN"
     if not isinstance(value, str) or value == "":
         raise ValidationError("Provider metadata must be a non-empty string.", target=target)
+    if len(value) > MAX_RENDERER_ID_LENGTH:
+        raise ReportError(
+            "REPORT_CONTENT_LIMIT_EXCEEDED",
+            "Provider metadata exceeds the maximum length.",
+            target=target,
+        )
     if any(part in target.casefold() for part in _FORBIDDEN_KEY_PARTS):
         raise ValidationError("Provider metadata target is forbidden.", target=target)
     return value
@@ -2057,6 +2350,74 @@ def _stable_warnings(warnings: list[Any]) -> list[dict[str, Any]]:
             continue
         normalized[canonical_sha256(dict(item))] = dict(item)
     return [normalized[key] for key in sorted(normalized)]
+
+
+def _bounded_warnings(value: Any, target: str) -> list[dict[str, Any]]:
+    warnings = _required_optional_list(value, target)
+    if len(warnings) > MAX_WARNING_COUNT:
+        raise ReportError(
+            "REPORT_CONTENT_LIMIT_EXCEEDED",
+            "Warning collection exceeds the maximum item count.",
+            target=target,
+        )
+    for warning in warnings:
+        if not isinstance(warning, Mapping):
+            raise ValidationError("Warning must be a JSON object.", target=target)
+        code = warning.get("code")
+        if not isinstance(code, str) or re.fullmatch(r"[A-Z][A-Z0-9_]*", code) is None:
+            raise ValidationError("Warning code is invalid.", target=target)
+        message = warning.get("developer_message")
+        if message is not None:
+            _bounded_optional_text(
+                message,
+                f"{target}.developer_message",
+                MAX_WARNING_MESSAGE_LENGTH,
+            )
+    return _stable_warnings(warnings)
+
+
+def _validate_citation_fields(citation: Mapping[str, Any], target: str) -> None:
+    for field in (
+        "id",
+        "case_id",
+        "evidence_id",
+        "source_id",
+        "file_id",
+        "artifact_id",
+        "timeline_event_id",
+        "search_result_id",
+    ):
+        if citation.get(field) is not None:
+            _bounded_non_empty(citation[field], f"{target}.{field}", MAX_ID_LENGTH)
+    _bounded_non_empty(citation.get("source_kind"), f"{target}.source_kind", 80)
+    for field, maximum in (
+        ("label", 100),
+        ("source_path", 4096),
+        ("source_reference", 4096),
+        ("excerpt", 4000),
+        ("encoding", 80),
+    ):
+        if citation.get(field) is not None:
+            _bounded_optional_text(citation[field], f"{target}.{field}", maximum)
+
+
+def _validate_renderer_capability(capability: ReportRendererCapability) -> None:
+    _bounded_non_empty(
+        capability.renderer_id,
+        "renderer_id",
+        MAX_RENDERER_ID_LENGTH,
+    )
+    _bounded_non_empty(
+        capability.renderer_version,
+        "renderer_version",
+        MAX_RENDERER_VERSION_LENGTH,
+    )
+    _bounded_optional_text(
+        capability.unavailable_reason,
+        "unavailable_reason",
+        256,
+    )
+    _bounded_warnings(capability.warnings, "warnings")
 
 
 def _stable_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2261,6 +2622,12 @@ def _safe_filename(filename: str, format_value: str) -> str:
     extension = ".pdf" if format_value == ReportExportFormat.PDF.value else ".html"
     if not cleaned.casefold().endswith(extension):
         cleaned = f"{cleaned}{extension}"
+    if len(cleaned) > MAX_FILENAME_LENGTH:
+        raise ReportError(
+            "REPORT_OUTPUT_INVALID",
+            "Export filename is invalid.",
+            target="filename",
+        )
     _validate_output_path_segment(cleaned, target="filename")
     return cleaned
 

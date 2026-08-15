@@ -53,6 +53,7 @@ from apex_forensic.ports.id_generator import IdGenerator
 from apex_forensic.ports.search_index import SearchIndexProvider, SearchRepository
 
 MAX_QUERY_LIMIT = 1000
+MAX_QUERY_LENGTH = 4096
 MAX_REGEX_LENGTH = 512
 MAX_REGEX_BOUNDED_REPEAT = 1000
 DEFAULT_SEARCH_CACHE_TTL_SECONDS: int | None = None
@@ -364,6 +365,7 @@ class SearchService:
                 raise NotFoundError("KEYWORD_SET_NOT_FOUND", "Keyword set not found.")
             effective_keyword_set_version = keyword_set.version
         raw_effective_query_text = self._effective_query_text(query_text, keyword_set)
+        self._validate_query(raw_effective_query_text, query_mode)
         effective_query_text = (
             raw_effective_query_text
             if query_mode is SearchQueryMode.REGEX_METADATA
@@ -1054,6 +1056,11 @@ class SearchService:
     def _validate_query(self, query_text: str, query_mode: SearchQueryMode) -> None:
         if not query_text.strip():
             raise ValidationError("Search query cannot be empty.", target="query")
+        if len(query_text) > MAX_QUERY_LENGTH:
+            raise ValidationError(
+                f"Search query cannot exceed {MAX_QUERY_LENGTH} characters.",
+                target="query",
+            )
         if query_mode is SearchQueryMode.REGEX_METADATA:
             _validate_safe_regex(query_text)
 

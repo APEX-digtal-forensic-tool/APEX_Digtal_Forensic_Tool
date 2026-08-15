@@ -68,6 +68,12 @@ def test_hash_verification_records_match_and_mismatch(services, sample_file: Pat
         chunk_size=64,
     )
     assert verification.to_schema_dict()["status"] == "MATCH"
+    assert verification.to_schema_dict()["case_id"] == case.case_id
+    stored_row = services.repository.connection.execute(
+        "SELECT case_id FROM hash_verifications WHERE verification_id = ?",
+        (verification.to_schema_dict()["id"],),
+    ).fetchone()
+    assert stored_row["case_id"] == case.case_id
 
     sample_file.write_bytes(b"modified")
     mismatch, job = services.evidence.verify_evidence(
@@ -77,7 +83,9 @@ def test_hash_verification_records_match_and_mismatch(services, sample_file: Pat
     )
     assert mismatch.to_schema_dict()["status"] == "MISMATCH"
     assert job.warnings[0]["code"] == "HASH_MISMATCH"
-    assert len(services.repository.list_hash_verifications(evidence.evidence_id)) == 2
+    history = services.repository.list_hash_verifications(evidence.evidence_id)
+    assert len(history) == 2
+    assert {item.to_schema_dict()["case_id"] for item in history} == {case.case_id}
 
 
 def test_hash_verification_error_history_is_preserved(services, sample_file: Path) -> None:

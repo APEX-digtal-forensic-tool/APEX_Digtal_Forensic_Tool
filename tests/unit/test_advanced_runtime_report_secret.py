@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import stat
 from datetime import UTC, datetime
@@ -14,6 +15,8 @@ from apex_forensic.config import build_services
 from apex_forensic.domain.enums import AnalysisProfileType
 from apex_forensic.domain.errors import ApexError
 from apex_forensic.domain.models import (
+    DecryptionAttempt,
+    DecryptionResult,
     ReportRenderPackage,
     SecretDerivationInput,
     SecretMaterial,
@@ -88,7 +91,8 @@ def test_secret_material_redacts_default_output_and_blocks_cross_case() -> None:
     assert public["redacted"]["length"] == len(b"correct horse battery staple")
 
     explicit = material.to_schema_dict(include_secret=True)
-    assert explicit["secret_b64"]
+    assert "secret_b64" not in explicit
+    assert "correct" not in str(explicit)
 
     derivation = SecretDerivationInput(
         case_id="other-case",
@@ -99,6 +103,87 @@ def test_secret_material_redacts_default_output_and_blocks_cross_case() -> None:
     with pytest.raises(ApexError) as mismatch:
         derivation.assert_references_same_case()
     assert mismatch.value.code == "SOURCE_MISMATCH"
+
+
+def test_secret_serializers_recursively_redact_stable_secret_field_names() -> None:
+    markers = {
+        name: f"synthetic-marker-{name}"
+        for name in (
+            "db_key_hex",
+            "db_iv_hex",
+            "pragma_key",
+            "user_nonce",
+            "nt_hash_hex",
+            "masterkey_hex",
+        )
+    }
+    reference = SecretReference(
+        secret_id="sec-redaction",
+        case_id="case-redaction",
+        evidence_id="evidence-redaction",
+        key_source_kind="SYNTHETIC",
+        provider_id="test-provider",
+        source_kind="SYNTHETIC",
+        raw_locator={
+            "details": [
+                dict(markers),
+                ({"db_iv_hex": markers["db_iv_hex"]},),
+            ],
+            "source_id": "source-safe",
+            "source_path": "evidence/safe.db",
+            "offset": 42,
+            "secret_values_emitted": False,
+            "raw_key_material_emitted": False,
+        },
+    )
+    derivation = SecretDerivationInput(
+        case_id=reference.case_id,
+        evidence_id=reference.evidence_id,
+        key_source_kind=reference.key_source_kind,
+        references=[reference],
+        parameters={
+            "nested": [
+                {"pragma_key": markers["pragma_key"]},
+                ({"user_nonce": markers["user_nonce"]},),
+            ]
+        },
+    )
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    attempt = DecryptionAttempt(
+        attempt_id="attempt-redaction",
+        case_id=reference.case_id,
+        evidence_id=reference.evidence_id,
+        provider_id="test-provider",
+        provider_version="1",
+        algorithm="SYNTHETIC",
+        key_source_kind=reference.key_source_kind,
+        status="FAILED",
+        started_at=now,
+        warnings=[{"details": {"nt_hash_hex": markers["nt_hash_hex"]}}],
+    )
+    result = DecryptionResult(
+        attempt=attempt,
+        status="FAILED",
+        citations=[{"details": {"masterkey_hex": markers["masterkey_hex"]}}],
+        metadata={
+            "secret_values_emitted": False,
+            "raw_key_material_emitted": False,
+        },
+    )
+
+    serialized = {
+        "reference": reference.to_schema_dict(),
+        "derivation": derivation.to_schema_dict(),
+        "result": result.to_schema_dict(),
+    }
+    encoded = json.dumps(serialized, ensure_ascii=False)
+
+    assert not any(marker in encoded for marker in markers.values())
+    assert serialized["reference"]["raw_locator"]["source_id"] == "source-safe"
+    assert serialized["reference"]["raw_locator"]["source_path"] == "evidence/safe.db"
+    assert serialized["reference"]["raw_locator"]["offset"] == 42
+    assert serialized["reference"]["raw_locator"]["secret_values_emitted"] is False
+    assert serialized["result"]["metadata"]["raw_key_material_emitted"] is False
 
 
 def test_runtime_html_renderer_writes_sanitized_utf8_output(tmp_path: Path) -> None:

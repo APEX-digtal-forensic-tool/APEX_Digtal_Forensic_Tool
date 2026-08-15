@@ -735,6 +735,7 @@ class SQLiteRepository:
 
                 CREATE TABLE IF NOT EXISTS hash_verifications (
                     verification_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
                     evidence_id TEXT NOT NULL REFERENCES evidence(evidence_id),
                     algorithm TEXT NOT NULL,
                     expected_digest TEXT NOT NULL,
@@ -2572,6 +2573,40 @@ class SQLiteRepository:
             )
             self._ensure_column("jobs", "job_revision", "INTEGER NOT NULL DEFAULT 1")
             self._ensure_column("jobs", "index_revision", "INTEGER")
+            self._ensure_column(
+                "hash_verifications",
+                "case_id",
+                "TEXT REFERENCES cases(case_id)",
+            )
+            self.connection.execute(
+                """
+                UPDATE hash_verifications
+                SET case_id = (
+                    SELECT evidence.case_id
+                    FROM evidence
+                    WHERE evidence.evidence_id = hash_verifications.evidence_id
+                )
+                WHERE case_id IS NULL
+                """
+            )
+            unresolved_verifications = self.connection.execute(
+                "SELECT COUNT(*) AS count FROM hash_verifications WHERE case_id IS NULL"
+            ).fetchone()
+            if unresolved_verifications is not None and int(
+                unresolved_verifications["count"]
+            ):
+                raise PersistenceError(
+                    "DATABASE_MIGRATION_FAILED",
+                    "Existing hash verifications could not be assigned to an evidence case.",
+                    retryable=False,
+                    details={"table": "hash_verifications"},
+                )
+            self.connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_hash_verifications_case_evidence
+                ON hash_verifications(case_id, evidence_id, verified_at)
+                """
+            )
             self._ensure_column("artifact_sources", "source_fingerprint", "TEXT")
             self._ensure_column("artifact_sources", "source_checkpoint_json", "TEXT")
             self._ensure_column(
@@ -2659,6 +2694,13 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("apex-engine-advanced-runtime-audit", to_json_timestamp(utc_now())),
+            )
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("hash-verification-case-scope", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -2872,17 +2914,39 @@ class SQLiteRepository:
         """Persist a hash verification history row."""
 
         data = verification.data
+        evidence_row = self.connection.execute(
+            "SELECT case_id FROM evidence WHERE evidence_id = ?",
+            (data["evidence_id"],),
+        ).fetchone()
+        if evidence_row is None:
+            raise PersistenceError(
+                "DATABASE_REFERENCE_INVALID",
+                "Hash verification evidence does not exist.",
+                retryable=False,
+                details={"evidence_id": data["evidence_id"]},
+            )
+        if str(evidence_row["case_id"]) != str(data["case_id"]):
+            raise PersistenceError(
+                "CASE_SCOPE_MISMATCH",
+                "Hash verification case does not match its evidence case.",
+                retryable=False,
+                details={
+                    "case_id": data["case_id"],
+                    "evidence_id": data["evidence_id"],
+                },
+            )
         with self.connection:
             self.connection.execute(
                 """
                 INSERT INTO hash_verifications (
-                    verification_id, evidence_id, algorithm, expected_digest,
+                    verification_id, case_id, evidence_id, algorithm, expected_digest,
                     observed_digest, status, verified_at, tool_version, job_id,
                     custody_event_id, error_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["id"],
+                    data["case_id"],
                     data["evidence_id"],
                     data["algorithm"],
                     data["expected_digest"],
@@ -10199,6 +10263,7 @@ class SQLiteRepository:
         return HashVerification(
             {
                 "id": str(row["verification_id"]),
+                "case_id": str(row["case_id"]),
                 "evidence_id": str(row["evidence_id"]),
                 "algorithm": str(row["algorithm"]),
                 "expected_digest": str(row["expected_digest"]),

@@ -43,6 +43,13 @@ def test_sqlite_reopen_and_schema_validated_workflow(
         assert loaded_evidence.hashes[0].digest == record.digest
         assert verification.to_schema_dict()["status"] == "MATCH"
         assert verifications[0].to_schema_dict()["status"] == "MATCH"
+        assert verification.to_schema_dict()["case_id"] == case.case_id
+        assert verifications[0].to_schema_dict()["case_id"] == case.case_id
+        stored_verification = reopened.repository.connection.execute(
+            "SELECT case_id FROM hash_verifications WHERE verification_id = ?",
+            (verification.to_schema_dict()["id"],),
+        ).fetchone()
+        assert stored_verification["case_id"] == case.case_id
         assert reopened.repository.get_job(job.job_id) is not None
         assert reopened.repository.get_job(verify_job.job_id) is not None
         assert reopened.custody.verify_chain(evidence.evidence_id) is True

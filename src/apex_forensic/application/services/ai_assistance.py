@@ -63,6 +63,9 @@ MAX_KEY_POINT_LENGTH = 500
 MAX_WARNING_COUNT = 200
 MAX_REASON_LENGTH = 4000
 MAX_PROVIDER_METADATA_LENGTH = 256
+MAX_SCOPE_TITLE_LENGTH = 300
+MAX_KEYWORD_TEXT_LENGTH = 4096
+MAX_ACTOR_ID_LENGTH = 256
 MAX_JSON_DEPTH = 8
 MAX_JSON_BYTES = 512 * 1024
 NO_DIRECT_CITATION = "NO_DIRECT_CITATION"
@@ -154,6 +157,7 @@ class AiAssistanceService:
         ttl_seconds: int = DEFAULT_REQUEST_TTL_SECONDS,
         correlation_id: str | None = None,
     ) -> AiAssistanceRequest:
+        correlation_id = _optional_non_empty(correlation_id, "correlation_id")
         self._require_case(case_id)
         snapshot = self._require_snapshot(context_snapshot_id)
         if snapshot.case_id != case_id:
@@ -194,19 +198,20 @@ class AiAssistanceService:
                 target="context_snapshot_id",
                 details={"resource_count": resource_count, "maximum": MAX_REQUEST_ITEMS},
             )
-        citations = _stable_citations(list(snapshot.citations))
-        if len(citations) > MAX_REQUEST_CITATIONS:
+        if len(snapshot.citations) > MAX_REQUEST_CITATIONS:
             raise AiAssistanceError(
                 "AI_REQUEST_LIMIT_EXCEEDED",
                 "AI assistance request exceeds the maximum citation count.",
                 target="citations",
             )
-        warnings = _stable_warnings(
+        citations = _stable_citations(list(snapshot.citations))
+        warnings = _bounded_warnings(
             [
                 *snapshot.warnings,
                 *[warning for scope in scope_contexts for warning in scope.warnings],
                 *_state_warnings(snapshot),
-            ]
+            ],
+            "warnings",
         )
         coverage_summary = {
             scope.scope_context_id: {
@@ -426,7 +431,11 @@ class AiAssistanceService:
             default=now,
             target="generation_completed_at",
         )
-        warnings = _stable_warnings(list(payload.get("warnings", [])))
+        warnings = _bounded_warnings(payload.get("warnings", []), "warnings")
+        external_request_id = _optional_non_empty(
+            payload.get("external_request_id"),
+            "external_request_id",
+        )
         snapshot = self._require_snapshot(request.context_snapshot_id)
         batch_id = self._id_generator.new_id()
         recommendations = self._keyword_recommendations_from_input(
@@ -440,7 +449,7 @@ class AiAssistanceService:
                 "provider_id": provider_id,
                 "provider_version": provider_version,
                 "model_id": model_id,
-                "external_request_id": payload.get("external_request_id"),
+                "external_request_id": external_request_id,
                 "recommendations": [
                     _without_generated_fields(item.to_schema_dict())
                     for item in recommendations
@@ -456,16 +465,17 @@ class AiAssistanceService:
             provider_id=provider_id,
             provider_version=provider_version,
             model_id=model_id,
-            external_request_id=None
-            if payload.get("external_request_id") is None
-            else str(payload.get("external_request_id")),
+            external_request_id=external_request_id,
             generation_started_at=generation_started_at,
             generation_completed_at=generation_completed_at,
             result_hash=result_hash,
             recommendation_count=len(recommendations),
             partial_state=_partial_state(request),
             stale_state=_stale_state(request),
-            warnings=_stable_warnings([*warnings, *_state_warnings_for_request(request)]),
+            warnings=_bounded_warnings(
+                [*warnings, *_state_warnings_for_request(request)],
+                "warnings",
+            ),
             created_at=now,
             batch_version=AI_KEYWORD_BATCH_VERSION,
         )
@@ -553,7 +563,11 @@ class AiAssistanceService:
                 target="summary_text",
             )
         _validate_safe_text(summary_text, "summary_text")
-        title = _required_string(payload, "title")
+        title = _bounded_non_empty(
+            _required_string(payload, "title"),
+            "title",
+            MAX_SCOPE_TITLE_LENGTH,
+        )
         _validate_safe_text(title, "title")
         key_points = _string_list(payload.get("key_points", []), "key_points")
         if len(key_points) > MAX_KEY_POINTS:
@@ -583,11 +597,16 @@ class AiAssistanceService:
         )
         self._validate_resource_ids_in_scope(scope_context, referenced_resource_ids)
         now = self._clock.now()
-        warnings = _stable_warnings(
+        warnings = _bounded_warnings(
             [
-                *list(payload.get("warnings", [])),
+                *_required_optional_list(payload.get("warnings", []), "warnings"),
                 *_state_warnings_for_request(request),
-            ]
+            ],
+            "warnings",
+        )
+        external_request_id = _optional_non_empty(
+            payload.get("external_request_id"),
+            "external_request_id",
         )
         content_payload = {
             "assistance_request_id": request.assistance_request_id,
@@ -617,9 +636,7 @@ class AiAssistanceService:
                 payload.get("provider_version", "UNKNOWN"), "provider_version"
             ),
             model_id=_metadata_string(payload.get("model_id", "UNKNOWN"), "model_id"),
-            external_request_id=None
-            if payload.get("external_request_id") is None
-            else str(payload.get("external_request_id")),
+            external_request_id=external_request_id,
             title=title,
             summary_text=summary_text,
             key_points=key_points,
@@ -790,7 +807,7 @@ class AiAssistanceService:
         regex_confirmed: bool = False,
         confirmation_metadata: Mapping[str, Any] | None = None,
     ) -> AiKeywordPromotion:
-        actor_id = _required_non_empty(actor_id, "actor_id")
+        actor_id = _bounded_non_empty(actor_id, "actor_id", MAX_ACTOR_ID_LENGTH)
         reason = _required_reason(reason)
         recommendation = self.get_keyword_recommendation(recommendation_id)
         keyword_set = self._search.get_keyword_set(keyword_set_id)
@@ -966,8 +983,10 @@ class AiAssistanceService:
                 )
             )
             value = _validate_keyword_value(_required_string(raw, "value"), keyword_type, "value")
-            normalized_value = str(
-                raw.get("normalized_value") or _normalize_keyword(value, keyword_type)
+            normalized_value = _bounded_non_empty(
+                raw.get("normalized_value") or _normalize_keyword(value, keyword_type),
+                "normalized_value",
+                MAX_KEYWORD_TEXT_LENGTH,
             )
             if "\x00" in normalized_value or not normalized_value:
                 raise ValidationError("Normalized keyword is invalid.", target="normalized_value")
@@ -1001,6 +1020,12 @@ class AiAssistanceService:
                 require_direct=not _has_warning(warnings, NO_DIRECT_CITATION),
             )
             reason = _required_reason(raw.get("reason"), target="reason")
+            display_value = _bounded_non_empty(
+                raw.get("display_value") or value,
+                "display_value",
+                MAX_KEYWORD_TEXT_LENGTH,
+            )
+            _validate_safe_text(display_value, "display_value")
             key = (keyword_type.value, normalized_value, recommended_scope)
             if key in seen:
                 continue
@@ -1041,7 +1066,7 @@ class AiAssistanceService:
                     keyword_type=keyword_type.value,
                     value=value,
                     normalized_value=normalized_value,
-                    display_value=str(raw.get("display_value") or value),
+                    display_value=display_value,
                     reason=reason,
                     confidence=confidence,
                     recommended_scope=recommended_scope,
@@ -1080,8 +1105,13 @@ class AiAssistanceService:
         corrected_value: str | None,
         corrected_reason: str | None,
     ) -> AiVerificationEvent:
-        actor_id = _required_non_empty(actor_id, "actor_id")
+        actor_id = _bounded_non_empty(actor_id, "actor_id", MAX_ACTOR_ID_LENGTH)
         reason = _required_reason(reason)
+        corrected_reason = _bounded_optional_text(
+            corrected_reason,
+            "corrected_reason",
+            MAX_REASON_LENGTH,
+        )
         action_value = _enum_value(AiVerificationAction, action, "action")
         events = self._repository.list_ai_verification_events(
             target_type=target_type,
@@ -1568,6 +1598,32 @@ def _required_non_empty(value: Any, target: str) -> str:
     return str(value).strip()
 
 
+def _bounded_non_empty(value: Any, target: str, maximum: int) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValidationError("Field must be a non-empty string.", target=target)
+    if len(value) > maximum:
+        raise ValidationError("Field exceeds the maximum length.", target=target)
+    return value.strip()
+
+
+def _optional_non_empty(value: Any, target: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValidationError("Field must be a non-empty string.", target=target)
+    return value.strip()
+
+
+def _bounded_optional_text(value: Any, target: str, maximum: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError("Field must be a string.", target=target)
+    if len(value) > maximum:
+        raise ValidationError("Field exceeds the maximum length.", target=target)
+    return value
+
+
 def _required_reason(value: Any, target: str = "reason") -> str:
     reason = _required_non_empty(value, target)
     if len(reason) > MAX_REASON_LENGTH:
@@ -1579,6 +1635,12 @@ def _required_list(payload: Mapping[str, Any], field: str) -> list[Any]:
     value = payload.get(field)
     if not isinstance(value, list):
         raise ValidationError("Field must be a list.", target=field)
+    return value
+
+
+def _required_optional_list(value: Any, target: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValidationError("Field must be a list.", target=target)
     return value
 
 
@@ -1727,12 +1789,29 @@ def _has_warning(warnings: list[Any], code: str) -> bool:
 
 def _stable_warnings(warnings: list[Any]) -> list[dict[str, Any]]:
     normalized: dict[str, dict[str, Any]] = {}
-    for item in warnings[:MAX_WARNING_COUNT]:
+    for item in warnings:
         if not isinstance(item, Mapping):
             continue
         code = str(item.get("code", "WARNING"))
         normalized[canonical_sha256(dict(item))] = {"code": code, **dict(item)}
     return [normalized[key] for key in sorted(normalized)]
+
+
+def _bounded_warnings(value: Any, target: str) -> list[dict[str, Any]]:
+    warnings = _required_optional_list(value, target)
+    if len(warnings) > MAX_WARNING_COUNT:
+        raise AiAssistanceError(
+            "AI_REQUEST_LIMIT_EXCEEDED",
+            "AI result exceeds the maximum warning count.",
+            target=target,
+        )
+    for warning in warnings:
+        if not isinstance(warning, Mapping):
+            raise ValidationError("Warning must be a JSON object.", target=target)
+        code = warning.get("code")
+        if not isinstance(code, str) or re.fullmatch(r"[A-Z][A-Z0-9_]*", code) is None:
+            raise ValidationError("Warning code is invalid.", target=target)
+    return _stable_warnings(warnings)
 
 
 def _stable_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:

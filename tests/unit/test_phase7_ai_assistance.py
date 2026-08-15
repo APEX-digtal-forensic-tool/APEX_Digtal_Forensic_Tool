@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -498,5 +499,261 @@ def test_provider_boundary_and_public_interface_descriptors(tmp_path: Path) -> N
         )
         assert envelope["status"] == "ERROR"
         assert envelope["errors"][0]["code"] == "VALIDATION_ERROR"
+    finally:
+        services.close()
+
+
+def test_ai_adapter_schema_boundaries_reject_before_persistence(tmp_path: Path) -> None:
+    services, case, evidence, node, snapshot, _ = _snapshot_fixture(tmp_path)
+    try:
+        request_count = services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_assistance_requests"
+        ).fetchone()["count"]
+        with pytest.raises(ApexError):
+            services.ai.create_request_from_context_snapshot(
+                case_id=case.case_id,
+                context_snapshot_id=snapshot.context_snapshot_id,
+                purpose="KEYWORD_RECOMMENDATION",
+                requested_operations=["RECOMMEND_KEYWORDS"],
+                requested_scopes=["filesystem"],
+                correlation_id="",
+            )
+        assert services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_assistance_requests"
+        ).fetchone()["count"] == request_count
+
+        with services.repository.connection:
+            services.repository.connection.execute(
+                """
+                UPDATE analysis_scope_contexts
+                SET result_count = ?
+                WHERE context_snapshot_id = ?
+                """,
+                (10_000, snapshot.context_snapshot_id),
+            )
+        request = services.ai.create_request_from_context_snapshot(
+            case_id=case.case_id,
+            context_snapshot_id=snapshot.context_snapshot_id,
+            purpose="KEYWORD_RECOMMENDATION",
+            requested_operations=["RECOMMEND_KEYWORDS"],
+            requested_scopes=["filesystem"],
+            correlation_id="correlation-1",
+        )
+        assert request.resource_count == 10_000
+        request_count = services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_assistance_requests"
+        ).fetchone()["count"]
+        with services.repository.connection:
+            services.repository.connection.execute(
+                """
+                UPDATE analysis_scope_contexts
+                SET result_count = ?
+                WHERE context_snapshot_id = ?
+                """,
+                (10_001, snapshot.context_snapshot_id),
+            )
+        with pytest.raises(ApexError):
+            services.ai.create_request_from_context_snapshot(
+                case_id=case.case_id,
+                context_snapshot_id=snapshot.context_snapshot_id,
+                purpose="KEYWORD_RECOMMENDATION",
+                requested_operations=["RECOMMEND_KEYWORDS"],
+                requested_scopes=["filesystem"],
+                correlation_id="correlation-over-limit",
+            )
+        assert services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_assistance_requests"
+        ).fetchone()["count"] == request_count
+        with services.repository.connection:
+            services.repository.connection.execute(
+                """
+                UPDATE analysis_scope_contexts
+                SET result_count = ?
+                WHERE context_snapshot_id = ?
+                """,
+                (10_000, snapshot.context_snapshot_id),
+            )
+        citation = _citation(
+            case.case_id,
+            evidence.evidence_id,
+            node.node_id,
+            node.original_relative_path,
+        )
+        accepted_payload = _keyword_payload(citation, evidence.evidence_id, node.node_id)
+        accepted_payload["recommendations"] = [accepted_payload["recommendations"][0]]
+        accepted_payload["recommendations"][0]["display_value"] = "가" * 4096
+        accepted_payload["recommendations"][0]["citations"] = [citation] * 200
+        state_warning_count = int(request.is_partial) + int(request.is_stale)
+        accepted_payload["warnings"] = [
+            {"code": f"W{index:03d}"} for index in range(200 - state_warning_count)
+        ]
+        accepted = services.ai.ingest_keyword_batch(
+            assistance_request_id=request.assistance_request_id,
+            payload=accepted_payload,
+        )
+        assert len(accepted["recommendations"][0]["display_value"]) == 4096
+        assert len(accepted["batch"]["warnings"]) == 200
+        batch_count = services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_keyword_recommendation_batches"
+        ).fetchone()["count"]
+
+        invalid_payloads = []
+        too_long_display = copy.deepcopy(accepted_payload)
+        too_long_display["recommendations"][0]["display_value"] = "가" * 4097
+        invalid_payloads.append(too_long_display)
+        too_many_warnings = copy.deepcopy(accepted_payload)
+        too_many_warnings["warnings"] = [
+            {"code": f"W{index:03d}"} for index in range(201)
+        ]
+        invalid_payloads.append(too_many_warnings)
+        too_many_citations = copy.deepcopy(accepted_payload)
+        too_many_citations["recommendations"][0]["citations"].append(citation)
+        invalid_payloads.append(too_many_citations)
+        empty_external_id = copy.deepcopy(accepted_payload)
+        empty_external_id["external_request_id"] = ""
+        invalid_payloads.append(empty_external_id)
+
+        for payload in invalid_payloads:
+            with pytest.raises(ApexError):
+                services.ai.ingest_keyword_batch(
+                    assistance_request_id=request.assistance_request_id,
+                    payload=payload,
+                )
+            assert services.repository.connection.execute(
+                "SELECT COUNT(*) AS count FROM ai_keyword_recommendation_batches"
+            ).fetchone()["count"] == batch_count
+    finally:
+        services.close()
+
+
+def test_ai_summary_review_and_promotion_schema_boundaries(tmp_path: Path) -> None:
+    services, case, evidence, node, snapshot, scope = _snapshot_fixture(tmp_path)
+    try:
+        summary_request = services.ai.create_request_from_context_snapshot(
+            case_id=case.case_id,
+            context_snapshot_id=snapshot.context_snapshot_id,
+            purpose="SCOPE_SUMMARY",
+            requested_operations=["SUMMARIZE_SCOPE"],
+            requested_scopes=["filesystem"],
+        )
+        citation = _citation(
+            case.case_id,
+            evidence.evidence_id,
+            node.node_id,
+            node.original_relative_path,
+        )
+        summary_payload = {
+            "scope_context_id": scope.scope_context_id,
+            "title": "가" * 300,
+            "summary_text": "Bounded summary.",
+            "key_points": ["가" * 500],
+            "referenced_resource_ids": [node.node_id],
+            "citations": [citation],
+            "external_request_id": "summary-external-1",
+        }
+        summary = services.ai.ingest_scope_summary(
+            assistance_request_id=summary_request.assistance_request_id,
+            payload=summary_payload,
+        )
+        assert len(summary.title) == 300
+        summary_count = services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_scope_summaries"
+        ).fetchone()["count"]
+        invalid_summary = dict(summary_payload)
+        invalid_summary["title"] = "가" * 301
+        with pytest.raises(ApexError):
+            services.ai.ingest_scope_summary(
+                assistance_request_id=summary_request.assistance_request_id,
+                payload=invalid_summary,
+            )
+        assert services.repository.connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_scope_summaries"
+        ).fetchone()["count"] == summary_count
+
+        keyword_request = services.ai.create_request_from_context_snapshot(
+            case_id=case.case_id,
+            context_snapshot_id=snapshot.context_snapshot_id,
+            purpose="KEYWORD_RECOMMENDATION",
+            requested_operations=["RECOMMEND_KEYWORDS"],
+            requested_scopes=["filesystem"],
+        )
+        payload = _keyword_payload(citation, evidence.evidence_id, node.node_id)
+        payload["recommendations"] = [payload["recommendations"][0]]
+        result = services.ai.ingest_keyword_batch(
+            assistance_request_id=keyword_request.assistance_request_id,
+            payload=payload,
+        )
+        recommendation_id = result["recommendations"][0]["recommendation_id"]
+        event = services.ai.review_keyword_recommendation(
+            recommendation_id=recommendation_id,
+            action="COMMENT",
+            actor_id="r" * 256,
+            reason="Boundary review.",
+            expected_review_revision=0,
+            corrected_reason="c" * 4000,
+        )
+        assert len(event.actor_id) == 256
+        event_count = len(
+            services.ai.review_history(
+                target_type="KEYWORD_RECOMMENDATION",
+                target_id=recommendation_id,
+            )
+        )
+        with pytest.raises(ApexError):
+            services.ai.review_keyword_recommendation(
+                recommendation_id=recommendation_id,
+                action="COMMENT",
+                actor_id="r" * 257,
+                reason="Rejected actor.",
+                expected_review_revision=1,
+            )
+        with pytest.raises(ApexError):
+            services.ai.review_keyword_recommendation(
+                recommendation_id=recommendation_id,
+                action="COMMENT",
+                actor_id="reviewer",
+                reason="Rejected correction.",
+                expected_review_revision=1,
+                corrected_reason="c" * 4001,
+            )
+        assert len(
+            services.ai.review_history(
+                target_type="KEYWORD_RECOMMENDATION",
+                target_id=recommendation_id,
+            )
+        ) == event_count
+
+        services.ai.review_keyword_recommendation(
+            recommendation_id=recommendation_id,
+            action="ACCEPT",
+            actor_id="reviewer",
+            reason="Accept.",
+            expected_review_revision=1,
+        )
+        keyword_set = services.search.create_keyword_set(
+            case_id=case.case_id,
+            name="Boundary promotion",
+            created_by="reviewer",
+        )
+        promotion = services.ai.promote_accepted_keyword(
+            recommendation_id=recommendation_id,
+            keyword_set_id=keyword_set.keyword_set_id,
+            actor_id="p" * 256,
+            reason="Promote.",
+            expected_review_revision=2,
+        )
+        assert len(promotion.actor_id) == 256
+        promotion_count = len(services.ai.promotion_history(recommendation_id=recommendation_id))
+        with pytest.raises(ApexError):
+            services.ai.promote_accepted_keyword(
+                recommendation_id=recommendation_id,
+                keyword_set_id=keyword_set.keyword_set_id,
+                actor_id="p" * 257,
+                reason="Rejected promoter.",
+                expected_review_revision=2,
+            )
+        assert len(
+            services.ai.promotion_history(recommendation_id=recommendation_id)
+        ) == promotion_count
     finally:
         services.close()

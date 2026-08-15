@@ -514,7 +514,8 @@ def test_dpapi_external_key_provider_decrypts_chromium_aes_gcm_secret(
     assert redacted["metadata"]["key_source"]["length"] == 32
     assert "plaintext_b64" not in redacted
     assert "chromium secret" not in str(redacted)
-    assert emitted["plaintext_b64"]
+    assert "plaintext_b64" not in emitted
+    assert plaintext.decode() not in str(emitted)
     assert failed["status"] == "AUTHENTICATION_FAILED"
     assert failed["metadata"]["failure_reason"] == "AES_GCM_AUTHENTICATION_FAILED"
     assert invalid_key["status"] == "INVALID_KEY"
@@ -932,7 +933,7 @@ def test_nss_provider_discovers_profile_candidates_but_decryption_is_unavailable
     assert result["metadata"]["profile"]["schema_status"] == "SUPPORTED"
     assert "plaintext_b64" not in result
     assert "do-not-emit" not in str(result)
-    assert result["metadata"]["primary_password_supplied"] == "<redacted>"
+    assert result["metadata"]["primary_password_supplied"] is True
 
 
 def test_nss_lib_provider_decrypts_logins_without_primary_password(
