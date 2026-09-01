@@ -204,6 +204,6 @@ MCP 전용 테스트는 49건 통과했다. 최종 wheel의 clean install과 실
 
 ## 6. Windows 검증 상태와 다음 단계
 
-MCP protocol과 Tool 동작은 macOS/Linux에서도 동적으로 검증할 수 있으며 M8의 local clean install·stdio·Inspector 검사는 macOS에서 통과했다. Windows가 필요한 지점은 최종 배포/제품 통합이다. GitHub Actions에는 `windows-latest` Python 3.11/3.12에서 wheel build, hash-locked clean install, `apex-mcp.exe` stdio/EOF/한글 경로 검증을 수행하도록 구성했지만, 이 로컬 작업만으로 hosted Windows job의 실제 통과를 주장하지 않는다. workflow를 원격에 push한 뒤 해당 두 matrix 결과를 release evidence로 보존해야 한다.
+MCP protocol과 Tool 동작은 macOS/Linux에서도 동적으로 검증할 수 있으며 M8의 local clean install·stdio·Inspector 검사는 macOS에서 통과했다. Windows가 필요한 지점은 최종 배포/제품 통합이다. GitHub Actions [MCP packaging and Windows run #1](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/actions/runs/33482524240)에서 Ubuntu contract/security와 Inspector, `windows-latest` Python 3.11/3.12 wheel build, hash-locked clean install, `apex-mcp.exe` stdio/EOF/한글 경로 검증이 모두 통과했다. 이 hosted run을 M8의 package-level Windows evidence로 보존한다.
 
 제품 통합에서는 설치된 Desktop bundle의 console lifecycle, 경로·권한·한국어 환경, Backend/Frontend 연결과 Windows-only provider를 함께 검증해야 한다. 또한 in-memory security provider를 Backend의 영속 identity/session/approval policy store로 교체하고 Desktop Frontend가 같은 fingerprint approval port를 호출해야 한다. 새로운 Domain Tool은 Core에 명시적 Descriptor와 transport contract가 추가된 뒤 별도 단계로 검토한다.

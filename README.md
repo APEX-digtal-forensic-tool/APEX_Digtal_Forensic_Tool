@@ -27,11 +27,11 @@ APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 �
 | Windows Host Semantic Verification | **PASSED_WITH_LIMITATIONS** | DPAPI·Chromium AES-GCM·Firefox NSS·Event Message·Report Renderer 검증, `failed_checks=[]` |
 | KakaoTalk Windows 2.0.8.990 | **IMPLEMENTED_UNVERIFIED** | Offline Discovery·PE Version 검증·외부 Key 복호화·`chatLogs` 추출 구현, 자동 Key 획득과 실제 Fixture는 외부 근거 부족으로 차단 |
 | Runtime/Dependency Packaging | **MCP 완료 / Native 진행 예정** | MCP wheel/sdist, hash lock, clean install과 Ubuntu/Windows CI matrix 구성 완료. E01·VHD·VHDX·OCR/STT 등 Optional Native Runtime과 Windows Desktop bundle 검증은 별도 필요 |
-| MCP / LLM Runtime | **M8 Packaging·CI 완료** | Core 외부 `apex_mcp`에 MCP 2.x stdio 및 authenticated Streamable HTTP와 52개 Context/View/AI/Report Tool을 구현. Descriptor/transport가 없는 Domain Tool은 미노출로 고정하고, MCP SDK `2.1.1`·uvicorn `0.52.4` lock, `apex-mcp` console, clean wheel install, Inspector strict, stdio EOF/한글 경로/secret 비노출, MCP-only release gate를 검증. Windows Python 3.11/3.12 hosted CI는 구성 완료 후 원격 실행 evidence가 필요. 제품용 영속 identity/approval/billing backend는 별도 통합 대상 |
+| MCP / LLM Runtime | **M8 Packaging·Windows CI 완료** | Core 외부 `apex_mcp`에 MCP 2.x stdio 및 authenticated Streamable HTTP와 52개 Context/View/AI/Report Tool을 구현. Descriptor/transport가 없는 Domain Tool은 미노출로 고정하고, MCP SDK `2.1.1`·uvicorn `0.52.4` lock, `apex-mcp` console, clean wheel install, Inspector strict, stdio EOF/한글 경로/secret 비노출, MCP-only release gate를 검증. Ubuntu Inspector와 Windows Python 3.11/3.12 hosted CI가 [run #1](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/actions/runs/33482524240)에서 통과. 제품용 영속 identity/approval/billing backend는 별도 통합 대상 |
 | Frontend / Backend | **별도 담당 및 통합 대상** | GUI, Session/Identity, Approval, Billing, Desktop 통합은 Core Engine과 분리 |
 
 > **Core Engine 기능 개발 완료 Candidate와 APEX 전체 제품 완성은 같은 의미가 아닙니다.**
-> 현재 남은 주요 작업은 실제 Evidence 정확성·성능 검증, Native Optional Dependency Packaging, Windows Desktop 통합, 원격 Windows MCP CI 실행 증적, 외부 전문가 검토와 별도 AI·Frontend·Backend 통합입니다.
+> 현재 남은 주요 작업은 실제 Evidence 정확성·성능 검증, Native Optional Dependency Packaging, Windows Desktop 통합, 외부 전문가 검토와 별도 AI·Frontend·Backend 통합입니다.
 
 ---
 
