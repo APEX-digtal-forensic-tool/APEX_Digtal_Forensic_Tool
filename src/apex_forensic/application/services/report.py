@@ -1159,6 +1159,9 @@ class ReportService:
         include_custody: bool = True,
         include_technical_appendix: bool = True,
         stale_confirmed: bool = False,
+        expected_content_fingerprint: str | None = None,
+        expected_approval_id: str | None = None,
+        expected_custody_snapshot_id: str | None = None,
         renderer: ReportRendererPort | None = None,
     ) -> ReportExportManifest:
         created_by = _bounded_non_empty(
@@ -1178,6 +1181,33 @@ class ReportService:
         )
         version = self.get_version(report_version_id)
         approval = self._require_approved_version(version)
+        if (
+            expected_content_fingerprint is not None
+            and expected_content_fingerprint != version.content_fingerprint
+        ):
+            raise ReportError(
+                "REPORT_APPROVAL_FINGERPRINT_MISMATCH",
+                "Expected content fingerprint does not match the approved version.",
+                target="expected_content_fingerprint",
+                retryable=True,
+            )
+        if expected_approval_id is not None and expected_approval_id != approval.approval_id:
+            raise ReportError(
+                "REPORT_APPROVAL_TRANSITION_INVALID",
+                "Expected approval does not match the latest approved decision.",
+                target="expected_approval_id",
+                retryable=True,
+            )
+        if (
+            expected_custody_snapshot_id is not None
+            and expected_custody_snapshot_id != approval.custody_snapshot_id
+        ):
+            raise ReportError(
+                "REPORT_APPROVAL_TRANSITION_INVALID",
+                "Expected custody snapshot does not match the approved decision.",
+                target="expected_custody_snapshot_id",
+                retryable=True,
+            )
         format_value = _enum_value(ReportExportFormat, format, "format")
         filename = _safe_filename(filename, format_value)
         if overwrite_policy != "DENY":

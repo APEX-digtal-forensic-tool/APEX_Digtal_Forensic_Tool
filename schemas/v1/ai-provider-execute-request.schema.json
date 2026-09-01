@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-provider-execute-request.schema.json",
+  "title": "APEX AI Provider Execute Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["assistance_request_id", "operation"],
+  "properties": {
+    "assistance_request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "operation": {
+      "enum": ["RECOMMEND_KEYWORDS", "SUMMARIZE_SCOPE"]
+    }
+  }
+}

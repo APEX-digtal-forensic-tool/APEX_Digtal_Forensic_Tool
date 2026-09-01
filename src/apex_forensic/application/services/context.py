@@ -15,6 +15,7 @@ from apex_forensic._time import parse_timestamp, to_json_timestamp
 from apex_forensic.constants import ENGINE_VERSION, SCHEMA_VERSION
 from apex_forensic.domain.enums import (
     AiAssistancePurpose,
+    AiRequestedOperation,
     AiVerificationAction,
     AnalysisContextPurpose,
     AnalysisScopeType,
@@ -36,6 +37,7 @@ from apex_forensic.domain.errors import (
     CursorInvalidError,
     NotFoundError,
     RawReadError,
+    ReportError,
     UnsupportedCapabilityError,
     ValidationError,
 )
@@ -167,6 +169,7 @@ _OPERATION_ALIASES: dict[str, str] = {
     "ai.request.create": "ai.request.create",
     "ai.request.get": "ai.request.get",
     "ai.request.list": "ai.request.list",
+    "ai.request.execute": "ai.request.execute",
     "ai.keyword-batch.get": "ai.keyword-batch.get",
     "ai.keyword_batch.get": "ai.keyword-batch.get",
     "ai.keyword-recommendation.get": "ai.keyword-recommendation.get",
@@ -412,6 +415,20 @@ _TOOL_DESCRIPTOR_SPECS: tuple[
         1,
     ),
     (
+        "ai.request.execute",
+        "ai.request.execute",
+        "tool.ai.request.execute",
+        "ai-provider-execute-request.schema.json",
+        "ai-provider-execute-result.schema.json",
+        ["AI_ASSISTANCE_ENGINE_CONTRACT"],
+        True,
+        False,
+        False,
+        True,
+        True,
+        1,
+    ),
+    (
         "ai.request.list",
         "ai.request.list",
         "tool.ai.request.list",
@@ -598,7 +615,7 @@ _TOOL_DESCRIPTOR_SPECS: tuple[
         "ai.capabilities",
         "tool.ai.capabilities",
         "ai-provider-capability.schema.json",
-        "ai-provider-capability.schema.json",
+        "ai-capabilities.schema.json",
         ["AI_ASSISTANCE_ENGINE_CONTRACT"],
         False,
         False,
@@ -3308,43 +3325,51 @@ class EngineInterfaceService:
         self._register_default_tool_descriptors()
 
     def version(self) -> EngineInterfaceVersion:
+        runtime_ai_available = False
+        if self._ai is not None:
+            runtime_capability = self._ai.capabilities().get("runtime_capability", {})
+            runtime_ai_available = bool(runtime_capability.get("is_available"))
+        capabilities = [
+            "CASE_EVIDENCE_READ",
+            "FILESYSTEM_VIEW",
+            "SAFE_RAW_READ",
+            "ARTIFACT_VIEW",
+            "BROWSER_MEDIA_VIEW",
+            "SEARCH_TIMELINE_VIEW",
+            "CONTEXT_SNAPSHOT",
+            "SIMPLE_DETAILED_RAW_VIEW",
+            "MCP_ADAPTER_DESCRIPTOR",
+            "AI_ASSISTANCE_ENGINE_CONTRACT",
+            "AI_RESULT_VALIDATION",
+            "AI_HUMAN_VERIFICATION",
+            "AI_KEYWORD_PROMOTION",
+            "REPORT_ENGINE_CONTRACT",
+            "REPORT_REVIEW_APPROVAL",
+            "REPORT_CUSTODY_SNAPSHOT",
+            "REPORT_EXPORT_MANIFEST",
+        ]
+        if runtime_ai_available:
+            capabilities.extend(["LLM_PROVIDER", "RUNTIME_AI_PROVIDER"])
+        unavailable_capabilities = [
+            "REST_SERVER",
+            "MCP_SERVER",
+            "PROMPT_TEMPLATE",
+            "RUNTIME_REPORT_RENDERER",
+            "PDF_RENDERING",
+            "HTML_RENDERING",
+            "AI_REPORT_DRAFT_GENERATION",
+            "GUI_REPORT_PREVIEW",
+            "DISK_IMAGE_RAW_OFFSET",
+        ]
+        if not runtime_ai_available:
+            unavailable_capabilities.extend(["LLM_PROVIDER", "RUNTIME_AI_PROVIDER"])
         version = EngineInterfaceVersion(
             interface_name="apex.engine.public",
             interface_version=INTERFACE_VERSION,
             engine_version=ENGINE_VERSION,
             schema_version=SCHEMA_VERSION,
-            capabilities=[
-                "CASE_EVIDENCE_READ",
-                "FILESYSTEM_VIEW",
-                "SAFE_RAW_READ",
-                "ARTIFACT_VIEW",
-                "BROWSER_MEDIA_VIEW",
-                "SEARCH_TIMELINE_VIEW",
-                "CONTEXT_SNAPSHOT",
-                "SIMPLE_DETAILED_RAW_VIEW",
-                "MCP_ADAPTER_DESCRIPTOR",
-                "AI_ASSISTANCE_ENGINE_CONTRACT",
-                "AI_RESULT_VALIDATION",
-                "AI_HUMAN_VERIFICATION",
-                "AI_KEYWORD_PROMOTION",
-                "REPORT_ENGINE_CONTRACT",
-                "REPORT_REVIEW_APPROVAL",
-                "REPORT_CUSTODY_SNAPSHOT",
-                "REPORT_EXPORT_MANIFEST",
-            ],
-            unavailable_capabilities=[
-                "REST_SERVER",
-                "MCP_SERVER",
-                "LLM_PROVIDER",
-                "RUNTIME_AI_PROVIDER",
-                "PROMPT_TEMPLATE",
-                "RUNTIME_REPORT_RENDERER",
-                "PDF_RENDERING",
-                "HTML_RENDERING",
-                "AI_REPORT_DRAFT_GENERATION",
-                "GUI_REPORT_PREVIEW",
-                "DISK_IMAGE_RAW_OFFSET",
-            ],
+            capabilities=capabilities,
+            unavailable_capabilities=unavailable_capabilities,
             generated_at=self._clock.now(),
         )
         self._repository.save_engine_interface_version(version)
@@ -3578,6 +3603,19 @@ class EngineInterfaceService:
                         request_id=request_id,
                         correlation_id=correlation_id,
                     )
+                if canonical_operation == "ai.request.execute":
+                    return self.success(
+                        ai.execute_request(
+                            assistance_request_id=self._required_string(
+                                request, "assistance_request_id"
+                            ),
+                            operation=self._required_enum(
+                                request, "operation", AiRequestedOperation
+                            ),
+                        ),
+                        request_id=request_id,
+                        correlation_id=correlation_id,
+                    )
                 if canonical_operation == "ai.request.list":
                     return self.success(
                         [
@@ -3682,6 +3720,7 @@ class EngineInterfaceService:
                             ),
                             actor_id=self._required_string(request, "actor_id"),
                             reason=self._required_string(request, "reason"),
+                            expected_case_id=self._optional_string(request, "case_id"),
                             expected_review_revision=self._optional_integer_or_none(
                                 request, "expected_review_revision", minimum=0
                             ),
@@ -3706,6 +3745,7 @@ class EngineInterfaceService:
                             ),
                             actor_id=self._required_string(request, "actor_id"),
                             reason=self._required_string(request, "reason"),
+                            expected_case_id=self._optional_string(request, "case_id"),
                             expected_review_revision=self._optional_integer_or_none(
                                 request, "expected_review_revision", minimum=0
                             ),
@@ -3726,6 +3766,7 @@ class EngineInterfaceService:
                             for item in ai.review_history(
                                 target_type=self._required_string(request, "target_type"),
                                 target_id=self._required_string(request, "target_id"),
+                                expected_case_id=self._optional_string(request, "case_id"),
                             )
                         ],
                         request_id=request_id,
@@ -3740,6 +3781,7 @@ class EngineInterfaceService:
                             keyword_set_id=self._required_string(
                                 request, "keyword_set_id"
                             ),
+                            expected_case_id=self._optional_string(request, "case_id"),
                             regex_confirmed=bool(request.get("regex_confirmed", False)),
                         ),
                         request_id=request_id,
@@ -3756,6 +3798,7 @@ class EngineInterfaceService:
                             ),
                             actor_id=self._required_string(request, "actor_id"),
                             reason=self._required_string(request, "reason"),
+                            expected_case_id=self._optional_string(request, "case_id"),
                             expected_review_revision=self._optional_integer_or_none(
                                 request, "expected_review_revision", minimum=0
                             ),
@@ -3805,6 +3848,7 @@ class EngineInterfaceService:
         correlation_id: str | None,
     ) -> dict[str, Any]:
         reports = self._require_report_service()
+        self._require_report_case(reports, operation, request)
         if operation == "report.capabilities":
             data = reports.capabilities()
         elif operation == "report.create":
@@ -4008,6 +4052,15 @@ class EngineInterfaceService:
                     request.get("include_technical_appendix", True)
                 ),
                 stale_confirmed=bool(request.get("stale_confirmed", False)),
+                expected_content_fingerprint=self._optional_string(
+                    request, "expected_content_fingerprint"
+                ),
+                expected_approval_id=self._optional_string(
+                    request, "expected_approval_id"
+                ),
+                expected_custody_snapshot_id=self._optional_string(
+                    request, "expected_custody_snapshot_id"
+                ),
             )
         elif operation == "report.export-manifest.get":
             data = reports.get_export_manifest(
@@ -4031,6 +4084,92 @@ class EngineInterfaceService:
             request_id=request_id,
             correlation_id=correlation_id,
         )
+
+    def _require_report_case(
+        self,
+        reports: Any,
+        operation: str,
+        request: Mapping[str, Any],
+    ) -> None:
+        """Bind report targets to an optional caller-supplied case before mutation."""
+
+        expected_case_id = self._optional_string(request, "case_id")
+        if expected_case_id is None:
+            return
+
+        actual_cases: list[tuple[str, str]] = []
+        report_id_operations = {
+            "report.get",
+            "report.version.list",
+            "report.version.create",
+            "report.archive",
+        }
+        version_id_operations = {
+            "report.version.get",
+            "report.review.submit",
+            "report.review.comment",
+            "report.review.request-changes",
+            "report.review.accept-section",
+            "report.review.reject-section",
+            "report.review.complete",
+            "report.review.reopen",
+            "report.review.history",
+            "report.approve",
+            "report.reject",
+            "report.approval.revoke",
+            "report.approval.get",
+            "report.custody-snapshot.create",
+            "report.render-package.create",
+            "report.export.prepare",
+        }
+        if operation in report_id_operations:
+            report = reports.get_report(self._required_string(request, "report_id"))
+            actual_cases.append(("report_id", str(report.case_id)))
+        elif operation == "report.ai-draft.ingest":
+            report_id = self._optional_string(request, "report_id")
+            if report_id is not None:
+                report = reports.get_report(report_id)
+                actual_cases.append(("report_id", str(report.case_id)))
+        elif operation in version_id_operations:
+            version = reports.get_version(
+                self._required_string(request, "report_version_id")
+            )
+            actual_cases.append(("report_version_id", str(version.case_id)))
+        elif operation == "report.version.compare":
+            for field in ("left_report_version_id", "right_report_version_id"):
+                version = reports.get_version(self._required_string(request, field))
+                actual_cases.append((field, str(version.case_id)))
+        elif operation == "report.custody-snapshot.get":
+            snapshot = reports.get_custody_snapshot(
+                self._required_string(request, "custody_snapshot_id")
+            )
+            actual_cases.append(("custody_snapshot_id", str(snapshot.case_id)))
+        elif operation == "report.render-package.get":
+            package = reports.get_render_package(
+                self._required_string(request, "package_id")
+            )
+            actual_cases.append(("package_id", str(package.case_id)))
+        elif operation in {
+            "report.export-manifest.get",
+            "report.export-status",
+            "report.export.record-result",
+        }:
+            manifest = reports.get_export_manifest(
+                self._required_string(request, "export_manifest_id")
+            )
+            actual_cases.append(("export_manifest_id", str(manifest.case_id)))
+
+        for target, actual_case_id in actual_cases:
+            if actual_case_id != expected_case_id:
+                raise ReportError(
+                    "REPORT_REFERENCE_CASE_MISMATCH",
+                    "Report target belongs to another case.",
+                    target=target,
+                    details={
+                        "expected_case_id": expected_case_id,
+                        "actual_case_id": actual_case_id,
+                    },
+                )
 
     @staticmethod
     def _request_payload(payload: Mapping[str, Any]) -> Mapping[str, Any]:
