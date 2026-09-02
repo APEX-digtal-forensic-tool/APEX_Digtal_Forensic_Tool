@@ -467,8 +467,10 @@ def test_provider_boundary_and_public_interface_descriptors(tmp_path: Path) -> N
             requested_scopes=["filesystem"],
         )
         capability = services.ai.capabilities()
-        assert capability["provider"]["is_available"] is False
-        assert capability["provider"]["unavailable_reason"] == "CAPABILITY_UNAVAILABLE"
+        assert capability["runtime_capability"]["is_available"] is False
+        assert capability["runtime_capability"]["unavailable_reason"] == (
+            "CAPABILITY_UNAVAILABLE"
+        )
         with pytest.raises(ApexError) as unavailable:
             services.ai.generate_keyword_recommendations(
                 assistance_request_id=request.assistance_request_id

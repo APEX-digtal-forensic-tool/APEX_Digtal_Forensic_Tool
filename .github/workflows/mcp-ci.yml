@@ -1,0 +1,94 @@
+name: MCP packaging and Windows
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  contract-and-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.21"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Sync locked quality environment
+        run: uv sync --locked --extra dev --extra mcp-server
+      - name: MCP contract tests
+        run: uv run --locked pytest -q tests/mcp
+      - name: Lint and type check
+        run: |
+          uv run --locked ruff check src tests/mcp tools/verify_mcp_stdio.py tools/verify_mcp_package.py tools/verify_mcp_inspector.py
+          uv run --locked mypy --strict src
+      - name: Source stdio lifecycle smoke
+        run: uv run --locked python tools/verify_mcp_stdio.py --module --json
+      - name: Security and release gate
+        run: uv run --locked python tools/verify_engine_release.py --mcp-only --json
+      - name: Patch hygiene
+        run: git diff --check
+
+  clean-package:
+    name: clean-package (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.12"
+            inspector: true
+          - os: windows-latest
+            python-version: "3.11"
+            inspector: false
+          - os: windows-latest
+            python-version: "3.12"
+            inspector: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.21"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Check dependency lock
+        run: uv lock --check
+      - name: Build wheel and source distribution
+        run: uv build --python "${{ matrix.python-version }}" --out-dir dist
+      - name: Set up Node for Inspector
+        if: matrix.inspector
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: "24"
+      - name: Clean locked wheel install and Inspector smoke
+        if: matrix.inspector
+        run: python tools/verify_mcp_package.py --wheel-dir dist --inspector --json
+      - name: Clean locked wheel install and Windows stdio smoke
+        if: ${{ !matrix.inspector }}
+        run: python tools/verify_mcp_package.py --wheel-dir dist --json

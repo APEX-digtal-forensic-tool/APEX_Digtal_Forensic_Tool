@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-provider-execute-result.schema.json",
+  "title": "APEX AI Provider Execute Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "assistance_request_id",
+    "operation",
+    "request_fingerprint",
+    "source_revision_check",
+    "result_kind",
+    "result",
+    "replayed",
+    "observed_fact_status"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "assistance_request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "operation": {
+      "enum": ["RECOMMEND_KEYWORDS", "SUMMARIZE_SCOPE"]
+    },
+    "request_fingerprint": { "$ref": "common.schema.json#/$defs/sha256" },
+    "source_revision_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assistance_request_id",
+        "context_snapshot_id",
+        "is_current",
+        "states"
+      ],
+      "properties": {
+        "assistance_request_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "context_snapshot_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "is_current": { "type": "boolean" },
+        "states": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "common.schema.json#/$defs/restrictedContractObject" }
+        }
+      }
+    },
+    "result_kind": {
+      "enum": ["AI_RECOMMENDATION_BATCH", "AI_SUMMARY"]
+    },
+    "result": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["batch", "recommendations"],
+          "properties": {
+            "batch": {
+              "$ref": "ai-keyword-recommendation-batch.schema.json#/$defs/aiKeywordRecommendationBatch"
+            },
+            "recommendations": {
+              "type": "array",
+              "maxItems": 1000,
+              "items": {
+                "$ref": "ai-keyword-recommendation.schema.json#/$defs/aiKeywordRecommendation"
+              }
+            }
+          }
+        },
+        { "$ref": "ai-scope-summary.schema.json#/$defs/aiScopeSummary" }
+      ]
+    },
+    "replayed": { "type": "boolean" },
+    "observed_fact_status": { "const": "NOT_OBSERVED_FACT" }
+  }
+}

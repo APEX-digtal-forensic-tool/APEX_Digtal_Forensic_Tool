@@ -123,22 +123,27 @@ class AiAssistanceService:
     def capabilities(self) -> dict[str, Any]:
         provider_capability = self._provider.capabilities()
         provider_capability.generated_at = provider_capability.generated_at or self._clock.now()
+        engine_capabilities = [
+            "AI_ASSISTANCE_REQUEST_CONTRACT",
+            "AI_RESULT_VALIDATION",
+            "AI_CITATION_VALIDATION",
+            "AI_HUMAN_VERIFICATION",
+            "AI_KEYWORD_PROMOTION",
+        ]
+        unavailable_capabilities = [
+            "PROMPT_TEMPLATE",
+            "MCP_SERVER",
+            "AI_OBSERVED_FACT_PROMOTION",
+        ]
+        if provider_capability.is_available:
+            engine_capabilities.append("RUNTIME_LLM_PROVIDER")
+        else:
+            unavailable_capabilities.append("RUNTIME_LLM_PROVIDER")
         return {
             "schema_version": SCHEMA_VERSION,
-            "engine_capabilities": [
-                "AI_ASSISTANCE_REQUEST_CONTRACT",
-                "AI_RESULT_VALIDATION",
-                "AI_CITATION_VALIDATION",
-                "AI_HUMAN_VERIFICATION",
-                "AI_KEYWORD_PROMOTION",
-            ],
-            "unavailable_capabilities": [
-                "RUNTIME_LLM_PROVIDER",
-                "PROMPT_TEMPLATE",
-                "MCP_SERVER",
-                "AI_OBSERVED_FACT_PROMOTION",
-            ],
-            "provider": provider_capability.to_schema_dict(),
+            "engine_capabilities": engine_capabilities,
+            "unavailable_capabilities": unavailable_capabilities,
+            "runtime_capability": provider_capability.to_schema_dict(),
         }
 
     def create_request_from_context_snapshot(
@@ -691,11 +696,13 @@ class AiAssistanceService:
         action: AiVerificationAction | str,
         actor_id: str,
         reason: str,
+        expected_case_id: str | None = None,
         expected_review_revision: int | None = None,
         corrected_value: str | None = None,
         corrected_reason: str | None = None,
     ) -> AiVerificationEvent:
         recommendation = self.get_keyword_recommendation(recommendation_id)
+        self._require_target_case(recommendation.case_id, expected_case_id)
         if corrected_value is not None:
             corrected_value = _validate_keyword_value(
                 corrected_value,
@@ -722,11 +729,13 @@ class AiAssistanceService:
         action: AiVerificationAction | str,
         actor_id: str,
         reason: str,
+        expected_case_id: str | None = None,
         expected_review_revision: int | None = None,
         corrected_value: str | None = None,
         corrected_reason: str | None = None,
     ) -> AiVerificationEvent:
         summary = self.get_scope_summary(scope_summary_id)
+        self._require_target_case(summary.case_id, expected_case_id)
         if corrected_value is not None:
             if len(corrected_value) > MAX_SUMMARY_LENGTH:
                 raise AiAssistanceError(
@@ -748,9 +757,16 @@ class AiAssistanceService:
             corrected_reason=corrected_reason,
         )
 
-    def review_history(self, *, target_type: str, target_id: str) -> list[AiVerificationEvent]:
+    def review_history(
+        self,
+        *,
+        target_type: str,
+        target_id: str,
+        expected_case_id: str | None = None,
+    ) -> list[AiVerificationEvent]:
         target_value = _enum_value(AiVerificationTargetType, target_type, "target_type")
-        self._require_review_target(target_value, target_id)
+        target = self._require_review_target(target_value, target_id)
+        self._require_target_case(target.case_id, expected_case_id)
         return cast(
             list[AiVerificationEvent],
             self._repository.list_ai_verification_events(
@@ -764,9 +780,11 @@ class AiAssistanceService:
         *,
         recommendation_id: str,
         keyword_set_id: str,
+        expected_case_id: str | None = None,
         regex_confirmed: bool = False,
     ) -> dict[str, Any]:
         recommendation = self.get_keyword_recommendation(recommendation_id)
+        self._require_target_case(recommendation.case_id, expected_case_id)
         keyword_set = self._search.get_keyword_set(keyword_set_id)
         self._validate_keyword_set_case(recommendation, keyword_set)
         self._require_promotable_recommendation(recommendation)
@@ -803,6 +821,7 @@ class AiAssistanceService:
         keyword_set_id: str,
         actor_id: str,
         reason: str,
+        expected_case_id: str | None = None,
         expected_review_revision: int | None = None,
         regex_confirmed: bool = False,
         confirmation_metadata: Mapping[str, Any] | None = None,
@@ -810,6 +829,7 @@ class AiAssistanceService:
         actor_id = _bounded_non_empty(actor_id, "actor_id", MAX_ACTOR_ID_LENGTH)
         reason = _required_reason(reason)
         recommendation = self.get_keyword_recommendation(recommendation_id)
+        self._require_target_case(recommendation.case_id, expected_case_id)
         keyword_set = self._search.get_keyword_set(keyword_set_id)
         self._validate_keyword_set_case(recommendation, keyword_set)
         self._require_promotable_recommendation(recommendation)
@@ -957,6 +977,142 @@ class AiAssistanceService:
             assistance_request_id=assistance_request_id,
             payload=payload,
         )
+
+    def execute_request(
+        self,
+        *,
+        assistance_request_id: str,
+        operation: AiRequestedOperation | str,
+    ) -> dict[str, Any]:
+        """Execute one approved provider operation and ingest its validated result.
+
+        Completed results are replayed from Core storage. New provider dispatch is allowed only
+        while the request is live and all captured source revisions remain current.
+        """
+
+        request = self.get_request(assistance_request_id)
+        operation_value = _enum_value(AiRequestedOperation, operation, "operation")
+        supported_operations = {
+            AiRequestedOperation.RECOMMEND_KEYWORDS.value,
+            AiRequestedOperation.SUMMARIZE_SCOPE.value,
+        }
+        if operation_value not in supported_operations:
+            raise AiAssistanceError(
+                "AI_OPERATION_UNSUPPORTED",
+                "The public provider execution contract does not support this operation.",
+                target="operation",
+                details={"operation": operation_value},
+            )
+        if operation_value not in request.requested_operations:
+            raise AiAssistanceError(
+                "AI_OPERATION_NOT_REQUESTED",
+                "The operation was not included in the immutable AI assistance request.",
+                target="operation",
+                details={"operation": operation_value},
+            )
+
+        revision_check = self.validate_current_revisions(assistance_request_id)
+        existing = self._existing_execution_result(
+            assistance_request_id=assistance_request_id,
+            operation=operation_value,
+        )
+        if existing is not None:
+            return self._execution_result(
+                request=request,
+                operation=operation_value,
+                revision_check=revision_check,
+                result=existing,
+                replayed=True,
+            )
+
+        self._request_for_ingest(assistance_request_id)
+        if not revision_check["is_current"]:
+            raise AiAssistanceError(
+                "AI_SOURCE_REVISION_STALE",
+                "Captured source revisions changed before provider execution.",
+                target="context_snapshot_id",
+                details={
+                    "assistance_request_id": assistance_request_id,
+                    "context_snapshot_id": request.context_snapshot_id,
+                },
+            )
+
+        provider_capability = self._provider.capabilities()
+        if (
+            not provider_capability.is_available
+            or operation_value not in provider_capability.supported_operations
+        ):
+            raise AiAssistanceError(
+                provider_capability.unavailable_reason or "CAPABILITY_UNAVAILABLE",
+                "The configured AI provider cannot execute the requested operation.",
+                target="provider",
+                details={
+                    "provider_id": provider_capability.provider_id,
+                    "operation": operation_value,
+                },
+            )
+
+        if operation_value == AiRequestedOperation.RECOMMEND_KEYWORDS.value:
+            result: dict[str, Any] = self.generate_keyword_recommendations(
+                assistance_request_id=assistance_request_id
+            )
+        else:
+            result = self.generate_scope_summary(
+                assistance_request_id=assistance_request_id
+            ).to_schema_dict()
+        return self._execution_result(
+            request=request,
+            operation=operation_value,
+            revision_check=revision_check,
+            result=result,
+            replayed=False,
+        )
+
+    def _existing_execution_result(
+        self,
+        *,
+        assistance_request_id: str,
+        operation: str,
+    ) -> dict[str, Any] | None:
+        if operation == AiRequestedOperation.RECOMMEND_KEYWORDS.value:
+            batch = self._repository.get_ai_keyword_batch_by_request(
+                assistance_request_id
+            )
+            if batch is None:
+                return None
+            return self.get_keyword_batch(batch.recommendation_batch_id)
+        summary = self._repository.get_ai_scope_summary_by_request(
+            assistance_request_id
+        )
+        if summary is None:
+            return None
+        return self.get_scope_summary(summary.scope_summary_id).to_schema_dict()
+
+    @staticmethod
+    def _execution_result(
+        *,
+        request: AiAssistanceRequest,
+        operation: str,
+        revision_check: dict[str, Any],
+        result: dict[str, Any],
+        replayed: bool,
+    ) -> dict[str, Any]:
+        result_kind = (
+            "AI_RECOMMENDATION_BATCH"
+            if operation == AiRequestedOperation.RECOMMEND_KEYWORDS.value
+            else "AI_SUMMARY"
+        )
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "assistance_request_id": request.assistance_request_id,
+            "operation": operation,
+            "request_fingerprint": request.request_fingerprint,
+            "source_revision_check": revision_check,
+            "result_kind": result_kind,
+            "result": result,
+            "replayed": replayed,
+            "observed_fact_status": "NOT_OBSERVED_FACT",
+        }
 
     def _keyword_recommendations_from_input(
         self,
@@ -1505,7 +1661,7 @@ class AiAssistanceService:
             )
         return cast(AnalysisContextSnapshot, snapshot)
 
-    def _require_review_target(self, target_type: str, target_id: str) -> None:
+    def _require_review_target(self, target_type: str, target_id: str) -> Any:
         if target_type == AiVerificationTargetType.KEYWORD_RECOMMENDATION.value:
             target = self._repository.get_ai_keyword_recommendation(target_id)
         elif target_type == AiVerificationTargetType.SCOPE_SUMMARY.value:
@@ -1517,6 +1673,16 @@ class AiAssistanceService:
                 "AI_REVIEW_TARGET_NOT_FOUND",
                 "AI review target was not found.",
                 target="target_id",
+            )
+        return target
+
+    @staticmethod
+    def _require_target_case(actual_case_id: str, expected_case_id: str | None) -> None:
+        if expected_case_id is not None and expected_case_id != actual_case_id:
+            raise AiAssistanceError(
+                "AI_TARGET_CASE_MISMATCH",
+                "AI review or promotion target belongs to another case.",
+                target="case_id",
             )
 
     def _require_promotable_recommendation(

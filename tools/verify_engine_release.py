@@ -39,6 +39,11 @@ def main() -> int:
         action="store_true",
         help="Skip only the full suite; focused gate tests still run.",
     )
+    parser.add_argument(
+        "--mcp-only",
+        action="store_true",
+        help="Run the portable MCP contract, source, design, and security subset.",
+    )
     parser.add_argument("--timeout", type=float, default=900.0)
     parser.add_argument(
         "--fixture-manifest",
@@ -53,6 +58,7 @@ def main() -> int:
         timeout=args.timeout,
         skip_full_pytest=args.skip_full_pytest,
         fixture_manifest=args.fixture_manifest,
+        mcp_only=args.mcp_only,
     )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -70,29 +76,53 @@ def run_release_gate(
     timeout: float,
     skip_full_pytest: bool,
     fixture_manifest: str | None = None,
+    mcp_only: bool = False,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     checks: list[dict[str, Any]] = []
     base_env = os.environ.copy()
     base_env["PYTHONPATH"] = str(ROOT / "src")
 
-    if skip_full_pytest:
-        checks.append(
-            _check(
-                "pytest",
-                "SKIPPED_WITH_REASON",
-                reason="SKIPPED_BY_EXPLICIT_COMMAND_OPTION",
+    if not mcp_only:
+        if skip_full_pytest:
+            checks.append(
+                _check(
+                    "pytest",
+                    "SKIPPED_WITH_REASON",
+                    reason="SKIPPED_BY_EXPLICIT_COMMAND_OPTION",
+                )
             )
-        )
-    else:
-        checks.append(
-            _run_command(
-                "pytest",
-                [python_executable, "-m", "pytest", "-q"],
-                timeout=timeout,
-                env=base_env,
+        else:
+            checks.append(
+                _run_command(
+                    "pytest",
+                    [python_executable, "-m", "pytest", "-q"],
+                    timeout=timeout,
+                    env=base_env,
+                )
             )
+    checks.append(
+        _run_command(
+            "mcp-contract",
+            [python_executable, "-m", "pytest", "-q", "tests/mcp"],
+            timeout=timeout,
+            env=base_env,
         )
+    )
+    checks.append(
+        _run_json_command(
+            "mcp-stdio-lifecycle",
+            [
+                python_executable,
+                "tools/verify_mcp_stdio.py",
+                "--module",
+                "--json",
+            ],
+            classifier=_classify_mcp_stdio,
+            timeout=timeout,
+            env=base_env,
+        )
+    )
     checks.append(
         _run_command(
             "ruff",
@@ -104,7 +134,7 @@ def run_release_gate(
     checks.append(
         _run_command(
             "mypy",
-            [python_executable, "-m", "mypy", "src/apex_forensic"],
+            [python_executable, "-m", "mypy", "src"],
             timeout=timeout,
             env=base_env,
         )
@@ -126,6 +156,10 @@ def run_release_gate(
     )
     checks.append(design)
     checks.append(_strict_schema_status(design))
+
+    if mcp_only:
+        checks.append(_run_bandit(python_executable, timeout=timeout, env=base_env))
+        return _release_report(checks, started=started, scope="MCP_ONLY")
 
     runtime_command = [
         python_executable,
@@ -219,6 +253,15 @@ def run_release_gate(
         )
     )
 
+    return _release_report(checks, started=started, scope="FULL_ENGINE")
+
+
+def _release_report(
+    checks: list[dict[str, Any]],
+    *,
+    started: float,
+    scope: str,
+) -> dict[str, Any]:
     failed = [check["name"] for check in checks if check["status"] == "FAILED"]
     limitations = [
         {"name": check["name"], "status": check["status"], "reason": check.get("reason")}
@@ -231,6 +274,7 @@ def run_release_gate(
         "release_ready_on_this_host": not failed and not limitations,
         "elapsed_wall_seconds": time.perf_counter() - started,
         "root": str(ROOT),
+        "scope": scope,
         "failed_checks": failed,
         "limitations": limitations,
         "checks": checks,
@@ -418,6 +462,40 @@ def _classify_doctor(
     if "HOST_VERIFICATION_REQUIRED" in statuses:
         return "HOST_VERIFICATION_REQUIRED", "WINDOWS_PROVIDER_REQUIRES_WINDOWS_HOST", details
     return "PASSED", None, details
+
+
+def _classify_mcp_stdio(
+    payload: dict[str, Any],
+    returncode: int | None,
+) -> tuple[str, str | None, dict[str, Any]]:
+    eof = payload.get("eof_lifecycle")
+    details = {
+        "protocol_version": payload.get("protocol_version"),
+        "tool_count": payload.get("tool_count"),
+        "tool_surface_matches": payload.get("tool_surface_matches"),
+        "raw_read_default_deny": payload.get("raw_read_default_deny"),
+        "unicode_database_path_verified": payload.get("unicode_database_path_verified"),
+        "eof_lifecycle": eof if isinstance(eof, dict) else {},
+        "secret_values_emitted": payload.get("secret_values_emitted"),
+    }
+    passed = (
+        returncode in {0, None}
+        and payload.get("status") == "PASSED"
+        and payload.get("protocol_version") == "2026-07-28"
+        and payload.get("tool_count") == 52
+        and payload.get("tool_surface_matches") is True
+        and payload.get("raw_read_default_deny") is True
+        and payload.get("unicode_database_path_verified") is True
+        and isinstance(eof, dict)
+        and eof.get("status") == "PASSED"
+        and eof.get("stdout_protocol_only") is True
+        and payload.get("secret_values_emitted") is False
+    )
+    return (
+        ("PASSED", None, details)
+        if passed
+        else ("FAILED", "MCP_STDIO_CONTRACT_VIOLATION", details)
+    )
 
 
 def _classify_benchmark(

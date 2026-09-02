@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=78.1.1,<81"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -17,10 +17,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "bandit>=1.9,<2",
+  "mcp==2.1.1",
   "mypy>=1.10",
   "pytest>=8.2",
   "ruff>=0.5",
   "types-defusedxml>=0.7.0",
+]
+mcp-server = [
+  "mcp==2.1.1",
+  "uvicorn==0.52.4",
 ]
 windows-artifacts = [
   "python-registry>=1.3.1",
@@ -56,9 +62,14 @@ virtual-disk = [
 
 [project.scripts]
 apex-forensic = "apex_forensic.cli:main"
+apex-mcp = "apex_mcp.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+apex_forensic = ["py.typed"]
+apex_mcp = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -76,7 +87,9 @@ select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
 python_version = "3.11"
 strict = true
 pretty = true
-packages = ["apex_forensic"]
+files = ["src/apex_forensic", "src/apex_mcp"]
+mypy_path = "src"
+explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 module = ["jsonschema.*"]

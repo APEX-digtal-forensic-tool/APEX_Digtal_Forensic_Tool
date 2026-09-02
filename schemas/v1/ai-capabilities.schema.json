@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-capabilities.schema.json",
+  "title": "APEX AI Capabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "engine_capabilities",
+    "unavailable_capabilities",
+    "runtime_capability"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "engine_capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "unavailable_capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "runtime_capability": {
+      "$ref": "ai-provider-capability.schema.json#/$defs/aiProviderCapability"
+    }
+  }
+}
