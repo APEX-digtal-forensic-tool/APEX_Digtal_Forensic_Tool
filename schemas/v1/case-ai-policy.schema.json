@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/case-ai-policy.schema.json",
+  "title": "APEX Case AI Policy",
+  "$ref": "#/$defs/caseAiPolicy",
+  "$defs": {
+    "caseAiPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "policy_id",
+        "case_id",
+        "revision",
+        "created_at",
+        "ai_enabled",
+        "external_allowed",
+        "local_only",
+        "allowed_classifications",
+        "secret_handling",
+        "raw_allowed",
+        "redaction_required",
+        "projection_required"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "policy_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "ai_enabled": {
+          "type": "boolean"
+        },
+        "external_allowed": {
+          "type": "boolean"
+        },
+        "local_only": {
+          "type": "boolean"
+        },
+        "allowed_classifications": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/dataClassification"
+          },
+          "uniqueItems": true
+        },
+        "secret_handling": {
+          "enum": [
+            "DENY",
+            "REDACT",
+            "ALLOW"
+          ]
+        },
+        "raw_allowed": {
+          "type": "boolean"
+        },
+        "redaction_required": {
+          "type": "boolean"
+        },
+        "projection_required": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

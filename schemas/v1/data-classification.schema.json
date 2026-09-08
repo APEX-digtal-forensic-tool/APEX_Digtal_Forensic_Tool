@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/data-classification.schema.json",
+  "title": "APEX Data Classification",
+  "$ref": "#/$defs/dataClassification",
+  "$defs": {
+    "dataClassification": {
+      "$ref": "common.schema.json#/$defs/dataClassification"
+    }
+  }
+}

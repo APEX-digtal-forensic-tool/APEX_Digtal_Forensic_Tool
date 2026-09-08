@@ -14,6 +14,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apex_forensic._time import parse_timestamp, to_json_timestamp, utc_now
+from apex_forensic.constants import SCHEMA_VERSION
 from apex_forensic.domain.enums import (
     AnalysisContextPurpose,
     AnalysisProfileType,
@@ -47,7 +48,7 @@ from apex_forensic.domain.enums import (
     TimezoneSource,
     ViewMode,
 )
-from apex_forensic.domain.errors import PersistenceError
+from apex_forensic.domain.errors import PersistenceError, StateConflictError, ValidationError
 from apex_forensic.domain.models import (
     AiAssistanceRequest,
     AiKeywordPromotion,
@@ -110,6 +111,10 @@ from apex_forensic.domain.models import (
     TimelineEvent,
     TimelineQuery,
     ViewProjection,
+)
+from apex_forensic.domain.models.ai_governance import (
+    AiEgressAuditRecord,
+    CaseAiPolicy,
 )
 from apex_forensic.domain.services.canonical import canonical_sha256
 
@@ -2307,6 +2312,110 @@ class SQLiteRepository:
                     PRIMARY KEY(renderer_id, renderer_version)
                 );
 
+                CREATE TABLE IF NOT EXISTS case_ai_policies (
+                    policy_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    revision INTEGER NOT NULL CHECK(revision > 0),
+                    ai_enabled INTEGER NOT NULL CHECK(ai_enabled IN (0, 1)),
+                    external_allowed INTEGER NOT NULL CHECK(external_allowed IN (0, 1)),
+                    local_only INTEGER NOT NULL CHECK(local_only IN (0, 1)),
+                    allowed_classifications_json TEXT NOT NULL,
+                    secret_handling TEXT NOT NULL
+                        CHECK(secret_handling IN ('DENY','REDACT','ALLOW')),
+                    raw_allowed INTEGER NOT NULL CHECK(raw_allowed IN (0, 1)),
+                    redaction_required INTEGER NOT NULL CHECK(redaction_required IN (0, 1)),
+                    projection_required INTEGER NOT NULL CHECK(projection_required IN (0, 1)),
+                    content_fingerprint TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL CHECK(schema_version = '1.0.0'),
+                    UNIQUE(case_id, revision),
+                    UNIQUE(case_id, policy_id, revision, content_fingerprint)
+                );
+                CREATE TABLE IF NOT EXISTS ai_egress_audit_records (
+                    audit_id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL REFERENCES cases(case_id),
+                    source_id TEXT NOT NULL,
+                    source_type TEXT NOT NULL CHECK(source_type IN (
+                        'ARTIFACT','CONTEXT_SNAPSHOT','AI_ASSISTANCE_REQUEST'
+                    )),
+                    source_fingerprint TEXT NOT NULL,
+                    classification TEXT NOT NULL CHECK(classification IN (
+                        'PUBLIC','INTERNAL','SENSITIVE','SECRET'
+                    )),
+                    contains_secrets INTEGER NOT NULL CHECK(contains_secrets IN (0, 1)),
+                    data_form TEXT NOT NULL CHECK(data_form IN (
+                        'RAW','STRUCTURED','REDACTED','SAFE_PROJECTION'
+                    )),
+                    content_fingerprint TEXT,
+                    destination TEXT NOT NULL CHECK(destination IN ('LOCAL','EXTERNAL')),
+                    decision TEXT NOT NULL CHECK(decision IN (
+                        'ALLOW','DENY','ALLOW_WITH_REDACTION','ALLOW_PROJECTION_ONLY'
+                    )),
+                    reason TEXT NOT NULL,
+                    reason_codes_json TEXT NOT NULL,
+                    required_transformations_json TEXT NOT NULL,
+                    policy_id TEXT,
+                    policy_revision INTEGER,
+                    policy_fingerprint TEXT,
+                    redaction_applied INTEGER NOT NULL CHECK(redaction_applied IN (0, 1)),
+                    projection_applied INTEGER NOT NULL CHECK(projection_applied IN (0, 1)),
+                    created_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL CHECK(schema_version = '1.0.0'),
+                    FOREIGN KEY(case_id, policy_id, policy_revision, policy_fingerprint)
+                        REFERENCES case_ai_policies(
+                            case_id, policy_id, revision, content_fingerprint
+                        ),
+                    CHECK((policy_id IS NULL AND policy_revision IS NULL
+                        AND policy_fingerprint IS NULL AND decision = 'DENY') OR
+                        (policy_id IS NOT NULL AND policy_revision IS NOT NULL
+                        AND policy_fingerprint IS NOT NULL)),
+                    CHECK(redaction_applied = (data_form IN ('REDACTED','SAFE_PROJECTION'))),
+                    CHECK(projection_applied = (data_form = 'SAFE_PROJECTION')),
+                    CHECK(contains_secrets = 0 OR classification = 'SECRET'),
+                    CHECK(data_form = 'RAW' OR content_fingerprint IS NOT NULL)
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_egress_audit_case_source
+                    ON ai_egress_audit_records(case_id, source_id, created_at, audit_id);
+                CREATE TRIGGER IF NOT EXISTS ai_egress_audit_source_case
+                BEFORE INSERT ON ai_egress_audit_records
+                WHEN NOT (
+                    (NEW.source_type = 'ARTIFACT' AND EXISTS (
+                        SELECT 1 FROM artifacts WHERE artifact_id = NEW.source_id
+                        AND case_id = NEW.case_id
+                    )) OR
+                    (NEW.source_type = 'CONTEXT_SNAPSHOT' AND EXISTS (
+                        SELECT 1 FROM analysis_context_snapshots
+                        WHERE context_snapshot_id = NEW.source_id AND case_id = NEW.case_id
+                    )) OR
+                    (NEW.source_type = 'AI_ASSISTANCE_REQUEST' AND EXISTS (
+                        SELECT 1 FROM ai_assistance_requests
+                        WHERE assistance_request_id = NEW.source_id AND case_id = NEW.case_id
+                    ))
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'AI egress source must belong to the case');
+                END;
+                CREATE TRIGGER IF NOT EXISTS case_ai_policies_no_update
+                BEFORE UPDATE ON case_ai_policies
+                BEGIN
+                    SELECT RAISE(ABORT, 'case_ai_policies are immutable');
+                END;
+                CREATE TRIGGER IF NOT EXISTS case_ai_policies_no_delete
+                BEFORE DELETE ON case_ai_policies
+                BEGIN
+                    SELECT RAISE(ABORT, 'case_ai_policies are immutable');
+                END;
+                CREATE TRIGGER IF NOT EXISTS ai_egress_audit_no_update
+                BEFORE UPDATE ON ai_egress_audit_records
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_egress_audit_records are immutable');
+                END;
+                CREATE TRIGGER IF NOT EXISTS ai_egress_audit_no_delete
+                BEFORE DELETE ON ai_egress_audit_records
+                BEGIN
+                    SELECT RAISE(ABORT, 'ai_egress_audit_records are immutable');
+                END;
+
                 CREATE TABLE IF NOT EXISTS view_projections (
                     projection_id TEXT PRIMARY KEY,
                     case_id TEXT NOT NULL REFERENCES cases(case_id),
@@ -2701,6 +2810,14 @@ class SQLiteRepository:
                 VALUES (?, ?)
                 """,
                 ("hash-verification-case-scope", to_json_timestamp(utc_now())),
+            )
+
+            self.connection.execute(
+                """
+                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+                VALUES (?, ?)
+                """,
+                ("apex-engine-ai-data-governance", to_json_timestamp(utc_now())),
             )
 
     def save_case(self, case: Case) -> None:
@@ -6976,6 +7093,131 @@ class SQLiteRepository:
             (context_snapshot_id,),
         ).fetchall()
         return [self._row_to_revision_state(row) for row in rows]
+
+    def save_case_ai_policy(self, policy: CaseAiPolicy, *, expected_revision: int) -> None:
+        """Append a revision only if the caller observed the current revision."""
+
+        if (type(expected_revision) is not int or expected_revision < 0
+                or policy.revision != expected_revision + 1):
+            raise ValidationError("Invalid expected policy revision.")
+        data = policy.to_schema_dict()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                INSERT INTO case_ai_policies (
+                    policy_id, case_id, revision, ai_enabled, external_allowed, local_only,
+                    allowed_classifications_json, secret_handling, raw_allowed,
+                    redaction_required, projection_required, content_fingerprint, created_at,
+                    schema_version
+                ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                WHERE COALESCE((SELECT MAX(revision) FROM case_ai_policies
+                    WHERE case_id = ?), 0) = ?
+                """,
+                (
+                    policy.policy_id, policy.case_id, policy.revision, int(policy.ai_enabled),
+                    int(policy.external_allowed), int(policy.local_only),
+                    self._json(data["allowed_classifications"]), policy.secret_handling.value,
+                    int(policy.raw_allowed), int(policy.redaction_required),
+                    int(policy.projection_required), policy.content_fingerprint, data["created_at"],
+                    SCHEMA_VERSION, policy.case_id, expected_revision,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StateConflictError("Case AI policy revision changed.")
+
+    def get_case_ai_policy(self, case_id: str) -> CaseAiPolicy | None:
+        row = self.connection.execute(
+            "SELECT * FROM case_ai_policies WHERE case_id = ? ORDER BY revision DESC LIMIT 1",
+            (case_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        fingerprint = data.pop("content_fingerprint")
+        data["allowed_classifications"] = json.loads(data.pop("allowed_classifications_json"))
+        for name in (
+            "ai_enabled", "external_allowed", "local_only", "raw_allowed",
+            "redaction_required", "projection_required",
+        ):
+            data[name] = bool(data[name])
+        policy = CaseAiPolicy.from_schema_dict(data)
+        if policy.content_fingerprint != fingerprint:
+            raise ValidationError("Stored case AI policy fingerprint mismatch.")
+        return policy
+
+    def append_ai_egress_audit(self, record: AiEgressAuditRecord) -> None:
+        """Persist metadata only, rejecting a policy changed since the evaluation."""
+
+        result = record.result
+        data = result.data
+        source = data.source
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                INSERT INTO ai_egress_audit_records (
+                    audit_id, case_id, source_id, source_type, source_fingerprint,
+                    classification, contains_secrets, data_form, content_fingerprint,
+                    destination, decision, reason, reason_codes_json, required_transformations_json,
+                    policy_id, policy_revision, policy_fingerprint, redaction_applied,
+                    projection_applied, created_at, schema_version
+                ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                WHERE (SELECT policy_id FROM case_ai_policies WHERE case_id = ?
+                    ORDER BY revision DESC LIMIT 1) IS ?
+                """,
+                (
+                    record.audit_id, source.case_id, source.source_id, source.source_type.value,
+                    source.source_fingerprint, data.classification.value,
+                    int(data.contains_secrets),
+                    data.data_form.value, data.content_fingerprint, result.destination.value,
+                    result.decision.value, result.reason,
+                    self._json([item.value for item in result.reason_codes]),
+                    self._json([item.value for item in result.required_transformations]),
+                    result.policy_id, result.policy_revision, result.policy_fingerprint,
+                    int(data.redaction_applied), int(data.projection_applied),
+                    to_json_timestamp(record.created_at), SCHEMA_VERSION,
+                    source.case_id, result.policy_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StateConflictError("Case AI policy changed; evaluate egress again.")
+
+    def list_ai_egress_audits(
+        self, *, case_id: str, source_id: str | None = None,
+    ) -> list[AiEgressAuditRecord]:
+        rows = self.connection.execute(
+            """SELECT * FROM ai_egress_audit_records WHERE case_id = ?
+            AND (? IS NULL OR source_id = ?) ORDER BY created_at, audit_id""",
+            (case_id, source_id, source_id),
+        ).fetchall()
+        return [self._row_to_ai_egress_audit(row) for row in rows]
+
+    @staticmethod
+    def _row_to_ai_egress_audit(row: sqlite3.Row) -> AiEgressAuditRecord:
+        return AiEgressAuditRecord.from_schema_dict({
+            "schema_version": row["schema_version"], "audit_id": row["audit_id"],
+            "created_at": row["created_at"],
+            "redaction_applied": bool(row["redaction_applied"]),
+            "projection_applied": bool(row["projection_applied"]),
+            "result": {
+                "schema_version": row["schema_version"],
+                "data": {
+                    "source": {
+                        "case_id": row["case_id"], "source_id": row["source_id"],
+                        "source_type": row["source_type"],
+                        "source_fingerprint": row["source_fingerprint"],
+                    },
+                    "classification": row["classification"],
+                    "contains_secrets": bool(row["contains_secrets"]),
+                    "data_form": row["data_form"],
+                    "content_fingerprint": row["content_fingerprint"],
+                },
+                "destination": row["destination"], "decision": row["decision"],
+                "reason": row["reason"], "reason_codes": json.loads(row["reason_codes_json"]),
+                "required_transformations": json.loads(row["required_transformations_json"]),
+                "policy_id": row["policy_id"], "policy_revision": row["policy_revision"],
+                "policy_fingerprint": row["policy_fingerprint"],
+            },
+        })
 
     def save_ai_assistance_request(self, request: AiAssistanceRequest) -> None:
         """Persist one immutable AI assistance request contract."""
