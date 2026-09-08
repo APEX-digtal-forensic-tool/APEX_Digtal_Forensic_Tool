@@ -1982,6 +1982,10 @@ class SQLiteRepository:
                     ON ai_keyword_recommendation_batches(
                         case_id, created_at DESC, recommendation_batch_id
                     );
+                CREATE INDEX IF NOT EXISTS idx_ai_keyword_batches_request
+                    ON ai_keyword_recommendation_batches(
+                        assistance_request_id, created_at, recommendation_batch_id
+                    );
 
                 CREATE TABLE IF NOT EXISTS ai_keyword_recommendations (
                     recommendation_id TEXT PRIMARY KEY,
@@ -2048,6 +2052,10 @@ class SQLiteRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_ai_scope_summaries_case
                     ON ai_scope_summaries(case_id, created_at DESC, scope_summary_id);
+                CREATE INDEX IF NOT EXISTS idx_ai_scope_summaries_request
+                    ON ai_scope_summaries(
+                        assistance_request_id, created_at, scope_summary_id
+                    );
                 CREATE INDEX IF NOT EXISTS idx_ai_scope_summaries_scope
                     ON ai_scope_summaries(scope_context_id, created_at DESC);
 
@@ -7339,6 +7347,22 @@ class SQLiteRepository:
         ).fetchone()
         return None if row is None else self._row_to_ai_keyword_batch(row)
 
+    def get_ai_keyword_batch_by_request(
+        self, assistance_request_id: str
+    ) -> AiKeywordRecommendationBatch | None:
+        """Return the first completed keyword execution for one immutable request."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM ai_keyword_recommendation_batches
+            WHERE assistance_request_id = ?
+            ORDER BY created_at, recommendation_batch_id
+            LIMIT 1
+            """,
+            (assistance_request_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_keyword_batch(row)
+
     def get_ai_keyword_recommendation(
         self, recommendation_id: str
     ) -> AiKeywordRecommendation | None:
@@ -7407,6 +7431,22 @@ class SQLiteRepository:
         row = self.connection.execute(
             "SELECT * FROM ai_scope_summaries WHERE scope_summary_id = ?",
             (scope_summary_id,),
+        ).fetchone()
+        return None if row is None else self._row_to_ai_scope_summary(row)
+
+    def get_ai_scope_summary_by_request(
+        self, assistance_request_id: str
+    ) -> AiScopeSummaryRecord | None:
+        """Return the first completed summary execution for one immutable request."""
+
+        row = self.connection.execute(
+            """
+            SELECT * FROM ai_scope_summaries
+            WHERE assistance_request_id = ?
+            ORDER BY created_at, scope_summary_id
+            LIMIT 1
+            """,
+            (assistance_request_id,),
         ).fetchone()
         return None if row is None else self._row_to_ai_scope_summary(row)
 

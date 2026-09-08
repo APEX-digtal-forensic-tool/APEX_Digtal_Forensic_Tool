@@ -26,12 +26,12 @@ APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 �
 | Forensic Core Engine | **Goal-scope Feature Complete Candidate** | Phase 1~8, Advanced Core Runtime, Release Hardening 구현 완료 |
 | Windows Host Semantic Verification | **PASSED_WITH_LIMITATIONS** | DPAPI·Chromium AES-GCM·Firefox NSS·Event Message·Report Renderer 검증, `failed_checks=[]` |
 | KakaoTalk Windows 2.0.8.990 | **IMPLEMENTED_UNVERIFIED** | Offline Discovery·PE Version 검증·외부 Key 복호화·`chatLogs` 추출 구현, 자동 Key 획득과 실제 Fixture는 외부 근거 부족으로 차단 |
-| Runtime/Dependency Packaging | **진행 예정** | E01·VHD·VHDX·OCR/STT 등 Optional Runtime과 Windows Desktop Packaging·CI Matrix 검증 필요 |
-| MCP / LLM Runtime | **별도 담당** | Core Engine 외부에서 MCP Server·Provider·Prompt·Agent Workflow 구현 |
+| Runtime/Dependency Packaging | **MCP 완료 / Native 진행 예정** | MCP wheel/sdist, hash lock, clean install과 Ubuntu/Windows CI matrix 구성 완료. E01·VHD·VHDX·OCR/STT 등 Optional Native Runtime과 Windows Desktop bundle 검증은 별도 필요 |
+| MCP / LLM Runtime | **M8 Packaging·Windows CI 완료** | Core 외부 `apex_mcp`에 MCP 2.x stdio 및 authenticated Streamable HTTP와 52개 Context/View/AI/Report Tool을 구현. Descriptor/transport가 없는 Domain Tool은 미노출로 고정하고, MCP SDK `2.1.1`·uvicorn `0.52.4` lock, `apex-mcp` console, clean wheel install, Inspector strict, stdio EOF/한글 경로/secret 비노출, MCP-only release gate를 검증. Ubuntu Inspector와 Windows Python 3.11/3.12 hosted CI가 [run #1](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/actions/runs/33482524240)에서 통과. 제품용 영속 identity/approval/billing backend는 별도 통합 대상 |
 | Frontend / Backend | **별도 담당 및 통합 대상** | GUI, Session/Identity, Approval, Billing, Desktop 통합은 Core Engine과 분리 |
 
 > **Core Engine 기능 개발 완료 Candidate와 APEX 전체 제품 완성은 같은 의미가 아닙니다.**
-> 현재 남은 주요 작업은 실제 Evidence 정확성·성능 검증, Optional Dependency Packaging, Windows Desktop 통합, 외부 전문가 검토와 별도 MCP·AI·Frontend·Backend 통합입니다.
+> 현재 남은 주요 작업은 실제 Evidence 정확성·성능 검증, Native Optional Dependency Packaging, Windows Desktop 통합, 외부 전문가 검토와 별도 AI·Frontend·Backend 통합입니다.
 
 ---
 
@@ -1018,13 +1018,13 @@ KakaoTalk Windows Desktop 2.0.8.990에 한해 명시적 Offline Root 아래의 `
 - 형태소 분석 지원을 주장하지 않음
 - Office·PDF·OCR·STT Full-text Extraction 미지원
 - Unallocated Raw Content Full-text Search 미지원
-- YARA와 실제 AI Keyword 생성은 별도 Runtime
+- YARA는 별도 Runtime이며 AI Keyword 생성은 선택적 MCP provider 설정 필요
 
 ## AI Keyword Recommendation
 
 AI는 조사 범위를 줄이기 위한 Keyword Candidate를 제안할 수 있습니다.
 
-> 현재 Engine은 AI Provider를 실행하지 않고, 외부 Adapter가 제출한 Keyword Recommendation을 검증·저장·검토·승격하는 Phase 7 계약을 제공합니다.
+> 기본 Core service는 unavailable provider를 사용한다. 선택적 MCP runtime은 public `ai.request.execute` 계약으로 OpenAI-compatible provider를 호출하고, 결과를 동일한 Phase 7 검증·저장 경계로 ingest한다. 생성 결과는 `UNREVIEWED`와 `NOT_OBSERVED_FACT` 상태를 유지한다.
 
 ```text
 Case 배경 정보
@@ -1719,14 +1719,21 @@ APEX/
 - [ ] 실제 Evidence 성능·정확성 Benchmark 및 외부 전문가 검토
 - [ ] Native Dependency Packaging·CI Matrix
 - [ ] Windows Desktop Packaging
+- [x] MCP wheel/sdist·hash lock·clean install·Inspector strict·Windows CI Matrix 정의 — MCP M8
 - [ ] 최종 Release 문서·배포 검증
 - [ ] 선택적 후속 연구: 형태소 기반 한국어 Search — Core 완료 Gate 제외
 
 ### 별도 담당
 
-- [ ] Built-in MCP Adapter — MCP 담당
-- [ ] LLM Provider / Prompt / Agent Workflow — MCP·AI 담당
-- [ ] Identity / Approval / Billing — Backend 담당
+- [x] Built-in MCP Adapter M0~M7 — stdio/Streamable HTTP Context/View/Raw/AI/human verification/report 및 Domain 노출 경계
+- [x] 선택적 OpenAI-compatible LLM Provider execute/ingest — MCP M3
+- [x] AI keyword/scope human review·history·promotion preview/promotion — MCP M4
+- [x] Report draft·immutable version·human review/approval·custody-bound export — MCP M5
+- [x] Authenticated session/RBAC/case tenancy/approval-provider 및 Streamable HTTP — MCP M6
+- [x] Descriptor 없는 Domain Tool 미노출, Search/Hash/Kakao 제한 회귀 계약 — MCP M7
+- [x] `apex-mcp` 패키징, locked clean install, stdio lifecycle, Inspector strict, MCP security/release gate, Windows Python 3.11/3.12 CI 정의 — MCP M8
+- [ ] 자율 Agent Workflow와 제품 Prompt 정책 — MCP·AI 후속 담당
+- [ ] 영속 Identity / Approval policy / Billing backend — Backend 담당
 - [ ] 한국어 GUI 및 View — Frontend 담당
 
 ---

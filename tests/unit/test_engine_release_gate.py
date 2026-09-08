@@ -55,8 +55,8 @@ def test_security_manifest_classifies_every_current_medium_finding(project_root:
     audit = module.audit_bandit_report(report, manifest)
 
     assert audit["complete"] is True
-    assert audit["medium_or_high_count"] == 43
-    assert audit["classified_count"] == 43
+    assert audit["medium_or_high_count"] == 44
+    assert audit["classified_count"] == 44
     assert audit["bandit_clean"] is False
     assert audit["unclassified"] == []
 
@@ -108,3 +108,48 @@ def test_release_gate_preserves_runtime_limitations(project_root: Path) -> None:
     assert status == "CAPABILITY_UNAVAILABLE"
     assert reason == "OPTIONAL_RUNTIME_UNAVAILABLE"
     assert details["windows_runtime_success_claimed"] is False
+
+
+def test_release_gate_requires_mcp_stdio_security_contract(project_root: Path) -> None:
+    module = _load_release_gate(project_root)
+
+    status, reason, details = module._classify_mcp_stdio(
+        {
+            "status": "PASSED",
+            "protocol_version": "2026-07-28",
+            "tool_count": 52,
+            "tool_surface_matches": True,
+            "raw_read_default_deny": True,
+            "unicode_database_path_verified": True,
+            "secret_values_emitted": False,
+            "eof_lifecycle": {
+                "status": "PASSED",
+                "stdout_protocol_only": True,
+            },
+        },
+        0,
+    )
+
+    assert status == "PASSED"
+    assert reason is None
+    assert details["tool_count"] == 52
+
+    failed, failed_reason, _ = module._classify_mcp_stdio(
+        {
+            "status": "PASSED",
+            "protocol_version": "2026-07-28",
+            "tool_count": 52,
+            "tool_surface_matches": True,
+            "raw_read_default_deny": True,
+            "unicode_database_path_verified": True,
+            "secret_values_emitted": True,
+            "eof_lifecycle": {
+                "status": "PASSED",
+                "stdout_protocol_only": True,
+            },
+        },
+        0,
+    )
+
+    assert failed == "FAILED"
+    assert failed_reason == "MCP_STDIO_CONTRACT_VIOLATION"

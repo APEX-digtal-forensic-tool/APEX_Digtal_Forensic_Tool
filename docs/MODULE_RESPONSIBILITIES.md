@@ -184,8 +184,8 @@ Adapters report what they can do; the runtime probe aggregates host evidence; do
 | Design Contract Validator | `tools/validate_design.mjs` and `tools/validate_design_basic.py` | schema/doc/DDL/traceability cross-check |
 | Runtime Contract Validator | `tools/verify_windows_host_runtime.py` | Windows host semantic/capability classification |
 | Evidence Recovery Validator | `tests/unit/test_release_hardening_recovery.py` | stored-run recovery contract |
-| Security Gate | `tools/verify_engine_release.py` plus Bandit/report interpretation | classified findings; current test manifest includes 43 medium findings, not a clean claim |
-| Release Gate | `tools/verify_engine_release.py` | pytest, Ruff, mypy, design/runtime/recovery/security/benchmark/CLI/Unicode gates |
+| Security Gate | `tools/verify_engine_release.py` plus Bandit/report interpretation | classified findings; current test manifest includes 44 medium findings, not a clean claim |
+| Release Gate | `tools/verify_engine_release.py` | full pytest/runtime gate and portable `--mcp-only` pytest/stdio/design/security CI scope |
 | External Validation Plan | release/validation owner outside automated unit tests | licensed real fixtures, expected outputs, host/dependency matrix, false-positive/negative assessment |
 
 A validator pass proves only its stated gate. Persistent Windows host results, real KakaoTalk fixture verification, and representative external benchmark results are not currently committed evidence.

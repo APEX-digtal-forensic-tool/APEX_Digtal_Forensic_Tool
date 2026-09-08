@@ -41,6 +41,7 @@ from apex_forensic.application.services.ai_governance import (
     AiProjectionService,
     CaseAiPolicyService,
 )
+from apex_forensic.ports.ai_assistance import AiAssistanceProviderPort
 
 
 @dataclass(slots=True)
@@ -87,7 +88,12 @@ class ServiceBundle:
         self.repository.close()
 
 
-def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
+def build_services(
+    db_path: Path,
+    *,
+    initialize: bool = True,
+    ai_provider: AiAssistanceProviderPort | None = None,
+) -> ServiceBundle:
     """Create concrete services for a SQLite database path."""
 
     repository = SQLiteRepository(db_path)
@@ -162,6 +168,7 @@ def build_services(db_path: Path, *, initialize: bool = True) -> ServiceBundle:
         search=search,
         clock=clock,
         id_generator=ids,
+        provider=ai_provider,
     )
     reports = ReportService(
         repository=repository,

@@ -48,12 +48,12 @@
       "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
       "justification": "UPDATE assignments and the auxiliary job-table identifier are assembled only from hardcoded internal field and table literals; all state values are bound.",
       "locations": [
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3405",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3919",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3924",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:4069",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5886",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6552"
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3413",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3927",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3932",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:4077",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5894",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6560"
       ]
     },
     {
@@ -61,28 +61,28 @@
       "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
       "justification": "WHERE fragments are selected from hardcoded internal predicates and placeholder counts; all case, evidence, cursor, filter, and limit values are bound parameters.",
       "locations": [
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3762",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:4114",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5033",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5207",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5286",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5718",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5757",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6216",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6305",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6467",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7376",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7433",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7523",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7656",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7891",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8313",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9290",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9361",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9423",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9480",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9536",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9591"
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:3770",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:4122",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5041",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5215",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5294",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5726",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:5765",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6224",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6313",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6475",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7400",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7473",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7563",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7696",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:7931",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8353",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9330",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9401",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9463",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9520",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9576",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:9631"
       ]
     },
     {
@@ -90,7 +90,7 @@
       "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
       "justification": "Timeline sort direction and comparison operators are reduced to the fixed literals ASC or DESC and less-than or greater-than before query assembly; cursor values are bound.",
       "locations": [
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6772"
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:6780"
       ]
     },
     {
@@ -98,8 +98,16 @@
       "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
       "justification": "Dynamic resource identifiers must match an explicit five-entry table-to-ID-column allowlist, and artifact-type expansion creates only question-mark placeholders with bound values.",
       "locations": [
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8440",
-        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8458"
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8480",
+        "src/apex_forensic/adapters/persistence/sqlite/repository.py:8498"
+      ]
+    },
+    {
+      "test_id": "B104",
+      "disposition": "ACCEPTED_RISK_WITH_JUSTIFICATION",
+      "justification": "Binding MCP HTTP to all interfaces is available only through an explicit operator option. The transport still requires bearer authentication, exact Host and Origin allowlists, request-size and rate limits, and public HTTPS issuer/resource URLs for every non-loopback bind.",
+      "locations": [
+        "src/apex_mcp/__main__.py:108"
       ]
     }
   ]
