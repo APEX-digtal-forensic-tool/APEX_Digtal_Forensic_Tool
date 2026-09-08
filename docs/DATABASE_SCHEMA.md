@@ -20,6 +20,7 @@
 - `phase8-report-review-export-contract`
 - `apex-engine-work-package-a-evidence-readers`
 - `apex-engine-advanced-runtime-audit`
+- `apex-engine-ai-data-governance`
 
 별도 migration directory는 없다. Initialize DDL과 `_ensure_column`이 current migration mechanism이며, `jobs.job_revision`, `jobs.index_revision`, `artifact_sources.source_fingerprint`, `source_checkpoint_json`, `inspected_count`을 보강한다.
 
@@ -143,6 +144,17 @@ FTS5가 없으면 `search_documents_fts`를 만들거나 query success를 가장
 | `ai_provider_capabilities` | configured provider capability snapshot |
 
 Prompt, API key, credential, chain-of-thought와 raw provider body column은 없다. 선택적 OpenAI-compatible adapter도 동일 ingest validator를 통과한다.
+
+### AI Data Governance
+
+| 실제 table | 역할 |
+|---|---|
+| `case_ai_policies` | case별 immutable policy revision, classification allowlist와 secret/raw/projection 정책 |
+| `ai_egress_audit_records` | source fingerprint, decision/reason, classification, 변환 적용 여부, destination, policy reference, UTC timestamp |
+
+두 table은 update/delete 차단 trigger를 사용한다. Case/policy foreign key와 polymorphic source
+case 검사 trigger를 적용하며, audit insert 시 최신 policy ID를 확인한다. 원본 artifact와 AI payload를
+복제 저장하지 않는다. 상세 column 의미와 migration은 [AI Data Governance](AI_DATA_GOVERNANCE.md)를 따른다.
 
 ### 3.8 Report Runtime
 

@@ -25,7 +25,7 @@ from apex_mcp.schema_catalog import SchemaCatalog
 def test_schema_catalog_loads_all_canonical_contracts(project_root: Path) -> None:
     catalog = SchemaCatalog(project_root / "schemas" / "v1")
 
-    assert catalog.count == 70
+    assert catalog.count == 76
     assert catalog.has("engine-interface.schema.json")
     assert catalog.has("engine-tool-descriptor.schema.json")
     assert catalog.has("api-response.schema.json")

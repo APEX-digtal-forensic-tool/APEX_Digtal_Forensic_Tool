@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-egress-audit.schema.json",
+  "title": "APEX AI Egress Audit Record",
+  "$ref": "#/$defs/aiEgressAudit",
+  "$defs": {
+    "aiEgressAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "audit_id",
+        "result",
+        "redaction_applied",
+        "projection_applied",
+        "created_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "audit_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "result": {
+          "$ref": "ai-egress-decision.schema.json"
+        },
+        "redaction_applied": {
+          "type": "boolean"
+        },
+        "projection_applied": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "data_form": {
+                        "const": "RAW"
+                      }
+                    },
+                    "required": [
+                      "data_form"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "data"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "redaction_applied": {
+                "const": false
+              },
+              "projection_applied": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "data_form": {
+                        "const": "STRUCTURED"
+                      }
+                    },
+                    "required": [
+                      "data_form"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "data"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "redaction_applied": {
+                "const": false
+              },
+              "projection_applied": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "data_form": {
+                        "const": "REDACTED"
+                      }
+                    },
+                    "required": [
+                      "data_form"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "data"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "redaction_applied": {
+                "const": true
+              },
+              "projection_applied": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "result": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "properties": {
+                      "data_form": {
+                        "const": "SAFE_PROJECTION"
+                      }
+                    },
+                    "required": [
+                      "data_form"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "data"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "redaction_applied": {
+                "const": true
+              },
+              "projection_applied": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

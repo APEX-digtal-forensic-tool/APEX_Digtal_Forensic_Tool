@@ -78,6 +78,16 @@ Optional dependency가 없으면 빈 성공이 아니라 `CAPABILITY_UNAVAILABLE
 - `report.schema.json`은 초기 aggregate/statement 설계와 validator 호환성이다. 현재 report runtime은 granular Phase 8 schemas를 사용한다.
 - `analysis-context.schema.json`, `ai-enrichment.schema.json`, `keyword-recommendation.schema.json`, `machine-extraction.schema.json`은 초기 aggregate/consumer compatibility contracts다.
 
+### Engine AI Data Governance Contracts
+
+`build_services()`의 `ai_policies.configure/get`, `ai_projections.create`,
+`ai_egress.evaluate/evaluate_projection`은 provider 실행 없이 정책·projection·판단/audit를 제공한다.
+기존 AI request/snapshot DTO를 입력 source로 재사용한다. 새로운 schema는
+`case-ai-policy.schema.json`, `data-classification.schema.json`, `ai-egress-data.schema.json`,
+`ai-egress-decision.schema.json`, `safe-ai-projection.schema.json`, `ai-egress-audit.schema.json`이다.
+이 추가는 HTTP/MCP route 또는 기존 runtime 호출부의 변경이 아니다.
+[정책 의미와 사용 예제](AI_DATA_GOVERNANCE.md)를 확인한다.
+
 ## 6. KakaoTalk Interface Boundary
 
 현재 `secret kakaotalk inspect`와 `secret kakaotalk decrypt-store` 범위:

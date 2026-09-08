@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/safe-ai-projection.schema.json",
+  "title": "APEX Safe AI Projection",
+  "$ref": "#/$defs/safeAiProjection",
+  "$defs": {
+    "safeAiProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "source",
+        "classification",
+        "fields",
+        "redaction_applied",
+        "projection_applied",
+        "content_fingerprint",
+        "projection_version"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "source": {
+          "$ref": "ai-egress-data.schema.json#/$defs/source"
+        },
+        "classification": {
+          "$ref": "common.schema.json#/$defs/dataClassification"
+        },
+        "fields": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "redaction_applied": {
+          "const": true
+        },
+        "projection_applied": {
+          "const": true
+        },
+        "content_fingerprint": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "projection_version": {
+          "const": "safe-ai-projection-v1"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "type": "object",
+                "properties": {
+                  "source_type": {
+                    "const": "ARTIFACT"
+                  }
+                },
+                "required": [
+                  "source_type"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "artifact_type": {
+                    "$ref": "artifact.schema.json#/$defs/artifactType"
+                  },
+                  "parse_status": {
+                    "$ref": "artifact.schema.json#/$defs/parseStatus"
+                  },
+                  "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "is_partial": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "type": "object",
+                "properties": {
+                  "source_type": {
+                    "const": "CONTEXT_SNAPSHOT"
+                  }
+                },
+                "required": [
+                  "source_type"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "search_index_revision": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9223372036854775807
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "timeline_revision": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9223372036854775807
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_partial": {
+                    "type": "boolean"
+                  },
+                  "is_stale": {
+                    "type": "boolean"
+                  },
+                  "resource_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9223372036854775807
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "type": "object",
+                "properties": {
+                  "source_type": {
+                    "const": "AI_ASSISTANCE_REQUEST"
+                  }
+                },
+                "required": [
+                  "source_type"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "fields": {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "purpose": {
+                    "$ref": "ai-assistance-request.schema.json#/$defs/purpose"
+                  },
+                  "is_partial": {
+                    "type": "boolean"
+                  },
+                  "is_stale": {
+                    "type": "boolean"
+                  },
+                  "resource_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9223372036854775807
+                  },
+                  "max_keyword_candidates": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9223372036854775807
+                  },
+                  "max_summary_length": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9223372036854775807
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

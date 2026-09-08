@@ -9,6 +9,14 @@ from apex_forensic.domain.models.ai import (
     AiScopeSummaryRecord,
     AiVerificationEvent,
 )
+from apex_forensic.domain.models.ai_governance import (
+    AiDataReference,
+    AiEgressAuditRecord,
+    AiEgressData,
+    AiEgressResult,
+    CaseAiPolicy,
+    SafeAiProjection,
+)
 from apex_forensic.domain.models.artifact import (
     ArtifactAnalysisResult,
     ArtifactCapability,
@@ -102,6 +110,10 @@ from apex_forensic.domain.models.timeline import (
 
 __all__ = [
     "AiAssistanceRequest",
+    "AiDataReference",
+    "AiEgressAuditRecord",
+    "AiEgressData",
+    "AiEgressResult",
     "AiKeywordPromotion",
     "AiKeywordRecommendation",
     "AiKeywordRecommendationBatch",
@@ -122,6 +134,7 @@ __all__ = [
     "BrowserProfile",
     "CandidateReviewEvent",
     "Case",
+    "CaseAiPolicy",
     "CursorPage",
     "CustodyEvent",
     "CustodySnapshotRecord",
@@ -161,6 +174,7 @@ __all__ = [
     "ReportSection",
     "ReportVersion",
     "RevisionState",
+    "SafeAiProjection",
     "SearchCacheEntry",
     "SearchDocument",
     "SearchExecution",

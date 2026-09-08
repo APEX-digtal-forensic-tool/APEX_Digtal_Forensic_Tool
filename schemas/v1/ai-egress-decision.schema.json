@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-egress-decision.schema.json",
+  "title": "APEX AI Egress Decision",
+  "$ref": "#/$defs/aiEgressDecision",
+  "$defs": {
+    "aiEgressDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "data",
+        "destination",
+        "decision",
+        "reason",
+        "reason_codes",
+        "required_transformations",
+        "policy_id",
+        "policy_revision",
+        "policy_fingerprint"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0"
+        },
+        "data": {
+          "$ref": "ai-egress-data.schema.json"
+        },
+        "destination": {
+          "enum": [
+            "LOCAL",
+            "EXTERNAL"
+          ]
+        },
+        "decision": {
+          "enum": [
+            "ALLOW",
+            "DENY",
+            "ALLOW_WITH_REDACTION",
+            "ALLOW_PROJECTION_ONLY"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "POLICY_MISSING",
+              "CASE_MISMATCH",
+              "AI_DISABLED",
+              "LOCAL_ONLY",
+              "EXTERNAL_DENIED",
+              "CLASSIFICATION_DENIED",
+              "SECRET_DENIED",
+              "REDACTION_INCOMPLETE",
+              "RAW_DENIED",
+              "PROJECTION_REQUIRED",
+              "REDACTION_REQUIRED",
+              "POLICY_SATISFIED"
+            ]
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "required_transformations": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "REDACTED",
+              "SAFE_PROJECTION"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "policy_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy_revision": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy_fingerprint": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "policy_id": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "policy_id"
+            ]
+          },
+          "then": {
+            "properties": {
+              "policy_revision": {
+                "type": "null"
+              },
+              "policy_fingerprint": {
+                "type": "null"
+              },
+              "decision": {
+                "const": "DENY"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "policy_revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "policy_fingerprint": {
+                "$ref": "common.schema.json#/$defs/sha256"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "ALLOW"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          },
+          "then": {
+            "properties": {
+              "required_transformations": {
+                "const": []
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "DENY"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          },
+          "then": {
+            "properties": {
+              "required_transformations": {
+                "const": []
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "ALLOW_WITH_REDACTION"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          },
+          "then": {
+            "properties": {
+              "required_transformations": {
+                "const": [
+                  "REDACTED"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "ALLOW_PROJECTION_ONLY"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          },
+          "then": {
+            "properties": {
+              "required_transformations": {
+                "const": [
+                  "SAFE_PROJECTION"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

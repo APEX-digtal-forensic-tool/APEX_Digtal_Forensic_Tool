@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.apex-forensics.dev/v1/ai-egress-data.schema.json",
+  "title": "APEX AI Egress Data",
+  "$ref": "#/$defs/aiEgressData",
+  "$defs": {
+    "aiEgressData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "classification",
+        "contains_secrets",
+        "data_form",
+        "content_fingerprint"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "classification": {
+          "$ref": "common.schema.json#/$defs/dataClassification"
+        },
+        "contains_secrets": {
+          "type": "boolean"
+        },
+        "data_form": {
+          "enum": [
+            "RAW",
+            "STRUCTURED",
+            "REDACTED",
+            "SAFE_PROJECTION"
+          ]
+        },
+        "content_fingerprint": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "contains_secrets": {
+                "const": true
+              }
+            },
+            "required": [
+              "contains_secrets"
+            ]
+          },
+          "then": {
+            "properties": {
+              "classification": {
+                "const": "SECRET"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "data_form": {
+                "enum": [
+                  "STRUCTURED",
+                  "REDACTED",
+                  "SAFE_PROJECTION"
+                ]
+              }
+            },
+            "required": [
+              "data_form"
+            ]
+          },
+          "then": {
+            "properties": {
+              "content_fingerprint": {
+                "$ref": "common.schema.json#/$defs/sha256"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "source_id",
+        "source_type",
+        "source_fingerprint"
+      ],
+      "properties": {
+        "case_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_id": {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        "source_type": {
+          "enum": [
+            "ARTIFACT",
+            "CONTEXT_SNAPSHOT",
+            "AI_ASSISTANCE_REQUEST"
+          ]
+        },
+        "source_fingerprint": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

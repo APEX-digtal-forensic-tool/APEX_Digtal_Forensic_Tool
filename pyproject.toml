@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "defusedxml>=0.7.1",
   "jsonschema>=4.22",
+  "rfc3339-validator>=0.1.4",
   "pytsk3>=20260715",
   "tzdata; platform_system == 'Windows'",
 ]

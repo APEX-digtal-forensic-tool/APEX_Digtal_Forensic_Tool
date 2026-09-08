@@ -133,6 +133,15 @@ Annotation/Tag is a retained product ownership boundary, not a dedicated current
 
 Core blocks persistence of prompts, API keys, raw provider bodies, and chain-of-thought. Provider output cannot independently change custody, approve a report, or become a confirmed finding.
 
+### AI Data Governance Owners
+
+`CaseAiPolicyService` owns immutable policy revisions. `AiProjectionService` resolves existing
+source DTOs; the domain projection function selects validated structural fields and reuses
+`redact_secret_fields`. The pure egress evaluator owns deterministic decisions; `AiEgressService`
+owns source verification and audit-before-return. SQLite owns policy/audit persistence and integrity.
+These owners have no provider, prompt or transmission responsibility. Existing AI Assistance and
+Context owners remain unchanged. See [AI Data Governance](AI_DATA_GOVERNANCE.md).
+
 ## 10. Report and Renderer Ownership
 
 | Owner | Responsibility |

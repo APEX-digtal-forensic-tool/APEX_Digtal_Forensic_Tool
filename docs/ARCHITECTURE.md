@@ -117,6 +117,15 @@ Core의 AI 계약은 snapshot-first, provider-neutral, citation/review 기반이
 - AI result를 filesystem/artifact/timeline Observed Fact로 승격하지 않음
 - 승인 keyword를 자동 활성화하거나 search를 자동 실행하지 않음
 
+### AI Data Governance
+
+Case AI policy, data classification, deterministic egress evaluation, safe structural projection과
+append-only assessment audit가 Engine contract로 추가되었다. `CaseAiPolicyService`,
+`AiProjectionService`, `AiEgressService`는 기존 repository/DTO와 Secret Redaction 규칙을 재사용하며
+provider 실행이나 전송을 수행하지 않는다. 누락된 정책은 deny이고 변환 후에는 재평가가 필요하다.
+기존 optional provider 호출 경로에 대한 자동 강제 적용은 이번 Engine contract 범위에 포함되지 않는다.
+상세 의미와 통합 책임은 [AI Data Governance](AI_DATA_GOVERNANCE.md)를 따른다.
+
 ## 9. Report Architecture
 
 `reports`는 mutable workflow header이고 `report_versions`/sections/references는 immutable content다. Review와 approval/revocation은 optimistic revision과 hash-chain append-only event로 저장된다. Approval/export는 content fingerprint와 verified custody snapshot을 확인한다.

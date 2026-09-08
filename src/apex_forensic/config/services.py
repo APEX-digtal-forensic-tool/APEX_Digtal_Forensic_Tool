@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from apex_forensic.adapters.artifacts import (
@@ -36,6 +36,11 @@ from apex_forensic.application.services import (
     TimelineService,
     ViewProjectionService,
 )
+from apex_forensic.application.services.ai_governance import (
+    AiEgressService,
+    AiProjectionService,
+    CaseAiPolicyService,
+)
 from apex_forensic.ports.ai_assistance import AiAssistanceProviderPort
 
 
@@ -59,6 +64,23 @@ class ServiceBundle:
     context: ContextService
     views: ViewProjectionService
     interface: EngineInterfaceService
+    ai_policies: CaseAiPolicyService = field(init=False)
+    ai_projections: AiProjectionService = field(init=False)
+    ai_egress: AiEgressService = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Compose additive governance services without changing the bundle constructor."""
+
+        clock = SystemClock()
+        ids = UuidGenerator()
+        self.ai_policies = CaseAiPolicyService(
+            repository=self.repository, cases=self.repository, clock=clock, id_generator=ids,
+        )
+        self.ai_projections = AiProjectionService(sources=self.repository, cases=self.repository)
+        self.ai_egress = AiEgressService(
+            repository=self.repository, projections=self.ai_projections,
+            clock=clock, id_generator=ids,
+        )
 
     def close(self) -> None:
         """Close underlying resources."""

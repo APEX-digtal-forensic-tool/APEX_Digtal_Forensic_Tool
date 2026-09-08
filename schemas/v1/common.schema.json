@@ -3,6 +3,9 @@
   "$id": "https://schemas.apex-forensics.dev/v1/common.schema.json",
   "title": "APEX Common Types",
   "$defs": {
+    "dataClassification": {
+      "enum": ["PUBLIC", "INTERNAL", "SENSITIVE", "SECRET"]
+    },
     "uuid": {
       "type": "string",
       "format": "uuid"

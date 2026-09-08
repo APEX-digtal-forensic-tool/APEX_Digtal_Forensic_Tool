@@ -317,6 +317,15 @@ def sanitize_error_message(message: str | None) -> str | None:
     return message[:500]
 
 
+def redact_secret_fields(value: dict[str, Any]) -> dict[str, Any]:
+    """Return a detached field-name-redacted copy; arbitrary text is not secret-scanned.
+
+    Consumers exporting untrusted text must additionally restrict the selected fields.
+    """
+
+    return _redact_mapping(value)
+
+
 def _redact_mapping(value: dict[str, Any]) -> dict[str, Any]:
     redacted: dict[str, Any] = {}
     for key, item in value.items():
