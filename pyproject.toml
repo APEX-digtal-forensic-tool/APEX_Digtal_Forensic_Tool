@@ -60,6 +60,16 @@ expert-witness = [
 virtual-disk = [
   "libvhdi-python>=20251119",
 ]
+backend = [
+  "sqlalchemy[asyncio]>=2.0",
+  "alembic>=1.13",
+  "asyncpg>=0.29",
+  "aiosqlite>=0.20",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "python-jose[cryptography]>=3.3",
+  "passlib[bcrypt]>=1.7",
+]
 
 [project.scripts]
 apex-forensic = "apex_forensic.cli:main"
@@ -71,6 +81,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 apex_forensic = ["py.typed"]
 apex_mcp = ["py.typed"]
+apex_backend = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -88,7 +99,7 @@ select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
 python_version = "3.11"
 strict = true
 pretty = true
-files = ["src/apex_forensic", "src/apex_mcp"]
+files = ["src/apex_forensic", "src/apex_mcp", "src/apex_backend"]
 mypy_path = "src"
 explicit_package_bases = true
 
