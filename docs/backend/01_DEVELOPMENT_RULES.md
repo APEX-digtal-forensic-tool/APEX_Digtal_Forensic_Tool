@@ -89,3 +89,12 @@ Phase 하나가 완료되면 (위 5절 세 가지 끝낸 뒤) GitHub PR을 만�
 - 머지는 사람이 한다. Claude Code는 PR 생성까지만.
 - 같은 Phase 내 여러 커밋은 하나의 PR로 묶는다.
 - PR 설명에는 완료 조건 체크리스트, 추가된 테스트 수, ruff/mypy 결과를 포함한다.
+
+## 7. 커밋 작성자 규칙
+
+- 커밋 메시지에 `Co-Authored-By:` 트레일러를 절대 추가하지 않는다.
+  GitHub 기여자 목록에 외부 계정(Claude 등)이 나타나게 되므로 금지.
+- author는 항상 `hyj090915 <hyj090915@gmail.com>`이어야 한다.
+- 커밋 전 `git log --format="%an <%ae>" -1` 로 작성자 확인.
+- `uv.lock`이 변경된 경우 반드시 같은 커밋 또는 별도 커밋으로 포함한다
+  (CI가 `uv lock --check` / `uv sync --locked`로 검증함).
