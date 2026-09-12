@@ -22,8 +22,11 @@ dev = [
   "mcp==2.1.1",
   "mypy>=1.10",
   "pytest>=8.2",
+  "pytest-asyncio>=1.0",
   "ruff>=0.5",
   "types-defusedxml>=0.7.0",
+  "types-passlib>=1.7",
+  "types-python-jose>=3.3",
 ]
 mcp-server = [
   "mcp==2.1.1",
@@ -105,4 +108,12 @@ explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 module = ["jsonschema.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["alembic.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["cryptography.*"]
 ignore_missing_imports = true

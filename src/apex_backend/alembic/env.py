@@ -7,7 +7,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import apex_backend.models  # noqa: F401 — registers models on Base.metadata
@@ -38,8 +38,8 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection: object) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)  # type: ignore[arg-type]
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
 

@@ -157,7 +157,8 @@ class AuthService:
         result = await db.execute(
             select(User).where(User.email == email, User.tenant_id == tenant_id)
         )
-        return result.scalar_one_or_none()
+        user: User | None = result.scalar_one_or_none()
+        return user
 
 
 __all__ = ["AuthError", "AuthService", "hash_password", "verify_password"]

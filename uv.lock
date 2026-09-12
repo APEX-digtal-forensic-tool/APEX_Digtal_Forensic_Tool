@@ -104,8 +104,11 @@ dev = [
     { name = "mcp" },
     { name = "mypy" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "ruff" },
     { name = "types-defusedxml" },
+    { name = "types-passlib" },
+    { name = "types-python-jose" },
 ]
 expert-witness = [
     { name = "libewf-python" },
@@ -158,6 +161,7 @@ requires-dist = [
     { name = "passlib", extras = ["bcrypt"], marker = "extra == 'backend'", specifier = ">=1.7" },
     { name = "pillow", marker = "extra == 'browser-media'", specifier = ">=10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "python-evtx", marker = "extra == 'windows-artifacts'", specifier = ">=0.8.1" },
     { name = "python-jose", extras = ["cryptography"], marker = "extra == 'backend'", specifier = ">=3.3" },
     { name = "python-registry", marker = "extra == 'windows-artifacts'", specifier = ">=1.3.1" },
@@ -171,6 +175,8 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'backend'", specifier = ">=2.0" },
     { name = "types-defusedxml", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "types-passlib", marker = "extra == 'dev'", specifier = ">=1.7" },
+    { name = "types-python-jose", marker = "extra == 'dev'", specifier = ">=3.3" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "uvicorn", marker = "extra == 'backend'", specifier = ">=0.30" },
     { name = "uvicorn", marker = "extra == 'mcp-server'", specifier = "==0.52.4" },
@@ -2308,6 +2314,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-asyncio"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/43/7c/d36d04db312ecf4298932ef77e6e4a9e8ad017906e24e34f0b0c361a2473/pytest_asyncio-1.4.0.tar.gz", hash = "sha256:c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42", size = 58514, upload-time = "2026-05-26T09:56:04.083Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/e2/08a497ef684b88559c9cc5f4ad53a37e7b99e727094a86d6ea32536d5d3c/pytest_asyncio-1.4.0-py3-none-any.whl", hash = "sha256:933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1", size = 16930, upload-time = "2026-05-26T09:56:02.576Z" },
+]
+
+[[package]]
 name = "python-evtx"
 version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2968,6 +2987,36 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/da/d2/4553c8fa9cdebfe1e84b950cf790a4d2376a97fa016e43f7c65323fa6c7d/types_defusedxml-0.7.0.20260504.tar.gz", hash = "sha256:2ab2828a3f97111ba1c16cee273ad4124a831fc9198c41bf8368ff6ea48ad300", size = 10729, upload-time = "2026-05-04T05:22:50.192Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/2d/8a4b5ba1d732b8bc691f0efbb1c6f77cb5f6f473b2afe181d83d910773c5/types_defusedxml-0.7.0.20260504-py3-none-any.whl", hash = "sha256:a959e3a0a43b93e464bd625d91ec9193a2703ddc10443bdd627792485fae0b10", size = 13467, upload-time = "2026-05-04T05:22:49.319Z" },
+]
+
+[[package]]
+name = "types-passlib"
+version = "1.7.7.20260211"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/f4/718ff8cbef9366e597aefd58929321702d3e183998cea89949ab5423281f/types_passlib-1.7.7.20260211.tar.gz", hash = "sha256:af73afffe1ce94c95c7f6072bd261572c29845de74fdffa3a265fc7634bca056", size = 25666, upload-time = "2026-02-10T15:11:59.517Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/6a/e9fc6a5b8f9a380a4a56b9f1e4dba5c6899561868017b17f6de382808b6f/types_passlib-1.7.7.20260211-py3-none-any.whl", hash = "sha256:c0f1ad440c513a6c07f333b28249530686056fd54a7b3ac6128ae31fd46305d3", size = 40457, upload-time = "2026-02-10T15:11:58.647Z" },
+]
+
+[[package]]
+name = "types-pyasn1"
+version = "0.6.0.20260724"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/ba/a3be5620ec108bfb21481a7796a3c352e627969fa67db6a033cdaeacd117/types_pyasn1-0.6.0.20260724.tar.gz", hash = "sha256:00b9324c1ce8167ec1dc503018cc7d4f190f5770dd3e9a365e897e290e0532db", size = 17373, upload-time = "2026-07-24T04:57:47.402Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/ab/9936badd94cfbfb73d2ec83409e203fee44fc83a744e09a8779b37042f45/types_pyasn1-0.6.0.20260724-py3-none-any.whl", hash = "sha256:487987e4492ce2e1ba6f0048f025165383c49d5d16a345ae5dfe7d44045b7910", size = 24054, upload-time = "2026-07-24T04:57:46.482Z" },
+]
+
+[[package]]
+name = "types-python-jose"
+version = "3.5.0.20260408"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "types-pyasn1" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a1/b1/87cdb410d22913df39d7aad8864f94a4f5ad8d507ee07556888fdbe55e19/types_python_jose-3.5.0.20260408.tar.gz", hash = "sha256:3f8dccdc327bfffea7a81084ea1cea722fa499f13c1d04f7978b491dd36e0cf1", size = 11989, upload-time = "2026-04-08T04:34:10.577Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/83/df2b34e64f0a674935d718471cf10fb392a7e5bdb0e9e7c739885b62d274/types_python_jose-3.5.0.20260408-py3-none-any.whl", hash = "sha256:968d8a8eac1ff9da249d6335a2bb9f82288d59ba23afe91fcc2662eb9f485e2a", size = 14694, upload-time = "2026-04-08T04:34:09.747Z" },
 ]
 
 [[package]]

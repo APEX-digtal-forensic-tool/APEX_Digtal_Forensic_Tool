@@ -31,7 +31,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - name: Sync locked quality environment
-        run: uv sync --locked --extra dev --extra mcp-server
+        run: uv sync --locked --extra dev --extra mcp-server --extra backend
       - name: MCP contract tests
         run: uv run --locked pytest -q tests/mcp
       - name: Lint and type check
