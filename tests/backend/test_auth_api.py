@@ -39,11 +39,10 @@ SQLITE_URL = "sqlite+aiosqlite:///:memory:"
 async def app_client():
     """FastAPI test app backed by in-memory SQLite."""
     app = create_app(SQLITE_URL)
-    async with app.router.lifespan_context(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            yield app, client
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        yield app, client
 
 
 @pytest_asyncio.fixture
@@ -192,7 +191,7 @@ async def test_jwks_endpoint_structure(app_client) -> None:
 @pytest.mark.asyncio
 async def test_login_success(app_client) -> None:
     """Seed a user directly in the app's DB and verify login returns tokens."""
-    app, client = app_client
+    _app, client = app_client
 
     # Access the app's engine via the same SQLITE_URL.
     # In-memory SQLite: each engine gets its own DB, so we use the app's own
