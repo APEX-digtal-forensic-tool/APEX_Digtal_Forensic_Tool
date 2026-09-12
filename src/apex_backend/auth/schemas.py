@@ -28,4 +28,25 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
-__all__ = ["LoginRequest", "RefreshRequest", "TokenResponse"]
+class ConfirmationRequest(BaseModel):
+    """POST /confirmations request body."""
+
+    case_id: str
+    tool_name: str
+    request_fingerprint: str
+    target_ids: list[str] = []
+
+
+class ConfirmationResponse(BaseModel):
+    """Successful grant issuance response."""
+
+    grant_id: str
+
+
+__all__ = [
+    "ConfirmationRequest",
+    "ConfirmationResponse",
+    "LoginRequest",
+    "RefreshRequest",
+    "TokenResponse",
+]
