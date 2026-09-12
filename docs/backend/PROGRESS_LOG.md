@@ -8,27 +8,28 @@
 
 ## 현재 상태
 
-Phase: 2 대기 중 (인증/토큰 발급 API)
-마지막 업데이트: 2026-09-11
+Phase: 3 대기 중 (MCP TokenVerifier)
+마지막 업데이트: 2026-09-12
 
 ## 마지막 진행 상황
 
-Phase 1 완료.
-- `src/apex_backend/` 패키지 생성 (`__init__.py`, `py.typed`, `database.py`, `models.py`)
-- ORM 모델 4개: `User`, `CaseTenancy`, `UserSession`, `ConfirmationGrantRow`
-- Alembic 설정: `alembic.ini` (루트), `src/apex_backend/alembic/env.py` (async), `versions/0001_initial_schema.py`
-- `pyproject.toml`: `[backend]` 옵셔널 그룹 추가, mypy files에 `src/apex_backend` 추가
-- pytest 9개 추가 (`tests/backend/test_models.py`), 9/9 통과
-- ruff clean, mypy clean (5 source files)
-- `docs/backend/data-model/README.md` 작성, `specs/01_data_model_and_storage.md` 완료로 표시
+Phase 2 완료.
+- `src/apex_backend/app.py` — FastAPI 앱 팩토리 (`create_app`)
+- `src/apex_backend/auth/` — keys.py, jwt_utils.py, scopes.py, schemas.py, service.py, router.py
+- 엔드포인트: `POST /auth/login`, `POST /auth/refresh`, `GET /.well-known/jwks.json`
+- JWT 서명: RS256 + kid. 클레임: sub/session_id/tenant_id/allowed_case_ids/roles/scopes/iss/aud/jti
+- 비밀번호: bcrypt (passlib)
+- pytest 11개 추가 (`tests/backend/test_auth_api.py`), 11/11 통과 (누적 20/20)
+- ruff clean, mypy clean (13 source files)
+- `docs/backend/auth-api/README.md` 작성, `specs/02_auth_token_issuance_api.md` 완료로 표시
 
 ## 다음 작업
 
-Phase 2: `specs/02_auth_token_issuance_api.md` 읽고 착수.
-- FastAPI 앱 (`src/apex_backend/app.py`)
-- 로그인 엔드포인트 (`POST /auth/login`) — 패스워드 검증 + JWT 발급
-- 리프레시 엔드포인트 (`POST /auth/refresh`)
-- JWT 서명: RS256 or ES256 (스펙에 결정 위임, 없으면 HS256 + SECRET_KEY 환경변수로 시작)
+Phase 3: `specs/03_mcp_token_verifier.md` 읽고 착수.
+- `JwtTokenVerifier` 구현 (`src/apex_backend/` 또는 `src/apex_mcp/`)
+- Phase 2 JWKS 엔드포인트로 공개키 가져와 서명 검증
+- exp/iss/aud 검증, 실패 시 None 반환 (예외 금지)
+- 공개키 캐싱 + 주기적 갱신
 
 ## 결정 대기
 
@@ -53,3 +54,10 @@ Phase 2: `specs/02_auth_token_issuance_api.md` 읽고 착수.
 - Phase 1 완료: `src/apex_backend/` 패키지, ORM 모델 4개, Alembic 마이그레이션,
   pytest 9개 신규 (9/9 통과), ruff/mypy 클린.
   as-built: `docs/backend/data-model/README.md`.
+- PR 규칙 추가 (`01_DEVELOPMENT_RULES.md` 6절): Phase 완료 후 PR 생성, 머지는 사람이 함.
+
+### 2026-09-12
+- Phase 2 완료: FastAPI 앱 + RS256 JWT 발급 API + JWKS 엔드포인트.
+  pytest 11개 신규 (누적 20/20 통과), ruff/mypy 클린.
+  as-built: `docs/backend/auth-api/README.md`.
+  브랜치: `feat/backend-phase-2-auth-api` → PR 생성 예정.
