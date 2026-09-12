@@ -14,6 +14,7 @@ from apex_mcp.confirmation import (
     ConfirmationGrant,
     ConfirmationProvider,
     ConfirmationRequest,
+    DenyAllConfirmationProvider,
     InMemoryConfirmationProvider,
 )
 from apex_mcp.context_bridge import is_authenticated_actor
@@ -240,6 +241,70 @@ class InMemoryFrontendSecurityProvider:
         )
 
 
+class PersistentFrontendSecurityProvider:
+    """JWT-claims-backed FrontendSecurityProvider for production deployments.
+
+    ``resolve_session`` reconstructs ``FrontendSession`` directly from the
+    verified ``AccessToken.claims`` — no DB round-trip needed (Option A benefit).
+
+    ``confirmation_for`` and ``authorize`` delegate to an injected
+    ``ConfirmationProvider``; swap in a DB-backed implementation (Phase 5) to
+    enable persistent confirmation grants.
+    """
+
+    def __init__(
+        self,
+        confirmation_provider: ConfirmationProvider | None = None,
+    ) -> None:
+        self._confirmations: ConfirmationProvider = (
+            confirmation_provider if confirmation_provider is not None
+            else DenyAllConfirmationProvider()
+        )
+
+    def resolve_session(self, access_token: AccessToken) -> FrontendSession:
+        """Build FrontendSession from JWT claims in *access_token*."""
+        claims = access_token.claims or {}
+
+        actor_id = str(claims.get("sub") or access_token.subject or "").strip()
+        session_id = str(claims.get("session_id", "")).strip()
+        tenant_id = str(claims.get("tenant_id", "")).strip()
+
+        if not actor_id or not session_id or not tenant_id:
+            raise McpAuthorizationDeniedError("frontend.session")
+
+        raw_case_ids = claims.get("allowed_case_ids") or []
+        raw_roles = claims.get("roles") or []
+
+        allowed_case_ids = frozenset(
+            str(c).strip() for c in raw_case_ids if isinstance(c, str) and c.strip()
+        )
+        roles = frozenset(
+            str(r).strip().upper() for r in raw_roles if isinstance(r, str) and r.strip()
+        )
+
+        return FrontendSession(
+            actor_id=actor_id,
+            session_id=session_id,
+            tenant_id=tenant_id,
+            allowed_case_ids=allowed_case_ids,
+            roles=roles,
+        )
+
+    def confirmation_for(
+        self,
+        session: FrontendSession,
+        *,
+        case_id: str,
+        tool_name: str,
+        request_fingerprint: str,
+        target_ids: tuple[str, ...],
+    ) -> ConfirmationRequest | None:
+        return None
+
+    def authorize(self, request: ConfirmationRequest) -> bool:
+        return self._confirmations.authorize(request)
+
+
 class StaticBearerTokenVerifier:
     """Constant-time verifier for local development and deployment smoke tests."""
 
@@ -273,5 +338,6 @@ __all__ = [
     "FrontendSecurityProvider",
     "FrontendSession",
     "InMemoryFrontendSecurityProvider",
+    "PersistentFrontendSecurityProvider",
     "StaticBearerTokenVerifier",
 ]
