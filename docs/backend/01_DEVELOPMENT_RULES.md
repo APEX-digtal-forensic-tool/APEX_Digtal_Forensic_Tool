@@ -79,3 +79,13 @@ Phase 하나(스펙 파일 하나)의 구현이 끝나면:
    사실을 기록한다.
 
 이 세 가지를 다 하기 전까지는 그 Phase를 완료로 치지 않는다.
+
+## 6. PR 규칙 (Phase 완료 후 필수)
+
+Phase 하나가 완료되면 (위 5절 세 가지 끝낸 뒤) GitHub PR을 만든다.
+
+- base branch: `main`
+- PR 제목: `feat(backend): Phase N — <스펙 제목 한줄 요약>`
+- 머지는 사람이 한다. Claude Code는 PR 생성까지만.
+- 같은 Phase 내 여러 커밋은 하나의 PR로 묶는다.
+- PR 설명에는 완료 조건 체크리스트, 추가된 테스트 수, ruff/mypy 결과를 포함한다.
