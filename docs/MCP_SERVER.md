@@ -202,8 +202,36 @@ MCP 전용 테스트는 49건 통과했다. 최종 wheel의 clean install과 실
 
 전체 회귀 기준선에는 MCP 변경 전부터 존재한 두 실패가 있다. Firefox NSS decryption result redaction schema 불일치와 synthetic benchmark capability unavailable이며, M7 변경 범위와 무관하다.
 
-## 6. Windows 검증 상태와 다음 단계
+## 6. Backend 통합 완료 및 다음 단계
+
+### 6-1. Backend 인증 통합 (Phase 6 완료)
+
+`apex_backend` + `apex_mcp` HTTP 모드 간 end-to-end 인증 체인이 완성됐다.
+
+**구현 완료 항목:**
+
+- `JwtTokenVerifier`: JWKS fetch + TTL 캐시 + RS256 서명 검증 → `AccessToken | None`
+- `PersistentFrontendSecurityProvider`: JWT 클레임에서 `FrontendSession` 추출 (DB 불필요)
+- `DbFrontendSecurityProvider`: sync SQLAlchemy로 `ConfirmationGrantRow` 조회/소비
+- `POST /confirmations`: JWT 검증 후 1회용 5분 grant 발급
+- E2E 테스트 4건: JWT → MCP tool (정상), 위조 토큰 → 401, 허용되지 않은 case → TENANT_SCOPE_VIOLATION, InMemory 경로 유지
+
+**보안 체인:**
+
+```
+POST /auth/login → access_token (RS256 JWT)
+     ↓
+MCP HTTP (Bearer <token>) → JwtTokenVerifier → PersistentFrontendSecurityProvider → FrontendSession
+     ↓
+POST /confirmations (Bearer <token>) → ConfirmationGrantRow (DB)
+     ↓
+MCP confirm tool → DbFrontendSecurityProvider.confirmation_for/authorize → 1회 소비
+```
+
+배포 가이드: [`docs/backend/deployment/README.md`](backend/deployment/README.md)
+
+### 6-2. Windows 검증 상태
 
 MCP protocol과 Tool 동작은 macOS/Linux에서도 동적으로 검증할 수 있으며 M8의 local clean install·stdio·Inspector 검사는 macOS에서 통과했다. Windows가 필요한 지점은 최종 배포/제품 통합이다. GitHub Actions [MCP packaging and Windows run #1](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/actions/runs/33482524240)에서 Ubuntu contract/security와 Inspector, `windows-latest` Python 3.11/3.12 wheel build, hash-locked clean install, `apex-mcp.exe` stdio/EOF/한글 경로 검증이 모두 통과했다. 이 hosted run을 M8의 package-level Windows evidence로 보존한다.
 
-제품 통합에서는 설치된 Desktop bundle의 console lifecycle, 경로·권한·한국어 환경, Backend/Frontend 연결과 Windows-only provider를 함께 검증해야 한다. 또한 in-memory security provider를 Backend의 영속 identity/session/approval policy store로 교체하고 Desktop Frontend가 같은 fingerprint approval port를 호출해야 한다. 새로운 Domain Tool은 Core에 명시적 Descriptor와 transport contract가 추가된 뒤 별도 단계로 검토한다.
+제품 통합에서는 설치된 Desktop bundle의 console lifecycle, 경로·권한·한국어 환경, Backend/Frontend 연결과 Windows-only provider를 함께 검증해야 한다. 새로운 Domain Tool은 Core에 명시적 Descriptor와 transport contract가 추가된 뒤 별도 단계로 검토한다.
