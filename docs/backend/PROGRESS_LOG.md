@@ -8,9 +8,8 @@
 
 ## 현재 상태
 
-Phase: 1~11, 13 완료 (PR #14, #15, #16 머지 완료). Phase 14, 15 대기 (바로
-착수 가능). Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정, 스펙
-아님).
+Phase: 1~11, 13, 14 완료 (PR #14~#17 머지 완료/대기). Phase 15 대기 (바로
+착수 가능). Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정, 스펙 아님).
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
@@ -24,7 +23,7 @@ Phase 10 완료 (apex-mcp CLI JWT 인증 체인 배선, PR #14 머지됨):
 - `docs/backend/deployment/README.md` 4단계 명령어 수정.
 - `tests/mcp/test_cli_jwt_subprocess.py` 신규: subprocess JWT 인증 검증.
 
-Phase 11 완료 (confirmation grant 소비 경쟁 조건 수정, PR #15 머지 대기):
+Phase 11 완료 (confirmation grant 소비 경쟁 조건 수정, PR #15 머지 완료):
 - `src/apex_backend/auth/db_confirmation.py` `authorize()`: 읽기-검사-쓰기를
   원자적 `UPDATE ... WHERE uses_count < max_uses`로 교체. 두 요청이 동시에
   같은 grant를 소비하려 해도 정확히 하나만 True를 반환한다.
@@ -53,25 +52,29 @@ Phase 11 완료 (confirmation grant 소비 경쟁 조건 수정, PR #15 머지 �
 갱신. 전체 근거는 `docs/backend/AUDIT_2026-09-15_part2_full_recheck.md`
 참고.
 
-Phase 13 완료 (CI tests/backend 검증 공백 수정, PR #16 머지 대기):
+Phase 13 완료 (CI tests/backend 검증 공백 수정, PR #16 머지 완료):
 - `.github/workflows/mcp-ci.yml` `contract-and-security` job: `MCP contract tests`
   스텝 바로 뒤에 `Backend tests` 스텝(`uv run --locked pytest -q tests/backend`)
   추가. `tests/unit`(Core)·`tests/integration`은 이번 범위 제외.
 - 로컬 `tests/backend` 45/45 통과 재확인.
-- `tests/unit`(Core, 438개)·`tests/integration`(29개) CI 추가는 Core 담당과
-  별도 상의 필요 — PR 설명에 제외 사유 명시.
 - `docs/backend/ci-backend-tests/README.md` as-built 신규 작성.
+
+Phase 14 완료 (`--log-level` 죽은 설정값 실제 로깅 적용, PR #17 머지 대기):
+- `src/apex_mcp/__main__.py`: `import logging` 추가, `_logger = logging.getLogger(__name__)`.
+  `main()` config 검증 직후 `logging.basicConfig(level=config.log_level, ...)`
+  + `logging.root.setLevel(config.log_level)` 호출. 기동 시 DEBUG 로그 한 건 기록.
+- `tests/mcp/test_log_level.py` 신규 (4개): `--log-level DEBUG/WARNING` 설정 후
+  `logging.root.level` 검증, `caplog`으로 DEBUG 시작 로그 포착·WARNING 시 미포착 확인.
+- `docs/backend/log-level-wiring/README.md` as-built 신규 작성.
+- 전체 115개 통과 (mcp 70, backend 45), ruff/mypy 클린.
 
 ## 다음 작업
 
-1. Phase 14 착수: `specs/14_log_level_wiring.md` — `--log-level` 죽은
-   설정값 실제로 적용. 바로 시작 가능.
-2. Phase 15 착수: `specs/15_jwks_failure_logging.md` — JWKS 조회 실패
-   로깅 추가. Phase 14와 로깅 체계를 공유하는 게 이상적이라, 가능하면
-   Phase 14 이후에 진행 (필수는 아님, 완전 독립 진행도 가능).
+1. Phase 15 착수: `specs/15_jwks_failure_logging.md` — JWKS 조회 실패
+   로깅 추가. Phase 14 로깅 체계(`logging.getLogger(__name__)`) 재사용.
+   바로 시작 가능.
 
-Phase 14/15 둘 다 끝나면 이 섹션을 "없음. Phase 12는 대기 (사람 확인 필요)"로
-갱신할 것.
+Phase 15 끝나면 이 섹션을 "없음. Phase 12는 대기 (사람 확인 필요)"로 갱신할 것.
 
 Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
 `specs/12_refresh_token_rotation_logout.md` "주의" 절 참고, 범위를
@@ -83,7 +86,6 @@ Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
 - Phase 12 (refresh token rotation/로그아웃) — 범위 확정 전까지 대기
 - `tests/unit`(Core)/`tests/integration`을 CI에 추가하는 것 — Core 담당과
   별도 상의 필요, 백엔드가 일방적으로 진행하지 말 것
-- Phase 12 (refresh token rotation/로그아웃) — 범위 확정 전까지 대기
 
 ## 결정 대기
 
@@ -181,4 +183,5 @@ Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
 - Phase 11 완료: confirmation grant 소비 경쟁 조건 수정 (원자적 UPDATE).
   PR #15 생성 (머지 완료).
 - Phase 13 완료: CI `tests/backend` 검증 공백 수정. `mcp-ci.yml`에 `Backend tests`
-  스텝 추가. 로컬 45/45 통과 확인. PR #16 생성 (머지 대기).
+  스텝 추가. 로컬 45/45 통과 확인. PR #16 생성 (머지 완료).
+- Phase 14 완료: `--log-level` 죽은 설정값 실제 로깅에 적용. PR #17 생성 (머지 대기).

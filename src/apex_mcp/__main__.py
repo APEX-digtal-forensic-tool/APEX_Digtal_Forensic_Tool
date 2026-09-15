@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
@@ -20,6 +21,8 @@ from apex_mcp.frontend_security import (
 from apex_mcp.http_transport import HttpTransportConfig, run_http
 from apex_mcp.m7_tools import M7_TOOL_NAMES, m7_bindings
 from apex_mcp.server import create_runtime
+
+_logger = logging.getLogger(__name__)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -100,6 +103,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         log_level=args.log_level.upper(),
         ai_provider=ai_provider,
     ).validate()
+    logging.basicConfig(level=config.log_level, format="%(levelname)s %(name)s %(message)s")
+    logging.root.setLevel(config.log_level)
+    _logger.debug(
+        "apex-mcp starting (transport=%s, log_level=%s)", args.transport, config.log_level
+    )
     if args.transport == "stdio":
         create_runtime(config, bindings=m7_bindings()).run_stdio()
         return 0
