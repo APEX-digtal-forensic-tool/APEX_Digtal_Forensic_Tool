@@ -8,24 +8,41 @@
 
 ## 현재 상태
 
-Phase: 1~9 전부 완료. 백엔드 마스터플랜 전체 완료.
+Phase: 1~10 완료 (Phase 10 PR 생성, 머지 대기). Phase 11 대기.
+Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정, 스펙 아님).
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
 
-Phase 9 완료 (레거시 mcp_server 정리):
-- `mcp_server/` 디렉터리 삭제 (git untracked 상태였음, `git rm` 불필요)
-- `.gitignore`에 `mcp_server/` 추가 (재발 방지)
-- `ruff check .` 레포 전체 기준 클린 확인
-- docs/ 안 `mcp_server/` 참조 검색: specs/09 파일만 해당, 별도 정리 불필요
+Phase 10 완료 (apex-mcp CLI JWT 인증 체인 배선):
+- `src/apex_mcp/__main__.py`: `--http-jwks-uri`/`APEX_JWKS_URI`,
+  `--http-db-url`/`APEX_CONFIRMATION_DB_URL`, `--http-jwks-cache-ttl`
+  인자 추가. JWKS URI 지정 시 `JwtTokenVerifier` + `DbFrontendSecurityProvider`
+  프로덕션 모드, 미지정 시 기존 `StaticBearerTokenVerifier` +
+  `InMemoryFrontendSecurityProvider` 개발용 모드 유지.
+- `docs/backend/deployment/README.md` 4단계 명령어 수정 (잘못된
+  `--http --port 8765` → 올바른 `--transport http --http-port 8765`).
+  `APEX_CONFIRMATION_DB_URL` 환경변수 항목 추가.
+- `tests/mcp/test_cli_jwt_subprocess.py` 신규: apex-mcp CLI를 실제
+  서브프로세스(`subprocess.Popen`)로 띄워서 유효 JWT → non-401,
+  위조 JWT → 401 검증. 통과 확인.
+- 전체 테스트 564 통과, ruff/mypy 클린.
+- PR #14 생성 (머지 대기).
 
 ## 다음 작업
 
-없음. Phase 1~9 전부 완료. 새 작업은 사람이 별도 기획서를 주면 시작.
+1. Phase 11 착수: `specs/11_confirmation_grant_race_fix.md` — confirmation
+   grant 1회 소비 경쟁 조건 수정. 바로 시작 가능.
+2. Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
+   `specs/12_refresh_token_rotation_logout.md` "주의" 절 참고, 범위를
+   사람과 먼저 확정해야 함.
+
+Phase 11 끝나면 이 섹션을 "없음"으로 갱신할 것.
 
 보류 중인 항목(착수 금지):
 - Windows Desktop bundle 제품 통합 검증 — 프론트/패키징 담당과 협의 필요
 - Case/Evidence/Search 신규 Domain Tool — Core Descriptor 열릴 때까지 대기
+- Phase 12 (refresh token rotation/로그아웃) — 범위 확정 전까지 대기
 
 ## 결정 대기
 
@@ -95,3 +112,27 @@ Phase 9 완료 (레거시 mcp_server 정리):
   PROGRESS_LOG.md 전체 동기화. PR #11 생성 (머지 완료).
 - Phase 9 완료: `mcp_server/` 디렉터리 삭제, `.gitignore`에 `mcp_server/` 추가,
   `ruff check .` 클린 확인. PR #12 생성. 백엔드 마스터플랜 Phase 1~9 전부 완료.
+
+### 2026-09-15 (재검토)
+- Phase 1~9 완료 후 "테스트 green = 문제 없음" 결론에 대한 재검증 요청 받음.
+  실행 경로를 직접 추적해서 재조사, 추측 없이 코드/재현으로만 판단.
+- 확인된 실제 문제 2건: (1) `apex-mcp` CLI가 `JwtTokenVerifier`/
+  `DbFrontendSecurityProvider`를 안 쓰고 여전히 개발용 스텁으로만 동작
+  (배포 가이드 명령어도 이것 때문에 실행 불가, 재현함). (2)
+  `DbFrontendSecurityProvider.authorize()`의 1회 소비 로직에 경쟁 조건
+  있음 (원자적 UPDATE/행 잠금 없음).
+- 확인했으나 문제 아님으로 판정한 것 2건: `PersistentFrontendSecurityProvider
+  .confirmation_for`가 항상 `None`인 건 의도된 추상 기반 설계 (서브클래스
+  `DbFrontendSecurityProvider`가 실제 로직 담당, docstring으로 확인).
+  `JwtTokenVerifier`의 `client_id`에 issuer를 넣는 것도 실제로 읽는 곳이
+  없어서 영향 없음.
+- 참고 사항 1건 (버그 아님): refresh token rotation/로그아웃 엔드포인트
+  없음. 어떤 스펙에도 요구사항 명시된 적 없음.
+- Core 쪽 문제 1건 별도 확인 (Firefox NSS redaction 스키마 vs
+  `_SAFE_INDICATOR_FIELD_NAMES` 화이트리스트 불일치) — 백엔드/MCP 범위
+  밖이라 이 마스터플랜에는 안 넣고 Core 담당에게 별도 전달.
+- `specs/10_cli_jwt_wiring_fix.md`, `specs/11_confirmation_grant_race_fix.md`,
+  `specs/12_refresh_token_rotation_logout.md` 신규 작성.
+  `00_MASTER_PLAN.md` 5절/6-1절 Phase 9 상태 정정(완료), 6-3절에 이번
+  재검토 요약 추가. 전체 근거는
+  `docs/backend/AUDIT_2026-09-15_production_wiring.md` 참고.
