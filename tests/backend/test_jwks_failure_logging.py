@@ -63,9 +63,11 @@ def _mock_http_response(body: dict[str, Any]) -> Any:
 async def test_fetch_failure_empty_cache_logs_warning(
     verifier_empty: JwtTokenVerifier, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"):
-        with _mock_http_error():
-            await verifier_empty._fetch_jwks()
+    with (
+        caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"),
+        _mock_http_error(),
+    ):
+        await verifier_empty._fetch_jwks()
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings, "Expected at least one WARNING log when fetch fails with empty cache"
@@ -76,9 +78,11 @@ async def test_fetch_failure_empty_cache_logs_warning(
 async def test_fetch_failure_stale_cache_logs_warning(
     verifier_with_cache: JwtTokenVerifier, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"):
-        with _mock_http_error():
-            await verifier_with_cache._fetch_jwks()
+    with (
+        caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"),
+        _mock_http_error(),
+    ):
+        await verifier_with_cache._fetch_jwks()
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings, "Expected at least one WARNING log when fetch fails with stale cache"
@@ -89,9 +93,11 @@ async def test_fetch_failure_stale_cache_logs_warning(
 async def test_fetch_failure_includes_exc_info(
     verifier_empty: JwtTokenVerifier, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"):
-        with _mock_http_error():
-            await verifier_empty._fetch_jwks()
+    with (
+        caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"),
+        _mock_http_error(),
+    ):
+        await verifier_empty._fetch_jwks()
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings
@@ -110,9 +116,11 @@ async def test_bad_jwk_logs_warning(
 ) -> None:
     malformed_jwks = {"keys": [{"kid": "bad-key", "kty": "RSA", "n": "!!!invalid!!!"}]}
 
-    with caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"):
-        with _mock_http_response(malformed_jwks):
-            await verifier_empty._fetch_jwks()
+    with (
+        caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"),
+        _mock_http_response(malformed_jwks),
+    ):
+        await verifier_empty._fetch_jwks()
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings, "Expected WARNING when JWK parse fails"
@@ -132,11 +140,13 @@ async def test_bad_jwk_does_not_affect_valid_keys(
         ]
     }
 
-    with caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"):
-        with _mock_http_response(mixed_jwks):
-            await verifier_empty._fetch_jwks()
+    with (
+        caplog.at_level(logging.WARNING, logger="apex_backend.auth.jwt_verifier"),
+        _mock_http_response(mixed_jwks),
+    ):
+        await verifier_empty._fetch_jwks()
 
-    assert kid in verifier_empty._keys, "Valid key should still be cached despite bad-key parse failure"
+    assert kid in verifier_empty._keys, "Valid key must be cached despite bad-key failure"
     assert "bad-key" not in verifier_empty._keys
 
 
