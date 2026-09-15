@@ -34,6 +34,8 @@ jobs:
         run: uv sync --locked --extra dev --extra mcp-server --extra backend
       - name: MCP contract tests
         run: uv run --locked pytest -q tests/mcp
+      - name: Backend tests
+        run: uv run --locked pytest -q tests/backend
       - name: Lint and type check
         run: |
           uv run --locked ruff check src tests/mcp tools/verify_mcp_stdio.py tools/verify_mcp_package.py tools/verify_mcp_inspector.py
