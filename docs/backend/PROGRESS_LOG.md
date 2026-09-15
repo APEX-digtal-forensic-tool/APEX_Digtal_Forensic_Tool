@@ -8,8 +8,9 @@
 
 ## 현재 상태
 
-Phase: 1~11 완료 (Phase 11 PR #15 머지 대기).
-Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정, 스펙 아님).
+Phase: 1~11, 13 완료 (PR #14, #15, #16 머지 완료). Phase 14, 15 대기 (바로
+착수 가능). Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정, 스펙
+아님).
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
@@ -32,9 +33,45 @@ Phase 11 완료 (confirmation grant 소비 경쟁 조건 수정, PR #15 머지 �
   호출 재현 테스트 추가. 통과 확인.
 - 전체 테스트 564 통과, ruff/mypy 클린.
 
+2026-09-15 2차 재검토: Phase 10/11 및 Core NSS 스키마 픽스(PR #13, 권태욱)를
+전부 직접 재현해서 재검증함(정상 동작 확인). 이어서 "설정값이 실제로
+쓰이는지", "예외 처리가 흔적을 남기는지", "CI가 실제로 뭘 검증하는지"까지
+점검해서 새 문제 3건 확인:
+- CI(`mcp-ci.yml`)가 `tests/mcp`(66개)만 돌리고 `tests/backend`(45개)는
+  전혀 실행한 적 없음 (`tools/verify_engine_release.py --mcp-only`도
+  전체 pytest 블록을 스킵하는 것 소스로 확인). Phase 7 bcrypt 버그가
+  지금까지 CI에서 안 걸린 이유가 이거였음.
+- `--log-level`/`APEX_MCP_LOG_LEVEL`이 검증만 되고 실제 로깅에 미적용
+  (애초에 `apex_backend`/`apex_mcp`에 `logging` 모듈 자체가 없음).
+- `JwtTokenVerifier._fetch_jwks()`가 JWKS 조회 실패를 로그 없이 완전
+  무음으로 삼킴 (fail-open/fail-closed 동작 자체는 안전, 관측성만 0).
+확인했으나 문제 아닌 것: DPAPI/AI/리포트 렌더러 unavailable 클래스들
+(의도된 null-object 폴백), `overwrite_policy` 제한(의도된 증거 무결성
+보호), 라우터 `NotImplementedError` 스텁(`app.py`가 실제로 연결함).
+`specs/13_ci_backend_tests.md`, `14_log_level_wiring.md`,
+`15_jwks_failure_logging.md` 신규 작성. `00_MASTER_PLAN.md` 5절/6-4절
+갱신. 전체 근거는 `docs/backend/AUDIT_2026-09-15_part2_full_recheck.md`
+참고.
+
+Phase 13 완료 (CI tests/backend 검증 공백 수정, PR #16 머지 대기):
+- `.github/workflows/mcp-ci.yml` `contract-and-security` job: `MCP contract tests`
+  스텝 바로 뒤에 `Backend tests` 스텝(`uv run --locked pytest -q tests/backend`)
+  추가. `tests/unit`(Core)·`tests/integration`은 이번 범위 제외.
+- 로컬 `tests/backend` 45/45 통과 재확인.
+- `tests/unit`(Core, 438개)·`tests/integration`(29개) CI 추가는 Core 담당과
+  별도 상의 필요 — PR 설명에 제외 사유 명시.
+- `docs/backend/ci-backend-tests/README.md` as-built 신규 작성.
+
 ## 다음 작업
 
-없음. Phase 10/11 완료. PR #15 머지 후 모든 버그 수정 완료.
+1. Phase 14 착수: `specs/14_log_level_wiring.md` — `--log-level` 죽은
+   설정값 실제로 적용. 바로 시작 가능.
+2. Phase 15 착수: `specs/15_jwks_failure_logging.md` — JWKS 조회 실패
+   로깅 추가. Phase 14와 로깅 체계를 공유하는 게 이상적이라, 가능하면
+   Phase 14 이후에 진행 (필수는 아님, 완전 독립 진행도 가능).
+
+Phase 14/15 둘 다 끝나면 이 섹션을 "없음. Phase 12는 대기 (사람 확인 필요)"로
+갱신할 것.
 
 Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
 `specs/12_refresh_token_rotation_logout.md` "주의" 절 참고, 범위를
@@ -43,6 +80,9 @@ Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
 보류 중인 항목(착수 금지):
 - Windows Desktop bundle 제품 통합 검증 — 프론트/패키징 담당과 협의 필요
 - Case/Evidence/Search 신규 Domain Tool — Core Descriptor 열릴 때까지 대기
+- Phase 12 (refresh token rotation/로그아웃) — 범위 확정 전까지 대기
+- `tests/unit`(Core)/`tests/integration`을 CI에 추가하는 것 — Core 담당과
+  별도 상의 필요, 백엔드가 일방적으로 진행하지 말 것
 - Phase 12 (refresh token rotation/로그아웃) — 범위 확정 전까지 대기
 
 ## 결정 대기
@@ -139,4 +179,6 @@ Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
   `docs/backend/AUDIT_2026-09-15_production_wiring.md` 참고.
 - Phase 10 완료: apex-mcp CLI JWT 인증 체인 배선. PR #14 생성 (머지 완료).
 - Phase 11 완료: confirmation grant 소비 경쟁 조건 수정 (원자적 UPDATE).
-  PR #15 생성 (머지 대기).
+  PR #15 생성 (머지 완료).
+- Phase 13 완료: CI `tests/backend` 검증 공백 수정. `mcp-ci.yml`에 `Backend tests`
+  스텝 추가. 로컬 45/45 통과 확인. PR #16 생성 (머지 대기).
