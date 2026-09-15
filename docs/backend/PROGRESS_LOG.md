@@ -8,8 +8,8 @@
 
 ## 현재 상태
 
-Phase: 1~11, 13, 14 완료 (PR #14~#17 머지 완료/대기). Phase 15 대기 (바로
-착수 가능). Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정, 스펙 아님).
+Phase: 1~11, 13, 14, 15 완료 (PR #14~#17 머지 완료, PR #18 머지 대기).
+다음 착수 가능 Phase 없음. Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정).
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
@@ -59,7 +59,7 @@ Phase 13 완료 (CI tests/backend 검증 공백 수정, PR #16 머지 완료):
 - 로컬 `tests/backend` 45/45 통과 재확인.
 - `docs/backend/ci-backend-tests/README.md` as-built 신규 작성.
 
-Phase 14 완료 (`--log-level` 죽은 설정값 실제 로깅 적용, PR #17 머지 대기):
+Phase 14 완료 (`--log-level` 죽은 설정값 실제 로깅 적용, PR #17 머지 완료):
 - `src/apex_mcp/__main__.py`: `import logging` 추가, `_logger = logging.getLogger(__name__)`.
   `main()` config 검증 직후 `logging.basicConfig(level=config.log_level, ...)`
   + `logging.root.setLevel(config.log_level)` 호출. 기동 시 DEBUG 로그 한 건 기록.
@@ -68,13 +68,20 @@ Phase 14 완료 (`--log-level` 죽은 설정값 실제 로깅 적용, PR #17 머
 - `docs/backend/log-level-wiring/README.md` as-built 신규 작성.
 - 전체 115개 통과 (mcp 70, backend 45), ruff/mypy 클린.
 
+Phase 15 완료 (JWKS 조회 실패 로깅 추가, PR #18 머지 대기):
+- `src/apex_backend/auth/jwt_verifier.py`: `import logging` + `_logger` 추가.
+  `_fetch_jwks()` `except Exception` 블록: 빈 캐시 시 "no cached keys" 경고,
+  캐시 있을 시 "continuing with N cached key(s)" 경고, 둘 다 `exc_info=True`.
+  JWK 파싱 실패 `except Exception: continue` 블록: kid/URI 포함 경고 추가.
+- `tests/backend/test_jwks_failure_logging.py` 신규 (7개): 빈/스테일 캐시 fetch
+  실패 경고 로그, exc_info 첨부, JWK 파싱 실패 경고, 유효 키 생존 확인,
+  fail-closed/fail-open 동작 불변 확인.
+- `docs/backend/jwks-failure-logging/README.md` as-built 신규 작성.
+- 전체 118개 통과 (mcp 66, backend 52), ruff/mypy 클린.
+
 ## 다음 작업
 
-1. Phase 15 착수: `specs/15_jwks_failure_logging.md` — JWKS 조회 실패
-   로깅 추가. Phase 14 로깅 체계(`logging.getLogger(__name__)`) 재사용.
-   바로 시작 가능.
-
-Phase 15 끝나면 이 섹션을 "없음. Phase 12는 대기 (사람 확인 필요)"로 갱신할 것.
+없음. Phase 12는 대기 (사람 확인 필요).
 
 Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
 `specs/12_refresh_token_rotation_logout.md` "주의" 절 참고, 범위를
@@ -184,4 +191,6 @@ Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
   PR #15 생성 (머지 완료).
 - Phase 13 완료: CI `tests/backend` 검증 공백 수정. `mcp-ci.yml`에 `Backend tests`
   스텝 추가. 로컬 45/45 통과 확인. PR #16 생성 (머지 완료).
-- Phase 14 완료: `--log-level` 죽은 설정값 실제 로깅에 적용. PR #17 생성 (머지 대기).
+- Phase 14 완료: `--log-level` 죽은 설정값 실제 로깅 적용. PR #17 생성 (머지 완료).
+- Phase 15 완료: `JwtTokenVerifier._fetch_jwks()` JWKS 조회 실패 로깅 추가.
+  PR #18 생성 (머지 대기).

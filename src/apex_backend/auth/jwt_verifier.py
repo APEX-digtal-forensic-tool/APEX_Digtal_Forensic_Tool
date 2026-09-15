@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import time
 from typing import Any
 
@@ -15,6 +16,8 @@ from jose import jwt as jose_jwt
 from mcp.server.auth.provider import AccessToken
 
 from apex_backend.auth.jwt_utils import ALGORITHM, AUDIENCE, ISSUER
+
+_logger = logging.getLogger(__name__)
 
 
 class JwtTokenVerifier:
@@ -93,13 +96,26 @@ class JwtTokenVerifier:
             return None
 
     async def _fetch_jwks(self) -> None:
-        """Fetch JWKS and populate *_keys* cache. Silently no-ops on error."""
+        """Fetch JWKS and populate *_keys* cache. Logs on error, no-ops otherwise."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(self._jwks_uri)
                 resp.raise_for_status()
                 body = resp.json()
         except Exception:
+            if self._keys:
+                _logger.warning(
+                    "JWKS fetch failed for %s; continuing with %d cached key(s)",
+                    self._jwks_uri,
+                    len(self._keys),
+                    exc_info=True,
+                )
+            else:
+                _logger.warning(
+                    "JWKS fetch failed for %s; no cached keys — all tokens will be rejected",
+                    self._jwks_uri,
+                    exc_info=True,
+                )
             return
 
         new_keys: dict[str, str] = {}
@@ -108,6 +124,12 @@ class JwtTokenVerifier:
                 pem = _jwk_to_pem(jwk)
                 new_keys[jwk["kid"]] = pem
             except Exception:
+                _logger.warning(
+                    "Failed to parse JWK kid=%r from %s; skipping",
+                    jwk.get("kid"),
+                    self._jwks_uri,
+                    exc_info=True,
+                )
                 continue
 
         self._keys = new_keys
