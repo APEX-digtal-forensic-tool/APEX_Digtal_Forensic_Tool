@@ -107,7 +107,7 @@
       "disposition": "ACCEPTED_RISK_WITH_JUSTIFICATION",
       "justification": "Binding MCP HTTP to all interfaces is available only through an explicit operator option. The transport still requires bearer authentication, exact Host and Origin allowlists, request-size and rate limits, and public HTTPS issuer/resource URLs for every non-loopback bind.",
       "locations": [
-        "src/apex_mcp/__main__.py:108"
+        "src/apex_mcp/__main__.py:116"
       ]
     }
   ]
