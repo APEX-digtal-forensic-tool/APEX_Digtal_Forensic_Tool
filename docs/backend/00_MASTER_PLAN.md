@@ -114,7 +114,7 @@ Phase 하나 끝날 때마다 `PROGRESS_LOG.md`를 갱신한다 (필수, 생략 
 | 7 | bcrypt 버전 고정 (실제 버그: bcrypt 5.0.0 + passlib 비호환) | `specs/07_bcrypt_version_pin_fix.md` | 완료 (2026-09-15) |
 | 8 | 진행 문서 백필 (Phase 3~6 spec 상태/도메인 폴더/PROGRESS_LOG 동기화) | `specs/08_docs_sync_backfill.md` | 완료 (2026-09-15) |
 | 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 완료 (2026-09-15) |
-| 10 | apex-mcp CLI를 새 JWT 인증 체인에 실제로 배선 (실제 버그) | `specs/10_cli_jwt_wiring_fix.md` | 대기 |
+| 10 | apex-mcp CLI를 새 JWT 인증 체인에 실제로 배선 (실제 버그) | `specs/10_cli_jwt_wiring_fix.md` | 완료 (2026-09-15) |
 | 11 | confirmation grant 1회 소비 경쟁 조건 수정 (실제 버그) | `specs/11_confirmation_grant_race_fix.md` | 대기 |
 | 12 | refresh token rotation/로그아웃 엔드포인트 (선택, 낮은 우선순위) | `specs/12_refresh_token_rotation_logout.md` | 대기 (착수 전 사람 확인 필요) |
 

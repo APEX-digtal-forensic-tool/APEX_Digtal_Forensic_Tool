@@ -28,10 +28,9 @@
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
-| `APEX_JWKS_URI` | (필수) | `https://<backend-host>/.well-known/jwks.json` |
-| `APEX_ISSUER` | `https://apex.local` | JWT `iss` 검증값 |
-| `APEX_MCP_RESOURCE` | `https://apex.local/mcp` | JWT `aud` 검증값 |
-| `APEX_JWKS_CACHE_TTL` | `300` | JWKS 캐시 TTL (초) |
+| `APEX_JWKS_URI` | (필수) | `https://<backend-host>/.well-known/jwks.json` (`--http-jwks-uri`로도 설정 가능) |
+| `APEX_CONFIRMATION_DB_URL` | (필수) | `postgresql+psycopg2://user:pass@host:5432/db` — confirmation grant 조회용 sync 커넥션 (`--http-db-url`로도 설정 가능) |
+| `APEX_JWKS_CACHE_TTL` | `300` | JWKS 캐시 TTL (초) (`--http-jwks-cache-ttl`로도 설정 가능) |
 
 ## 실행 방법
 
@@ -63,10 +62,20 @@ uv run uvicorn apex_backend.app:create_app --factory --host 0.0.0.0 --port 8000
 
 ```bash
 APEX_JWKS_URI="https://apex.example.com/.well-known/jwks.json" \
-APEX_ISSUER="https://apex.example.com" \
-APEX_MCP_RESOURCE="https://apex.example.com/mcp" \
-uv run apex-mcp --http --port 8765
+APEX_CONFIRMATION_DB_URL="postgresql+psycopg2://apex:secret@localhost:5432/apex" \
+uv run apex-mcp \
+  --database /path/to/forensics.db \
+  --schema-dir /path/to/schemas/v1 \
+  --transport http \
+  --http-port 8765 \
+  --http-issuer-url "https://apex.example.com" \
+  --http-resource-url "https://apex.example.com/mcp"
 ```
+
+> `APEX_JWKS_URI`가 설정되면 JWT 프로덕션 모드로 동작한다
+> (`JwtTokenVerifier` + `DbFrontendSecurityProvider`). 설정하지 않으면
+> `--http-actor-id`/`--http-session-id`/`--http-tenant-id`/`--http-case-id` +
+> `APEX_MCP_HTTP_TOKEN`을 요구하는 개발용 스텁 모드로 동작한다.
 
 ## 인증 흐름
 

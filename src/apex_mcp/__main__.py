@@ -7,13 +7,14 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 from apex_forensic.config import AiProviderRuntimeConfig
 from apex_mcp.config import McpConfig
 from apex_mcp.frontend_security import (
     FrontendSession,
     InMemoryFrontendSecurityProvider,
+    PersistentFrontendSecurityProvider,
     StaticBearerTokenVerifier,
 )
 from apex_mcp.http_transport import HttpTransportConfig, run_http
@@ -41,6 +42,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--http-allowed-origin", action="append", default=[])
     parser.add_argument("--http-issuer-url")
     parser.add_argument("--http-resource-url")
+    # JWT / production mode args (reads env vars as defaults)
+    parser.add_argument("--http-jwks-uri", default=os.environ.get("APEX_JWKS_URI"))
+    parser.add_argument(
+        "--http-db-url", default=os.environ.get("APEX_CONFIRMATION_DB_URL")
+    )
+    parser.add_argument(
+        "--http-jwks-cache-ttl",
+        type=int,
+        default=int(os.environ.get("APEX_JWKS_CACHE_TTL", "300")),
+    )
+    # Dev mode (static bearer) args
     parser.add_argument("--http-token-env", default="APEX_MCP_HTTP_TOKEN")
     parser.add_argument("--http-actor-id")
     parser.add_argument("--http-session-id")
@@ -92,19 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         create_runtime(config, bindings=m7_bindings()).run_stdio()
         return 0
 
-    required_http = {
-        "--http-actor-id": args.http_actor_id,
-        "--http-session-id": args.http_session_id,
-        "--http-tenant-id": args.http_tenant_id,
-        "--http-case-id": args.http_case_id,
-    }
-    missing_http = [name for name, value in required_http.items() if not value]
-    if missing_http:
-        parser.error(f"HTTP transport requires: {', '.join(missing_http)}")
-    secret = os.environ.get(args.http_token_env)
-    if not secret:
-        parser.error(f"{args.http_token_env} must contain the HTTP bearer token")
-
+    # Common HTTP setup (applies to both JWT and dev modes)
     public_host = args.http_host if args.http_host not in {"0.0.0.0", "::"} else "127.0.0.1"
     url_host = f"[{public_host}]" if ":" in public_host else public_host
     base_url = f"http://{url_host}:{args.http_port}"
@@ -127,45 +127,88 @@ def main(argv: Sequence[str] | None = None) -> int:
     ]
     if "apex:mcp" not in scopes:
         parser.error("HTTP transport scopes must include apex:mcp")
-    access_token = AccessToken(
-        token=secret,
-        client_id=f"apex-http:{args.http_tenant_id}",
-        subject=args.http_actor_id,
-        scopes=scopes,
-        resource=resource_url,
-        claims={"iss": issuer_url},
+
+    http_config = HttpTransportConfig(
+        host=args.http_host,
+        port=args.http_port,
+        path=args.http_path,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+        issuer_url=issuer_url,
+        resource_url=resource_url,
+        max_requests=args.http_max_requests,
+        rate_window_seconds=args.http_rate_window,
     )
-    frontend_security = InMemoryFrontendSecurityProvider()
-    frontend_security.register(
-        access_token,
-        FrontendSession(
-            actor_id=args.http_actor_id,
-            session_id=args.http_session_id,
-            tenant_id=args.http_tenant_id,
-            allowed_case_ids=frozenset(args.http_case_id),
-            roles=frozenset(args.http_role or ["ANALYST"]),
-        ),
-    )
+
+    verifier: TokenVerifier
+    frontend_security: InMemoryFrontendSecurityProvider | PersistentFrontendSecurityProvider
+    if args.http_jwks_uri:
+        # JWT / production mode: JwtTokenVerifier + DbFrontendSecurityProvider
+        if not args.http_db_url:
+            parser.error(
+                "--http-db-url (or APEX_CONFIRMATION_DB_URL) is required "
+                "when --http-jwks-uri (or APEX_JWKS_URI) is set"
+            )
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from apex_backend.auth.db_confirmation import DbFrontendSecurityProvider
+        from apex_backend.auth.jwt_verifier import JwtTokenVerifier
+
+        sync_engine = create_engine(args.http_db_url)
+        sync_factory = sessionmaker(sync_engine, expire_on_commit=False)
+        frontend_security = DbFrontendSecurityProvider(sync_factory)
+        verifier = JwtTokenVerifier(
+            jwks_uri=args.http_jwks_uri,
+            issuer=issuer_url,
+            audience=resource_url,
+            cache_ttl_seconds=args.http_jwks_cache_ttl,
+        )
+    else:
+        # Dev mode: static bearer token + in-memory session store
+        required_dev = {
+            "--http-actor-id": args.http_actor_id,
+            "--http-session-id": args.http_session_id,
+            "--http-tenant-id": args.http_tenant_id,
+            "--http-case-id": args.http_case_id,
+        }
+        missing_dev = [name for name, value in required_dev.items() if not value]
+        if missing_dev:
+            parser.error(
+                f"HTTP dev mode requires: {', '.join(missing_dev)} "
+                "(or use --http-jwks-uri for JWT production mode)"
+            )
+        secret = os.environ.get(args.http_token_env)
+        if not secret:
+            parser.error(f"{args.http_token_env} must contain the HTTP bearer token")
+
+        access_token = AccessToken(
+            token=secret,
+            client_id=f"apex-http:{args.http_tenant_id}",
+            subject=args.http_actor_id,
+            scopes=scopes,
+            resource=resource_url,
+            claims={"iss": issuer_url},
+        )
+        frontend_security = InMemoryFrontendSecurityProvider()
+        frontend_security.register(
+            access_token,
+            FrontendSession(
+                actor_id=args.http_actor_id,
+                session_id=args.http_session_id,
+                tenant_id=args.http_tenant_id,
+                allowed_case_ids=frozenset(args.http_case_id),
+                roles=frozenset(args.http_role or ["ANALYST"]),
+            ),
+        )
+        verifier = StaticBearerTokenVerifier(secret, access_token)
+
     runtime = create_runtime(
         config,
         bindings=m7_bindings(),
         frontend_security_provider=frontend_security,
     )
-    run_http(
-        runtime,
-        HttpTransportConfig(
-            host=args.http_host,
-            port=args.http_port,
-            path=args.http_path,
-            allowed_hosts=allowed_hosts,
-            allowed_origins=allowed_origins,
-            issuer_url=issuer_url,
-            resource_url=resource_url,
-            max_requests=args.http_max_requests,
-            rate_window_seconds=args.http_rate_window,
-        ),
-        token_verifier=StaticBearerTokenVerifier(secret, access_token),
-    )
+    run_http(runtime, http_config, token_verifier=verifier)
     return 0
 
 

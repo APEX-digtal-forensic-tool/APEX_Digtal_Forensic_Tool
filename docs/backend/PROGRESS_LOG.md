@@ -8,38 +8,36 @@
 
 ## 현재 상태
 
-Phase: 1~9 완료. Phase 10, 11 대기 (2026-09-15 재검토에서 발견된 실제
-버그 수정, 바로 착수 가능). Phase 12는 대기하되 착수 전 사람 확인 필요
-(범위 미확정, 스펙 아님).
+Phase: 1~10 완료 (Phase 10 PR 생성, 머지 대기). Phase 11 대기.
+Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정, 스펙 아님).
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
 
-Phase 9 완료 (레거시 mcp_server 정리):
-- `mcp_server/` 디렉터리 삭제 (git untracked 상태였음, `git rm` 불필요)
-- `.gitignore`에 `mcp_server/` 추가 (재발 방지)
-- `ruff check .` 레포 전체 기준 클린 확인
-- docs/ 안 `mcp_server/` 참조 검색: specs/09 파일만 해당, 별도 정리 불필요
-
-Phase 1~9 전부 merge된 뒤, "테스트/ruff/mypy/CI green = 문제 없음"이라는
-결론이 부족하다는 지적에 따라 실행 경로 기준으로 재검토함(코드 직접
-읽고 재현, 추측 없음). 결과: `AUDIT_2026-09-15_production_wiring.md`에
-전체 기록. 실제 버그 2건(Phase 10, 11 스펙으로 신규 작성), 참고 사항
-1건(Phase 12, 착수 전 확인 필요)을 확인함. Core 쪽 문제(Firefox NSS
-redaction 스키마 불일치)도 하나 발견했으나 이건 백엔드/MCP 담당 범위
-밖이라 Core 담당(권태욱)에게 별도 전달, 이 마스터플랜에는 포함 안 함.
+Phase 10 완료 (apex-mcp CLI JWT 인증 체인 배선):
+- `src/apex_mcp/__main__.py`: `--http-jwks-uri`/`APEX_JWKS_URI`,
+  `--http-db-url`/`APEX_CONFIRMATION_DB_URL`, `--http-jwks-cache-ttl`
+  인자 추가. JWKS URI 지정 시 `JwtTokenVerifier` + `DbFrontendSecurityProvider`
+  프로덕션 모드, 미지정 시 기존 `StaticBearerTokenVerifier` +
+  `InMemoryFrontendSecurityProvider` 개발용 모드 유지.
+- `docs/backend/deployment/README.md` 4단계 명령어 수정 (잘못된
+  `--http --port 8765` → 올바른 `--transport http --http-port 8765`).
+  `APEX_CONFIRMATION_DB_URL` 환경변수 항목 추가.
+- `tests/mcp/test_cli_jwt_subprocess.py` 신규: apex-mcp CLI를 실제
+  서브프로세스(`subprocess.Popen`)로 띄워서 유효 JWT → non-401,
+  위조 JWT → 401 검증. 통과 확인.
+- 전체 테스트 564 통과, ruff/mypy 클린.
+- PR #14 생성 (머지 대기).
 
 ## 다음 작업
 
-1. Phase 10 착수: `specs/10_cli_jwt_wiring_fix.md` — apex-mcp CLI가 새
-   JWT 인증 체인을 실제로 쓰도록 배선. 바로 시작 가능.
-2. Phase 11 착수: `specs/11_confirmation_grant_race_fix.md` — confirmation
-   grant 1회 소비 경쟁 조건 수정. Phase 10과 순서 무관, 같이 진행 가능.
-3. Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
+1. Phase 11 착수: `specs/11_confirmation_grant_race_fix.md` — confirmation
+   grant 1회 소비 경쟁 조건 수정. 바로 시작 가능.
+2. Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
    `specs/12_refresh_token_rotation_logout.md` "주의" 절 참고, 범위를
    사람과 먼저 확정해야 함.
 
-Phase 10/11 둘 다 끝나면 이 섹션을 "없음"으로 갱신할 것.
+Phase 11 끝나면 이 섹션을 "없음"으로 갱신할 것.
 
 보류 중인 항목(착수 금지):
 - Windows Desktop bundle 제품 통합 검증 — 프론트/패키징 담당과 협의 필요
