@@ -8,32 +8,32 @@
 
 ## 현재 상태
 
-Phase: 1~7 완료. Phase 8(문서 백필), Phase 9(레거시 정리) 진행 중.
+Phase: 1~8 완료. Phase 9(레거시 mcp_server 정리) 대기 중.
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
 
-Phase 7 완료: `pyproject.toml` backend extra에 `bcrypt>=4.0,<4.1` 추가,
-`uv lock`으로 `uv.lock` 갱신 (bcrypt 5.0.0 → 4.0.1). 109개 테스트 통과,
-ruff/mypy 클린 확인. `specs/00_DECISIONS.md`에 bcrypt 버전 고정 결정 기록 추가.
-PR 생성 완료 (fix/backend-phase-7-bcrypt-pin). 머지 대기 중.
+Phase 8 완료 (문서 백필):
+- `specs/03~06` 상태를 각각 `완료`로 정정 (날짜: 03~05는 2026-09-12, 06은 2026-09-14)
+- 도메인 폴더 3개 신규 생성:
+  - `docs/backend/mcp-token-verifier/README.md` — JwtTokenVerifier 기준
+  - `docs/backend/mcp-frontend-security-provider/README.md` — PersistentFrontendSecurityProvider 기준
+  - `docs/backend/confirmation-grant-flow/README.md` — DbFrontendSecurityProvider + POST /confirmations 기준
+- 이 PROGRESS_LOG.md를 Phase 2에서 멈춰있던 상태에서 전체 동기화
+
+Phase 7 완료 (main 머지됨, PR #10):
+- `pyproject.toml`에 `bcrypt>=4.0,<4.1` 추가, `uv.lock` 갱신 (bcrypt 5.0.0 → 4.0.1)
+- 109개 테스트 통과, ruff/mypy 클린, `specs/00_DECISIONS.md` bcrypt 결정 기록 추가
 
 ## 다음 작업
 
-1. Phase 8 (`specs/08_docs_sync_backfill.md`) — specs/03~06 상태 완료로 정정,
-   도메인 폴더 3개 생성(mcp-token-verifier/, mcp-frontend-security-provider/,
-   confirmation-grant-flow/), PROGRESS_LOG/MASTER_PLAN 갱신. 브랜치:
-   `docs/backend-phase-8-docs-sync`.
-2. Phase 9 (`specs/09_remove_legacy_mcp_server_scaffold.md`) — 레거시
-   `mcp_server/` 삭제, ruff check . 클린 확인. 브랜치:
-   `chore/backend-phase-9-remove-legacy-mcp-server`.
-
-세 개 다 서로 독립적, 순서 상관없음. Phase 1~6과 달리 이 셋은 새 기능이
-아니라 수습/정리 작업.
-
-**하지 말 것**: Windows Desktop bundle 통합 검증, Case/Evidence/Search 신규
-Domain Tool — `00_MASTER_PLAN.md` 6-2절 "보류 항목" 참고. 사람이 별도로
-새 기획서를 줄 때까지 스스로 시작하지 않는다.
+Phase 9 (`specs/09_remove_legacy_mcp_server_scaffold.md`):
+- 브랜치 `chore/backend-phase-9-remove-legacy-mcp-server` 생성
+- `mcp_server/` 디렉터리 삭제 (untracked — `git rm` 불필요, `rm -rf`로 삭제)
+- `.gitignore` 확인 (재발 방지 항목 추가 여부 판단)
+- `ruff check .` 레포 전체 기준 클린 확인
+- docs/ 안에서 `mcp_server/` 참조 검색 후 있으면 정리
+- PROGRESS_LOG.md 갱신 후 커밋 + PR 생성
 
 ## 결정 대기
 
@@ -45,6 +45,7 @@ Domain Tool — `00_MASTER_PLAN.md` 6-2절 "보류 항목" 참고. 사람이 별
 - DB: PostgreSQL + asyncpg
 - SQLAlchemy: async 모드
 - 테스트 DB: 단위=SQLite/aiosqlite in-memory, 통합=실제 PostgreSQL
+- bcrypt: `>=4.0,<4.1` 고정 (passlib 비호환 버그, Phase 7)
 
 ## 히스토리 (오래된 순으로 append, 삭제 금지)
 
@@ -63,32 +64,40 @@ Domain Tool — `00_MASTER_PLAN.md` 6-2절 "보류 항목" 참고. 사람이 별
 ### 2026-09-12
 - Phase 2 완료: FastAPI 앱 + RS256 JWT 발급 API + JWKS 엔드포인트.
   pytest 11개 신규 (누적 20/20 통과), ruff/mypy 클린.
-  as-built: `docs/backend/auth-api/README.md`.
-- Phase 3 완료: `JwtTokenVerifier` (JWKS fetch + TTL 캐시 + RS256 검증).
-  (커밋 `c6d7051`/`28e9ab3` — as-built 문서화는 Phase 8에서 백필 예정.)
-- Phase 4 완료: `PersistentFrontendSecurityProvider` (JWT 클레임 → FrontendSession).
-  (커밋 `a62dca6`/`555c0f2` — as-built 문서화는 Phase 8에서 백필 예정.)
-- Phase 5 완료: confirmation grant 발급/DB 소비 (`DbFrontendSecurityProvider`,
-  `POST /confirmations`, 5분 1회용).
-  (커밋 `23a2762`/`31d0c6d` — as-built 문서화는 Phase 8에서 백필 예정.)
+  as-built: `docs/backend/auth-api/README.md`. 커밋 `e66d80c`/`2d88282`.
+- Phase 3 완료: `JwtTokenVerifier` 구현 (`src/apex_backend/auth/jwt_verifier.py`).
+  JWKS fetch + TTL 캐시(300초) + RS256 서명 검증 + 실패 시 None 반환.
+  pytest 11개 신규 (`tests/backend/test_jwt_verifier.py`, 누적 31/31 통과).
+  as-built: `docs/backend/mcp-token-verifier/README.md` (Phase 8에서 백필).
+  커밋 `c6d7051`/`28e9ab3`.
+- Phase 4 완료: `PersistentFrontendSecurityProvider` 구현
+  (`src/apex_mcp/frontend_security.py`). JWT 클레임 → FrontendSession 직접 재구성
+  (DB 조회 없음, Option A 핵심). pytest 12개 신규
+  (`tests/mcp/test_persistent_security_provider.py`, 누적 43/43 통과).
+  as-built: `docs/backend/mcp-frontend-security-provider/README.md` (Phase 8에서 백필).
+  커밋 `a62dca6`/`555c0f2`.
+- Phase 5 완료: confirmation grant 발급/소비 플로우.
+  `POST /confirmations` (FastAPI, JWT 검증, 1회용 5분 grant 발급),
+  `DbFrontendSecurityProvider` (sync SQLAlchemy, grant 조회/소비).
+  pytest 13개 신규 (`tests/backend/test_confirmation_grant.py`, 누적 65/65 통과).
+  as-built: `docs/backend/confirmation-grant-flow/README.md` (Phase 8에서 백필).
+  커밋 `23a2762`/`31d0c6d`.
 - 커밋 author/uv.lock 규칙 추가 (`01_DEVELOPMENT_RULES.md` 7절).
 
 ### 2026-09-14
 - Phase 6 완료: E2E 테스트 4건 (`tests/mcp/test_e2e_backend_integration.py`),
   `docs/backend/deployment/README.md`, `docs/MCP_SERVER.md` 6절 갱신.
-  (커밋 `f023c94`/`8edb18b`.) 백엔드 마스터플랜 코드 부분 전체 완료.
+  pytest 4개 신규 (누적 109/109 통과). 백엔드 마스터플랜 코드 부분 전체 완료.
+  커밋 `f023c94`/`8edb18b`.
 
 ### 2026-09-15
-- 사람이 클린 venv로 Phase 1~6 전체 재검증 (109개 테스트, ruff/mypy 클린
-  확인). 재검증 중 `bcrypt==5.0.0` + `passlib` 비호환으로 로그인/비번해시
-  테스트 2개가 깨지는 실제 버그 발견 (재현 확인, `bcrypt<4.1` 핀으로 해결
-  확인). 동시에 Phase 3~5의 문서 백필 규칙 미준수(스펙 상태/도메인 폴더)와
-  이 로그 자체가 Phase 2에서 멈춰있던 것 확인.
-- Phase 7(bcrypt 버전 고정), Phase 8(문서 백필), Phase 9(레거시 mcp_server
-  제거) 스펙 신규 작성. `00_MASTER_PLAN.md`에 6-1(진행 현황), 6-2(보류 항목:
-  Windows Desktop bundle 통합, Case/Evidence/Search Domain Tool — 둘 다
-  지금 착수 안 함) 섹션 추가.
+- 사람이 클린 venv로 Phase 1~6 전체 재검증 (109개 테스트, ruff/mypy 클린 확인).
+  재검증 중 `bcrypt==5.0.0` + `passlib` 비호환으로 로그인/비번해시 테스트 2개
+  깨지는 실제 버그 발견. Phase 3~5 문서 백필 규칙 미준수 확인.
+  Phase 7/8/9 스펙 신규 작성. `00_MASTER_PLAN.md` 6-1/6-2 섹션 추가.
 - Phase 7 완료: `pyproject.toml`에 `bcrypt>=4.0,<4.1` 추가, `uv.lock` 갱신
-  (bcrypt 5.0.0 → 4.0.1), 109개 테스트 통과, ruff/mypy 클린,
-  `specs/00_DECISIONS.md`에 bcrypt 결정 기록, spec 07 상태 완료로 갱신.
-  PR #10(fix/backend-phase-7-bcrypt-pin) 생성.
+  (bcrypt 5.0.0 → 4.0.1), 109개 테스트 통과, ruff/mypy 클린.
+  `specs/00_DECISIONS.md` bcrypt 결정 기록 추가. PR #10 생성 (머지 완료).
+- Phase 8 완료: specs/03~06 상태 완료로 정정, 도메인 폴더 3개 신규 생성
+  (mcp-token-verifier/, mcp-frontend-security-provider/, confirmation-grant-flow/),
+  PROGRESS_LOG.md 전체 동기화. PR #11 생성.

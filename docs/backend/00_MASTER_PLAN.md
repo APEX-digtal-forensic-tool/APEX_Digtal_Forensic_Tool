@@ -103,14 +103,17 @@ MCP 프로세스와 FastAPI 백엔드가 "인증 진실"을 어떻게 공유할�
 각 Phase는 `specs/` 밑에 하위 구현 기획서가 하나씩 있다. 순서대로 진행하고,
 Phase 하나 끝날 때마다 `PROGRESS_LOG.md`를 갱신한다 (필수, 생략 금지).
 
-| Phase | 내용 | 스펙 파일 |
-|---|---|---|
-| 1 | 데이터 모델 + DB 스키마 (user, session, case_tenancy, role, confirmation_grant) | `specs/01_data_model_and_storage.md` |
-| 2 | 인증/토큰 발급 API (로그인, JWT 발급, 리프레시) | `specs/02_auth_token_issuance_api.md` |
-| 3 | MCP용 `TokenVerifier` 실제 구현체 | `specs/03_mcp_token_verifier.md` |
-| 4 | MCP용 `FrontendSecurityProvider` 실제 구현체 (세션/RBAC/테넌시) | `specs/04_mcp_frontend_security_provider.md` |
-| 5 | 승인(confirmation) grant 발급/조회 플로우 | `specs/05_confirmation_grant_flow.md` |
-| 6 | 통합 테스트 + 배포 설정 문서화 | `specs/06_integration_and_docs.md` |
+| Phase | 내용 | 스펙 파일 | 상태 |
+|---|---|---|---|
+| 1 | 데이터 모델 + DB 스키마 (user, session, case_tenancy, role, confirmation_grant) | `specs/01_data_model_and_storage.md` | 완료 (2026-09-11) |
+| 2 | 인증/토큰 발급 API (로그인, JWT 발급, 리프레시) | `specs/02_auth_token_issuance_api.md` | 완료 (2026-09-12) |
+| 3 | MCP용 `TokenVerifier` 실제 구현체 | `specs/03_mcp_token_verifier.md` | 완료 (2026-09-12) |
+| 4 | MCP용 `FrontendSecurityProvider` 실제 구현체 (세션/RBAC/테넌시) | `specs/04_mcp_frontend_security_provider.md` | 완료 (2026-09-12) |
+| 5 | 승인(confirmation) grant 발급/조회 플로우 | `specs/05_confirmation_grant_flow.md` | 완료 (2026-09-12) |
+| 6 | 통합 테스트 + 배포 설정 문서화 | `specs/06_integration_and_docs.md` | 완료 (2026-09-14) |
+| 7 | bcrypt 버전 고정 (실제 버그: bcrypt 5.0.0 + passlib 비호환) | `specs/07_bcrypt_version_pin_fix.md` | 완료 (2026-09-15) |
+| 8 | 진행 문서 백필 (Phase 3~6 spec 상태/도메인 폴더/PROGRESS_LOG 동기화) | `specs/08_docs_sync_backfill.md` | 완료 (2026-09-15) |
+| 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 대기 |
 
 ## 6. 완료 기준 (전체)
 
@@ -121,6 +124,40 @@ Phase 하나 끝날 때마다 `PROGRESS_LOG.md`를 갱신한다 (필수, 생략 
 - 새 구현체마다 대응하는 pytest 존재하고 통과
 - ruff/mypy 클린
 - `docs/backend/<도메인명>/` 밑에 완료된 각 Phase의 as-built 문서 존재
+
+## 6-1. 진행 현황 갱신 (2026-09-14)
+
+Phase 1~6은 실제로 전부 구현되어 main에 merge 완료됨 (git log 확인:
+Phase1 `1777d31`, Phase2 `e66d80c`/`2d88282`, Phase3 `c6d7051`/`28e9ab3`,
+Phase4 `a62dca6`/`555c0f2`, Phase5 `23a2762`/`31d0c6d`, Phase6
+`f023c94`/`8edb18b`). Backend+MCP 인증 체인(JWT 발급 → JwtTokenVerifier →
+PersistentFrontendSecurityProvider → confirmation grant)이 실제로 동작하고
+109개 테스트로 검증됨. 다만 배포 환경에서 재현되는 실제 버그 하나(Phase 7)와
+문서 백필(Phase 8), 레거시 정리(Phase 9)가 후속 작업으로 남아 확인됨.
+
+| Phase | 내용 | 스펙 파일 | 상태 |
+|---|---|---|---|
+| 7 | bcrypt 버전 고정 (실제 버그: bcrypt 5.0.0 + passlib 비호환) | `specs/07_bcrypt_version_pin_fix.md` | 대기 |
+| 8 | 진행 문서 백필 (Phase 3~6 spec 상태/도메인 폴더/PROGRESS_LOG 동기화) | `specs/08_docs_sync_backfill.md` | 대기 |
+| 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 대기 |
+
+Phase 7, 8, 9는 서로 독립적이라 순서 상관없이, 또는 동시에 진행해도 된다.
+
+## 6-2. 보류 항목 (지금 시작하지 않음)
+
+아래 두 개는 남은 작업으로 확인은 됐지만, 지금 이 마스터 플랜(Backend)
+범위에서 착수하지 않는다. 이유를 명시해두는 건 나중에 "왜 안 했지"를
+다시 따지지 않기 위함이다. Claude Code는 이 두 항목에 대해 스스로 작업을
+시작하지 말 것 — 사람이 별도로 새 기획서를 만들어서 지시할 때까지 대기.
+
+- **Windows Desktop bundle 제품 통합 검증**: `docs/MCP_SERVER.md` 6-2절에
+  남은 작업으로 명시돼있음. Desktop 프론트엔드 번들링, 콘솔 lifecycle,
+  경로/권한, 한국어 환경 검증까지 얽혀있어서 프론트/패키징 담당과 같이
+  진행해야 하는 범위. 백엔드 단독으로 끝낼 수 있는 일이 아님.
+- **Case/Evidence/Search 신규 Domain Tool**: Core Forensic Engine이
+  `EngineInterfaceService`에 해당 Descriptor를 아직 공개하지 않음. Core
+  담당이 그걸 열어주기 전까지는 MCP/백엔드 쪽에서 손댈 수 있는 게 없음
+  (재구현 금지 원칙 위반이 됨). Core 쪽 진행 상황을 기다린다.
 
 ## 7. 이 폴더 안내
 

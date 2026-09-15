@@ -1,6 +1,6 @@
 # Phase 5 — 승인(confirmation) grant 발급 플로우
 
-상태: 대기
+상태: 완료 (2026-09-12)
 선행조건: Phase 4 완료
 
 ## 목적
