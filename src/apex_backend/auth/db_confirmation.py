@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, sessionmaker
 
 from apex_backend.models import ConfirmationGrantRow
@@ -82,9 +84,18 @@ class DbFrontendSecurityProvider(PersistentFrontendSecurityProvider):
             ):
                 return False
 
-            row.uses_count += 1
+            # Atomic increment: prevents double-consume under concurrent requests.
+            # Only increments if uses_count < max_uses at commit time.
+            cursor: CursorResult[Any] = db.execute(  # type: ignore[assignment]
+                update(ConfirmationGrantRow)
+                .where(
+                    ConfirmationGrantRow.grant_id == request.grant_id,
+                    ConfirmationGrantRow.uses_count < ConfirmationGrantRow.max_uses,
+                )
+                .values(uses_count=ConfirmationGrantRow.uses_count + 1)
+            )
             db.commit()
-            return True
+            return cursor.rowcount > 0
 
 
 __all__ = ["DbFrontendSecurityProvider"]

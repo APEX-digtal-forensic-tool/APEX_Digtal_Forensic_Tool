@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -86,6 +87,21 @@ def sync_db():
     factory = sessionmaker(engine, expire_on_commit=False)
     yield factory
     Base.metadata.drop_all(engine)
+    engine.dispose()
+
+
+@pytest.fixture
+def sync_db_threadsafe(tmp_path):
+    """File-based SQLite session factory safe for multi-threaded tests.
+
+    Uses a real file so each thread gets its own connection with proper
+    SQLite write-lock serialization (unlike shared in-memory StaticPool).
+    """
+    db_url = f"sqlite:///{tmp_path / 'concurrent_test.db'}"
+    engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    yield factory
     engine.dispose()
 
 
@@ -371,3 +387,40 @@ def test_authorize_multi_use_grant(sync_db):
     assert provider.authorize(request) is True
     assert provider.authorize(request) is True
     assert provider.authorize(request) is False  # exhausted
+
+
+# ---------------------------------------------------------------------------
+# Phase 11: atomic UPDATE — race condition regression test
+# ---------------------------------------------------------------------------
+
+
+def test_authorize_concurrent_race_max_uses_1(sync_db_threadsafe):
+    """Two threads racing on max_uses=1 grant: exactly one True (atomic UPDATE)."""
+    grant_id = _seed_grant(sync_db_threadsafe, max_uses=1)
+    provider = DbFrontendSecurityProvider(sync_db_threadsafe)
+    request = ConfirmationRequest(
+        grant_id=grant_id,
+        actor_id="user-abc",
+        session_id="sess-xyz",
+        case_id="case-001",
+        tool_name="report.approve",
+        request_fingerprint="fp-abc",
+        target_ids=("report-1",),
+    )
+
+    results: list[bool] = []
+    barrier = threading.Barrier(2)
+
+    def call() -> None:
+        barrier.wait()
+        results.append(provider.authorize(request))
+
+    threads = [threading.Thread(target=call) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(results) == 2
+    assert results.count(True) == 1, f"Expected exactly 1 True, got: {results}"
+    assert results.count(False) == 1
