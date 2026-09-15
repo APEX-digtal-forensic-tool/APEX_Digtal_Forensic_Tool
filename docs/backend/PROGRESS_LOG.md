@@ -8,32 +8,24 @@
 
 ## 현재 상태
 
-Phase: 1~8 완료. Phase 9(레거시 mcp_server 정리) 대기 중.
+Phase: 1~9 전부 완료. 백엔드 마스터플랜 전체 완료.
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
 
-Phase 8 완료 (문서 백필):
-- `specs/03~06` 상태를 각각 `완료`로 정정 (날짜: 03~05는 2026-09-12, 06은 2026-09-14)
-- 도메인 폴더 3개 신규 생성:
-  - `docs/backend/mcp-token-verifier/README.md` — JwtTokenVerifier 기준
-  - `docs/backend/mcp-frontend-security-provider/README.md` — PersistentFrontendSecurityProvider 기준
-  - `docs/backend/confirmation-grant-flow/README.md` — DbFrontendSecurityProvider + POST /confirmations 기준
-- 이 PROGRESS_LOG.md를 Phase 2에서 멈춰있던 상태에서 전체 동기화
-
-Phase 7 완료 (main 머지됨, PR #10):
-- `pyproject.toml`에 `bcrypt>=4.0,<4.1` 추가, `uv.lock` 갱신 (bcrypt 5.0.0 → 4.0.1)
-- 109개 테스트 통과, ruff/mypy 클린, `specs/00_DECISIONS.md` bcrypt 결정 기록 추가
+Phase 9 완료 (레거시 mcp_server 정리):
+- `mcp_server/` 디렉터리 삭제 (git untracked 상태였음, `git rm` 불필요)
+- `.gitignore`에 `mcp_server/` 추가 (재발 방지)
+- `ruff check .` 레포 전체 기준 클린 확인
+- docs/ 안 `mcp_server/` 참조 검색: specs/09 파일만 해당, 별도 정리 불필요
 
 ## 다음 작업
 
-Phase 9 (`specs/09_remove_legacy_mcp_server_scaffold.md`):
-- 브랜치 `chore/backend-phase-9-remove-legacy-mcp-server` 생성
-- `mcp_server/` 디렉터리 삭제 (untracked — `git rm` 불필요, `rm -rf`로 삭제)
-- `.gitignore` 확인 (재발 방지 항목 추가 여부 판단)
-- `ruff check .` 레포 전체 기준 클린 확인
-- docs/ 안에서 `mcp_server/` 참조 검색 후 있으면 정리
-- PROGRESS_LOG.md 갱신 후 커밋 + PR 생성
+없음. Phase 1~9 전부 완료. 새 작업은 사람이 별도 기획서를 주면 시작.
+
+보류 중인 항목(착수 금지):
+- Windows Desktop bundle 제품 통합 검증 — 프론트/패키징 담당과 협의 필요
+- Case/Evidence/Search 신규 Domain Tool — Core Descriptor 열릴 때까지 대기
 
 ## 결정 대기
 
@@ -100,4 +92,6 @@ Phase 9 (`specs/09_remove_legacy_mcp_server_scaffold.md`):
   `specs/00_DECISIONS.md` bcrypt 결정 기록 추가. PR #10 생성 (머지 완료).
 - Phase 8 완료: specs/03~06 상태 완료로 정정, 도메인 폴더 3개 신규 생성
   (mcp-token-verifier/, mcp-frontend-security-provider/, confirmation-grant-flow/),
-  PROGRESS_LOG.md 전체 동기화. PR #11 생성.
+  PROGRESS_LOG.md 전체 동기화. PR #11 생성 (머지 완료).
+- Phase 9 완료: `mcp_server/` 디렉터리 삭제, `.gitignore`에 `mcp_server/` 추가,
+  `ruff check .` 클린 확인. PR #12 생성. 백엔드 마스터플랜 Phase 1~9 전부 완료.
