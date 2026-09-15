@@ -16,7 +16,7 @@
 | 3 | confirmation grant 1회 소비 로직에 동시성 경쟁 조건 | 중간 | 확인된 문제 |
 | 4 | `PersistentFrontendSecurityProvider.confirmation_for`가 항상 `None` | - | 문제 아님 (설계 의도, 검증함) |
 | 5 | `JwtTokenVerifier`가 `client_id`에 issuer를 넣음 | - | 문제 아님 (미사용 필드) |
-| 6 | Firefox NSS redaction 스키마 vs 코드 화이트리스트 불일치 | - | 확인함, 백엔드/MCP 무관 (Core 이슈, 근본원인 특정함) |
+| 6 | Firefox NSS redaction 스키마 vs 코드 화이트리스트 불일치 | - | **해결됨** (Core 담당이 PR #13로 수정, 2026-09-15 확인) |
 | 7 | refresh token 재사용 탐지/rotation 없음, 로그아웃 엔드포인트 없음 | 낮음 | 참고 (스펙에 명시된 요구사항 아님) |
 
 ---
@@ -219,6 +219,23 @@ lookahead로 이런 케이스를 이미 피해가게 만들어놨는데, `passwo
 동일하게 화이트리스트로 반영해야 한다고 구체적으로 전달할 수 있는
 수준까지는 파봤다.
 
+**추가 (2026-09-15 오후, 해결 확인)**: Core 담당이 실제로 `fix/redacted-schema-validation`
+브랜치에서 고쳐서 PR #13(`6f16a52`, 머지 커밋 `db4bcb7`)으로 merge함.
+수정 방식이 정확히 위에서 제안한 접근과 같음 — 5개 세이프 인디케이터
+필드 이름을 정확히 매칭하는 새 `patternProperties` 항목을 추가해서
+`type: [boolean, null]`만 허용하고, 기존 `password` 리댁션 패턴에는
+그 5개 정확한 이름에 대한 부정형 lookahead 예외를 넣어서 서로 겹치지
+않게 함. 대소문자 무관 처리, 개행 문자로 앵커를 우회하는 케이스까지
+막아주는 `[\s\S]` 처리도 들어가 있음. 신규 계약 테스트
+`tests/unit/test_redacted_schema_contract.py`(83줄, 6개 스키마 전부에 대해
+파라미터화, 오탐/누락 양쪽 다 검증)도 같이 추가됨.
+
+직접 재검증함: `tests/unit/test_redacted_schema_contract.py`,
+`tests/unit/test_advanced_runtime_decryption.py::test_nss_lib_provider_decrypts_logins_without_primary_password`
+전부 통과. 전체 `tests/` 스위트 재실행 결과 실패 0건(스킵 몇 개 제외
+전부 통과, exit code 0). `ruff check tests/unit/test_redacted_schema_contract.py`
+클린. **이 항목은 완전히 해결됨.**
+
 ## 7. refresh token 재사용 탐지 없음, 로그아웃 엔드포인트 없음 — 참고 사항 (낮음)
 
 `AuthService.refresh()`(`src/apex_backend/auth/service.py`)는 refresh token을
@@ -245,8 +262,7 @@ refresh token으로 세션 만료 전까지 몇 번이든 새 access token을 �
 확인해야 한다. 3번은 `authorize()`를 `UPDATE confirmation_grants SET
 uses_count = uses_count + 1 WHERE grant_id = :id AND uses_count < max_uses`
 같은 조건부 원자 업데이트(또는 `SELECT ... FOR UPDATE`)로 바꾸면 해결된다.
-6번은 백엔드/MCP 소관이 아니니 Core 담당(권태욱)에게 근본 원인과 함께
-전달하면 된다.
 
-원하면 1+2번, 3번을 지금까지 쓰던 형식 그대로 `docs/backend/specs/10_*.md`
-스펙으로 만들어서 클로드코드한테 바로 던질 수 있게 준비해줄 수 있다.
+원하면 이 세 개(1+2를 묶어서 하나, 3을 하나)를 지금까지 쓰던 형식 그대로
+`docs/backend/specs/10_*.md` 스펙으로 만들어서 클로드코드한테 바로 던질 수
+있게 준비해줄 수 있다.
