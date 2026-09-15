@@ -113,7 +113,10 @@ Phase 하나 끝날 때마다 `PROGRESS_LOG.md`를 갱신한다 (필수, 생략 
 | 6 | 통합 테스트 + 배포 설정 문서화 | `specs/06_integration_and_docs.md` | 완료 (2026-09-14) |
 | 7 | bcrypt 버전 고정 (실제 버그: bcrypt 5.0.0 + passlib 비호환) | `specs/07_bcrypt_version_pin_fix.md` | 완료 (2026-09-15) |
 | 8 | 진행 문서 백필 (Phase 3~6 spec 상태/도메인 폴더/PROGRESS_LOG 동기화) | `specs/08_docs_sync_backfill.md` | 완료 (2026-09-15) |
-| 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 대기 |
+| 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 완료 (2026-09-15) |
+| 10 | apex-mcp CLI를 새 JWT 인증 체인에 실제로 배선 (실제 버그) | `specs/10_cli_jwt_wiring_fix.md` | 대기 |
+| 11 | confirmation grant 1회 소비 경쟁 조건 수정 (실제 버그) | `specs/11_confirmation_grant_race_fix.md` | 대기 |
+| 12 | refresh token rotation/로그아웃 엔드포인트 (선택, 낮은 우선순위) | `specs/12_refresh_token_rotation_logout.md` | 대기 (착수 전 사람 확인 필요) |
 
 ## 6. 완료 기준 (전체)
 
@@ -142,6 +145,30 @@ PersistentFrontendSecurityProvider → confirmation grant)이 실제로 동작�
 | 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 대기 |
 
 Phase 7, 8, 9는 서로 독립적이라 순서 상관없이, 또는 동시에 진행해도 된다.
+
+## 6-3. 2026-09-15 재검토 발견 사항 및 후속 Phase 10~12
+
+Phase 1~9 전부 완료 후, 코드를 다시 처음부터 끝까지 실행 경로 기준으로
+재검토했다 (테스트/ruff/mypy/CI green이라는 사실만으로 "문제 없음"이라고
+결론 내리지 말라는 지적에 따른 재조사). 테스트가 실제로 검증하지 않는
+경로에서 실제 문제 2건, 참고 사항 1건을 확인함. 전체 재검토 근거는
+`AUDIT_2026-09-15_production_wiring.md` 참고.
+
+- **Phase 10 (높음, 실제 버그)**: `apex-mcp` CLI가 `JwtTokenVerifier`/
+  `DbFrontendSecurityProvider`를 전혀 안 쓰고 여전히 개발용 스텁
+  (`StaticBearerTokenVerifier`/`InMemoryFrontendSecurityProvider`)으로만
+  동작함. 배포 가이드 명령어도 이것 때문에 실제로 실행 불가 (재현 확인함).
+  6절 완료 기준 중 "프로덕션 경로에서 인메모리 스텁을 안 씀"이 실제로는
+  충족되지 않은 상태였음.
+- **Phase 11 (중간, 실제 버그)**: `DbFrontendSecurityProvider.authorize()`의
+  1회 소비 로직에 읽기-검사-쓰기 원자성이 없어서 동시 요청 시 `max_uses=1`
+  grant가 두 번 소비될 수 있는 경쟁 조건 있음.
+- **Phase 12 (선택, 낮음, 버그 아님)**: refresh token 재사용 탐지/rotation,
+  로그아웃 엔드포인트 없음. 어떤 스펙에도 요구사항으로 명시된 적 없어서
+  참고 사항으로만 남김 — 착수 전 사람 확인 필요.
+
+Phase 10/11은 바로 착수 가능한 실제 버그 수정이고, Phase 12는 범위 확정을
+사람과 먼저 해야 한다 (해당 스펙 파일 "주의" 절 참고).
 
 ## 6-2. 보류 항목 (지금 시작하지 않음)
 
