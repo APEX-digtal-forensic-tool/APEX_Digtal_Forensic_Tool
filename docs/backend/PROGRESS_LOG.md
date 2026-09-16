@@ -8,12 +8,32 @@
 
 ## 현재 상태
 
-Phase: 1~16 완료 (PR #14~#19 머지 완료, Phase 12 PR #20 생성 완료, main 기준 CI green).
+Phase: 1~16 전부 완료 (PR #14~#20 전부 머지 완료, main 기준 CI green).
+Phase 12는 완료됐지만 알려진 트레이드오프 있음 — 아래 "마지막 진행 상황"과
+`00_MASTER_PLAN.md` 6-6절 참고.
 마지막 업데이트: 2026-09-16
 
 ## 마지막 진행 상황
 
-Phase 12 완료 (refresh token rotation, 세션 강제 로그아웃, PR #20 생성):
+**Phase 12 관련 결정 — MCP 경로 즉각 차단 범위 (2026-09-16, 사람 확정):**
+Phase 12 구현 검토 중, `PersistentFrontendSecurityProvider.resolve_session`/
+`JwtTokenVerifier.verify_token`이 옵션 A 설계상 DB를 안 타서, 로그아웃/재사용
+탐지로 세션을 강제 종료해도 이미 발급된 access token은 MCP 도구 호출(52개
+Tool 전체) 경로에서 `exp`까지 계속 통과된다는 사실을 확인함. `/auth/refresh`,
+`/confirmations`만 DB로 즉시 차단됨.
+→ **결정: `resolve_session`/`verify_token`에 DB 체크를 추가하는 근본 수정
+대신, `APEX_ACCESS_TOKEN_TTL`을 짧게(운영 권장값 `300`초) 설정해서 노출
+구간을 최소화하는 쪽으로 완화.** 옵션 A의 "매 도구 호출마다 DB 안 탄다"는
+성능·내결함성 이점을 유지하는 게 더 중요하다고 판단. 즉각(0초) 차단이
+필요해지면 하이브리드(주기적 폴링 캐시) 방식을 새 스펙으로 검토 — 지금은
+스펙 없음, 착수 금지.
+- `docs/backend/deployment/README.md`: env var 표에 `APEX_ACCESS_TOKEN_TTL`
+  프로덕션 권장값(`300`) 명시, "세션 관리 운영 참고" 섹션에 결정 배경과
+  근거 추가, "프로덕션 체크리스트"에 TTL 설정 확인 항목 추가.
+- `00_MASTER_PLAN.md` 6-6절 신규: 이 결정과 대안 비교 기록.
+- 코드 변경 없음 (운영 설정값 권장사항 + 문서화만).
+
+Phase 12 완료 (refresh token rotation, 세션 강제 로그아웃, PR #20 머지 완료):
 - `models.py`: `UserSession.current_refresh_jti VARCHAR(36) NULL` 추가.
 - `alembic/versions/0002_refresh_jti.py`: DB 마이그레이션 신규.
 - `jwt_utils.py`: `issue_refresh_token(jti=)` 파라미터 추가.
@@ -23,9 +43,11 @@ Phase 12 완료 (refresh token rotation, 세션 강제 로그아웃, PR #20 생�
 - `confirmation_router.py`: 세션 말소 체크 (존재 + `is_active == False`이면 401).
 - `app.py`: auth_router에 `_get_jwt_verifier` dependency 배선.
 - `tests/backend/test_refresh_rotation.py` 신규 (9개): jti 저장, 기본 rotation, 재사용 감지 + 세션 말소, 동시 refresh, logout, NULL jti 레거시, HTTP logout 엔드포인트, 말소 세션 confirmation 거부.
-- 전체 61개 통과, ruff/mypy 클린.
+- 전체 61개 통과, ruff/mypy 클린 — Claude(cloud)가 클린 venv에서 독립 재현해서
+  재확인함 (pytest 61 passed, ruff all checks passed, mypy --strict 0 issues).
 - `docs/backend/refresh-rotation-logout/README.md` as-built 신규.
-- `docs/backend/deployment/README.md` 운영 참고 섹션 추가.
+- `docs/backend/deployment/README.md` 운영 참고 섹션 추가 (이후 위 결정으로
+  한 차례 더 갱신됨).
 
 Phase 10 완료 (apex-mcp CLI JWT 인증 체인 배선, PR #14 머지됨):
 - `src/apex_mcp/__main__.py`: `--http-jwks-uri`/`APEX_JWKS_URI`,
@@ -88,7 +110,7 @@ Phase 14 완료 (`--log-level` 죽은 설정값 실제 로깅 적용, PR #17 머
 - `docs/backend/log-level-wiring/README.md` as-built 신규 작성.
 - 전체 115개 통과 (mcp 70, backend 45), ruff/mypy 클린.
 
-Phase 15 완료 (JWKS 조회 실패 로깅 추가, PR #18 머지 대기):
+Phase 15 완료 (JWKS 조회 실패 로깅 추가, PR #18 머지 완료):
 - `src/apex_backend/auth/jwt_verifier.py`: `import logging` + `_logger` 추가.
   `_fetch_jwks()` `except Exception` 블록: 빈 캐시 시 "no cached keys" 경고,
   캐시 있을 시 "continuing with N cached key(s)" 경고, 둘 다 `exc_info=True`.
@@ -99,7 +121,7 @@ Phase 15 완료 (JWKS 조회 실패 로깅 추가, PR #18 머지 대기):
 - `docs/backend/jwks-failure-logging/README.md` as-built 신규 작성.
 - 전체 118개 통과 (mcp 66, backend 52), ruff/mypy 클린.
 
-Phase 16 완료 (README.md 상태표·체크리스트 동기화, PR #19 생성):
+Phase 16 완료 (README.md 상태표·체크리스트 동기화, PR #19 머지 완료):
 - `README.md` line 30 (MCP/LLM Runtime 행): "제품용 영속 identity/approval/billing backend는 별도 통합 대상" → identity/approval 구현 완료(Phase 1~11·13~15), billing만 미완료로 수정.
 - `README.md` line 31 (Frontend/Backend 행): 상태 "별도 담당 및 통합 대상" → "Identity/Approval 완료 · GUI·Billing 별도 담당". 설명에서 Session/Identity·Approval 완료 반영.
 - `README.md` line 34 (마무리 요약): "AI·Frontend·Backend 통합" → "AI·Frontend·Billing 통합".
@@ -109,13 +131,17 @@ Phase 16 완료 (README.md 상태표·체크리스트 동기화, PR #19 생성):
 
 ## 다음 작업
 
-모든 계획된 백엔드 Phase (1~16 + 12) 완료.
+계획된 백엔드 Phase(1~16, Phase 12 포함) 전부 완료. 새로 시작할 스펙 없음.
 
-보류 중인 항목(착수 금지):
+보류 중인 항목(착수 금지, 사람 지시 있을 때까지 대기):
 - Windows Desktop bundle 제품 통합 검증 — 프론트/패키징 담당과 협의 필요
 - Case/Evidence/Search 신규 Domain Tool — Core Descriptor 열릴 때까지 대기
 - `tests/unit`(Core)/`tests/integration`을 CI에 추가하는 것 — Core 담당과
   별도 상의 필요, 백엔드가 일방적으로 진행하지 말 것
+- "자율 Agent Workflow와 제품 Prompt 정책" (README 체크리스트 항목) — 스펙
+  없음, 사람이 이번 라운드에 명시적으로 보류 결정함
+- MCP 경로 즉시(0초) revoked-session 차단 (하이브리드 캐시) — 지금은
+  TTL 완화로 대체함(위 "마지막 진행 상황" 참고), 필요해지면 새 스펙으로
 
 ## 결정 대기
 
@@ -128,6 +154,10 @@ Phase 16 완료 (README.md 상태표·체크리스트 동기화, PR #19 생성):
 - SQLAlchemy: async 모드
 - 테스트 DB: 단위=SQLite/aiosqlite in-memory, 통합=실제 PostgreSQL
 - bcrypt: `>=4.0,<4.1` 고정 (passlib 비호환 버그, Phase 7)
+- refresh token 재사용 탐지 시 세션 전체 강제 로그아웃 (Phase 12, 2026-09-15)
+- MCP 도구 호출 경로의 revoked-session 즉각 차단은 DB 체크 추가 대신
+  `APEX_ACCESS_TOKEN_TTL=300` 운영 권장값으로 완화 (Phase 12, 2026-09-16,
+  근거는 `00_MASTER_PLAN.md` 6-6절)
 
 ## 히스토리 (오래된 순으로 append, 삭제 금지)
 
@@ -223,4 +253,23 @@ Phase 16 완료 (README.md 상태표·체크리스트 동기화, PR #19 생성):
 ### 2026-09-16
 - Phase 12 완료: refresh token rotation(jti 기반), 재사용 탐지 시 세션 전체 강제
   로그아웃, `POST /auth/logout` 엔드포인트. migration 0002, 9개 신규 테스트.
-  61/61 통과, ruff/mypy 클린. PR #20 생성.
+  61/61 통과, ruff/mypy 클린. PR #20 생성 → 머지 완료.
+  Claude(cloud)가 클린 venv를 새로 구성해 pytest/ruff/mypy를 직접 재현하여
+  독립 검증함 (61 passed, ruff all checks passed, mypy --strict 0 issues,
+  apex_backend 17 files).
+- Phase 16(README 동기화) PR #19 머지 완료 확인.
+- Phase 12 검토 중 발견: MCP 도구 호출 경로(`resolve_session`/`verify_token`)는
+  DB revoked 체크가 없어서, 로그아웃/재사용탐지 후에도 access token이 만료
+  전까지는 MCP 쪽에서 계속 통과됨 — 스펙 4번("아직 만료 안 됐어도 거부")을
+  MCP 경로까지는 완전히 만족 못 시킨 상태. 사람에게 보고 후 논의.
+- **결정(사람)**: 근본 수정(DB 체크 추가, hot path 성능·장애점 트레이드오프)
+  대신 `APEX_ACCESS_TOKEN_TTL=300` 운영 권장값으로 노출 구간 완화. 근거는
+  `00_MASTER_PLAN.md` 6-6절, 운영 가이드는 `docs/backend/deployment/README.md`.
+  `PROGRESS_LOG.md`·`00_MASTER_PLAN.md` 갱신 (이 항목).
+- `00_MASTER_PLAN.md` 정합성 복구: Phase 15 검증 중 `git checkout <branch> --
+  .`로 워킹트리 강제 덮어쓰기했을 때, 그 시점까지 커밋 안 하고 워킹트리에만
+  갖고 있던 6-4절(Phase 13~15 로드맵)과 Phase 11 완료 상태 반영분이 통째로
+  날아갔던 것을 발견 (Claude(cloud) 원인, git add/commit 안 하고 파일만
+  수정해뒀던 게 원인). Phase 11 상태 정정, 6-3절 자기모순(표는 "범위
+  확정됨"인데 본문은 "확인 필요"로 남아있던 것) 정리, 6-4(Phase 13~15)·
+  6-5(Phase 16)·6-6(Phase 12 TTL 결정)절 복구 및 신규 작성.

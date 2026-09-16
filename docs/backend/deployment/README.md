@@ -1,6 +1,6 @@
 # APEX Backend — 배포 가이드
 
-상태: Phase 6 완료 (2026-09-12)
+상태: Phase 12 완료 (2026-09-16)
 
 ## 구성 요소
 
@@ -21,7 +21,7 @@
 | `APEX_RS256_KID` | `"default"` | 키 ID (JWKS `kid` 필드 값) |
 | `APEX_ISSUER` | `https://apex.local` | JWT `iss` 클레임 |
 | `APEX_MCP_RESOURCE` | `https://apex.local/mcp` | JWT `aud` 클레임 |
-| `APEX_ACCESS_TOKEN_TTL` | `3600` | access token 유효기간 (초) |
+| `APEX_ACCESS_TOKEN_TTL` | `3600` (**프로덕션 권장: `300`**) | access token 유효기간 (초). MCP 경로는 세션 revoked 여부를 DB로 확인하지 않으므로, 로그아웃/재사용 탐지 후에도 이 TTL이 지날 때까지는 MCP 도구 호출이 통과될 수 있다 — 상세는 "세션 관리 운영 참고" 참고 |
 | `APEX_REFRESH_TOKEN_TTL` | `86400` | refresh token 유효기간 (초) |
 
 ### apex_mcp (HTTP 모드)
@@ -55,6 +55,7 @@ APEX_DATABASE_URL="postgresql+asyncpg://apex:secret@localhost:5432/apex" \
 APEX_RS256_PRIVATE_KEY_PEM="$(cat private.pem)" \
 APEX_ISSUER="https://apex.example.com" \
 APEX_MCP_RESOURCE="https://apex.example.com/mcp" \
+APEX_ACCESS_TOKEN_TTL="300" \
 uv run uvicorn apex_backend.app:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
@@ -141,15 +142,25 @@ SQLite(테스트용)는 추가 드라이버 불필요.
 
 ## 세션 관리 운영 참고
 
-### 로그아웃
+### 로그아웃 / MCP 경로 즉각 차단 범위 (중요)
 
 `POST /auth/logout`에 Bearer access token을 보내면 해당 세션이 즉시 무효화된다.
-이후 동일 세션의 refresh token은 `401 Session revoked or not found`로 거부된다.
+이후 동일 세션의 refresh token은 `401 Session revoked or not found`로 거부되고,
+`POST /confirmations`도 DB 세션 상태를 확인하므로 즉시 401로 막힌다.
 
-MCP 경로(`apex_mcp`)는 JWT 서명만 검증하므로 **로그아웃 후에도 access token의 JWT
-만료 시간(`exp`)까지는 MCP 요청이 기술적으로 통과될 수 있다**. `POST /confirmations`
-는 DB 세션 상태를 확인하므로 즉시 차단된다. MCP 경로의 즉각 차단이 필요하면
-access token TTL을 짧게 유지할 것.
+**MCP 경로(`apex_mcp`, Case/Evidence/Search/Report/AI 등 실제 도구 호출)는 JWT
+서명만 검증하고 DB에 세션 revoked 여부를 확인하지 않는다** (Option A 설계 —
+매 도구 호출마다 DB 왕복을 만들지 않기 위한 의도적 트레이드오프). 따라서
+로그아웃하거나 refresh token 재사용이 탐지돼도, 이미 발급된 access token은
+`exp`(만료 시각)까지는 MCP 도구 호출에 계속 사용될 수 있다.
+
+**결정 (2026-09-16, 사람 확정)**: `resolve_session`/`verify_token`에 DB 체크를
+추가하는 근본 수정 대신, `APEX_ACCESS_TOKEN_TTL`을 짧게(**300초 권장**) 설정해서
+노출 구간을 최소화하는 쪽으로 완화하기로 함. Option A의 "매 도구 호출마다 DB
+안 탄다"는 성능·내결함성 이점을 유지하는 게 더 중요하다고 판단. 즉각(0초) 차단이
+필요해지면 별도 스펙으로 revoked-session 캐시(하이브리드: MCP 프로세스가 주기적으로
+말소 목록을 폴링해 메모리에 캐시) 도입을 검토할 것 — 매 호출 DB 왕복 없이도
+차단 지연을 초 단위로 줄일 수 있다.
 
 ### refresh token 재사용 탐지
 
@@ -171,6 +182,9 @@ Phase 12 배포 후 기존 세션(`current_refresh_jti IS NULL`)은 다음 refre
 - [ ] `APEX_RS256_PRIVATE_KEY_PEM` 환경변수로 키 주입 (in-memory 자동생성 금지)
 - [ ] `APEX_DATABASE_URL`에 PostgreSQL URL 설정
 - [ ] `APEX_ISSUER`, `APEX_MCP_RESOURCE`를 실제 도메인으로 변경
+- [ ] `APEX_ACCESS_TOKEN_TTL=300` 설정 확인 (기본값 3600을 그대로 두면 로그아웃/
+      재사용탐지 후에도 최대 1시간까지 MCP 도구 호출이 통과될 수 있음 — "세션 관리
+      운영 참고" 참고)
 - [ ] TLS 종단 (reverse proxy 또는 `--ssl-keyfile/--ssl-certfile`)
 - [ ] `psycopg2-binary` (또는 `psycopg2`) 설치 확인
 - [ ] DB 마이그레이션 (`alembic upgrade head`) CI/CD에 포함

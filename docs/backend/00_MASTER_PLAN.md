@@ -1,6 +1,6 @@
 # APEX 백엔드 마스터 기획서
 
-상태: 착수 전 (Phase 0)
+상태: Phase 1~16 전부 완료 (Phase 12 포함)
 작성일: 2026-09-11
 담당: 한예준 (Backend + MCP)
 실행: Claude Code (이 문서와 하위 스펙을 읽고 구현)
@@ -78,7 +78,7 @@ MCP 프로세스와 FastAPI 백엔드가 "인증 진실"을 어떻게 공유할�
 있고, 둘 다 말이 된다. Claude Code가 임의로 고르게 두지 말고, 아래 중 하나를
 **Phase 1 시작 전에 사람이 확정**해야 한다.
 
-**옵션 A (추천): JWT 로컬 검증 + 승인 grant는 공유 DB**
+**옵션 A (추천, 채택됨): JWT 로컬 검증 + 승인 grant는 공유 DB**
 - 백엔드가 로그인 시 서명된 JWT(RS256/ES256)를 발급. 클레임에 actor_id,
   session_id, tenant_id, allowed_case_ids, roles, scopes 전부 포함.
 - MCP의 `TokenVerifier.verify_token`은 백엔드에 매 요청마다 물어볼 필요 없이
@@ -98,6 +98,12 @@ MCP 프로세스와 FastAPI 백엔드가 "인증 진실"을 어떻게 공유할�
 로컬 검증(빠름), 승인 grant처럼 "방금 취소됐을 수도 있는" 상태만 공유 저장소로
 확인(정확함). 이 결정은 `specs/00_DECISIONS.md`에 확정해서 적어두고 시작한다.
 
+> **주의 (Phase 12에서 드러난 트레이드오프, 2026-09-16)**: "MCP 도구 호출은
+> DB 안 탄다"는 이 옵션 A의 핵심 이점 때문에, `POST /auth/logout`이나 refresh
+> token 재사용 탐지로 세션을 강제 종료해도 **이미 발급된 access token은 MCP
+> 도구 호출 경로에서는 만료 시각(exp)까지 계속 유효하다**. 상세 근거와 최종
+> 결정은 6-6절 참고.
+
 ## 5. 로드맵 (Phase)
 
 각 Phase는 `specs/` 밑에 하위 구현 기획서가 하나씩 있다. 순서대로 진행하고,
@@ -114,9 +120,12 @@ Phase 하나 끝날 때마다 `PROGRESS_LOG.md`를 갱신한다 (필수, 생략 
 | 7 | bcrypt 버전 고정 (실제 버그: bcrypt 5.0.0 + passlib 비호환) | `specs/07_bcrypt_version_pin_fix.md` | 완료 (2026-09-15) |
 | 8 | 진행 문서 백필 (Phase 3~6 spec 상태/도메인 폴더/PROGRESS_LOG 동기화) | `specs/08_docs_sync_backfill.md` | 완료 (2026-09-15) |
 | 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 완료 (2026-09-15) |
-| 10 | apex-mcp CLI를 새 JWT 인증 체인에 실제로 배선 (실제 버그) | `specs/10_cli_jwt_wiring_fix.md` | 완료 (2026-09-15) |
-| 11 | confirmation grant 1회 소비 경쟁 조건 수정 (실제 버그) | `specs/11_confirmation_grant_race_fix.md` | 대기 |
-| 12 | refresh token rotation(재사용 시 세션 전체 로그아웃) + 로그아웃 엔드포인트 | `specs/12_refresh_token_rotation_logout.md` | 대기 (범위 확정됨, 바로 착수 가능) |
+| 10 | apex-mcp CLI를 새 JWT 인증 체인에 실제로 배선 (실제 버그) | `specs/10_cli_jwt_wiring_fix.md` | 완료 (2026-09-15, PR #14) |
+| 11 | confirmation grant 1회 소비 경쟁 조건 수정 (실제 버그) | `specs/11_confirmation_grant_race_fix.md` | 완료 (2026-09-15, PR #15) |
+| 12 | refresh token rotation(재사용 시 세션 전체 로그아웃) + 로그아웃 엔드포인트 | `specs/12_refresh_token_rotation_logout.md` | 완료 (2026-09-16, PR #20) |
+
+Phase 13~16은 2차 재검토(6-4절)에서 나온 후속 항목으로, 아래 6-4/6-5절에
+별도 로드맵으로 기록돼있다 (이 표는 최초 작성 시점 기준이라 갱신 안 함).
 
 ## 6. 완료 기준 (전체)
 
@@ -138,37 +147,8 @@ PersistentFrontendSecurityProvider → confirmation grant)이 실제로 동작�
 109개 테스트로 검증됨. 다만 배포 환경에서 재현되는 실제 버그 하나(Phase 7)와
 문서 백필(Phase 8), 레거시 정리(Phase 9)가 후속 작업으로 남아 확인됨.
 
-| Phase | 내용 | 스펙 파일 | 상태 |
-|---|---|---|---|
-| 7 | bcrypt 버전 고정 (실제 버그: bcrypt 5.0.0 + passlib 비호환) | `specs/07_bcrypt_version_pin_fix.md` | 대기 |
-| 8 | 진행 문서 백필 (Phase 3~6 spec 상태/도메인 폴더/PROGRESS_LOG 동기화) | `specs/08_docs_sync_backfill.md` | 대기 |
-| 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 대기 |
-
 Phase 7, 8, 9는 서로 독립적이라 순서 상관없이, 또는 동시에 진행해도 된다.
-
-## 6-3. 2026-09-15 재검토 발견 사항 및 후속 Phase 10~12
-
-Phase 1~9 전부 완료 후, 코드를 다시 처음부터 끝까지 실행 경로 기준으로
-재검토했다 (테스트/ruff/mypy/CI green이라는 사실만으로 "문제 없음"이라고
-결론 내리지 말라는 지적에 따른 재조사). 테스트가 실제로 검증하지 않는
-경로에서 실제 문제 2건, 참고 사항 1건을 확인함. 전체 재검토 근거는
-`AUDIT_2026-09-15_production_wiring.md` 참고.
-
-- **Phase 10 (높음, 실제 버그)**: `apex-mcp` CLI가 `JwtTokenVerifier`/
-  `DbFrontendSecurityProvider`를 전혀 안 쓰고 여전히 개발용 스텁
-  (`StaticBearerTokenVerifier`/`InMemoryFrontendSecurityProvider`)으로만
-  동작함. 배포 가이드 명령어도 이것 때문에 실제로 실행 불가 (재현 확인함).
-  6절 완료 기준 중 "프로덕션 경로에서 인메모리 스텁을 안 씀"이 실제로는
-  충족되지 않은 상태였음.
-- **Phase 11 (중간, 실제 버그)**: `DbFrontendSecurityProvider.authorize()`의
-  1회 소비 로직에 읽기-검사-쓰기 원자성이 없어서 동시 요청 시 `max_uses=1`
-  grant가 두 번 소비될 수 있는 경쟁 조건 있음.
-- **Phase 12 (선택, 낮음, 버그 아님)**: refresh token 재사용 탐지/rotation,
-  로그아웃 엔드포인트 없음. 어떤 스펙에도 요구사항으로 명시된 적 없어서
-  참고 사항으로만 남김 — 착수 전 사람 확인 필요.
-
-Phase 10/11은 바로 착수 가능한 실제 버그 수정이고, Phase 12는 범위 확정을
-사람과 먼저 해야 한다 (해당 스펙 파일 "주의" 절 참고).
+셋 다 완료됨 (2026-09-15).
 
 ## 6-2. 보류 항목 (지금 시작하지 않음)
 
@@ -185,6 +165,83 @@ Phase 10/11은 바로 착수 가능한 실제 버그 수정이고, Phase 12는 �
   `EngineInterfaceService`에 해당 Descriptor를 아직 공개하지 않음. Core
   담당이 그걸 열어주기 전까지는 MCP/백엔드 쪽에서 손댈 수 있는 게 없음
   (재구현 금지 원칙 위반이 됨). Core 쪽 진행 상황을 기다린다.
+- (2026-09-15 추가) `tests/unit`(Core)/`tests/integration`을 CI에 추가하는
+  것 — Core 담당과 별도 상의 필요, 백엔드가 일방적으로 CI 정책을 바꾸지 말 것.
+- (2026-09-16 추가) "자율 Agent Workflow와 제품 Prompt 정책" (README 체크리스트
+  항목) — 스펙 없는 상태에서 Claude Code가 자유 설계하게 두는 리스크가 있어
+  사람이 이번 라운드에 명시적으로 보류 결정함.
+
+## 6-3. 2026-09-15 재검토 발견 사항 및 후속 Phase 10~12 (결과 반영 완료)
+
+Phase 1~9 전부 완료 후, 코드를 다시 처음부터 끝까지 실행 경로 기준으로
+재검토했다 (테스트/ruff/mypy/CI green이라는 사실만으로 "문제 없음"이라고
+결론 내리지 말라는 지적에 따른 재조사). 테스트가 실제로 검증하지 않는
+경로에서 실제 문제 2건, 참고 사항 1건을 확인함. 전체 재검토 근거는
+`AUDIT_2026-09-15_production_wiring.md` 참고.
+
+- **Phase 10 (높음, 실제 버그)** — 완료 (PR #14): `apex-mcp` CLI가
+  `JwtTokenVerifier`/`DbFrontendSecurityProvider`를 전혀 안 쓰고 여전히
+  개발용 스텁으로만 동작했던 문제. 배포 가이드 명령어도 이것 때문에 실제로
+  실행 불가했음 (재현 확인함). CLI에 프로덕션 모드 배선 완료.
+- **Phase 11 (중간, 실제 버그)** — 완료 (PR #15):
+  `DbFrontendSecurityProvider.authorize()`의 1회 소비 로직에 읽기-검사-쓰기
+  원자성이 없어서 동시 요청 시 `max_uses=1` grant가 두 번 소비될 수 있던
+  경쟁 조건. 원자적 UPDATE로 수정, `threading.Barrier` 동시성 테스트로 검증.
+- **Phase 12 (당시: 선택/버그 아님, 이후 범위 확정되어 완료)** — 완료
+  (2026-09-16, PR #20): refresh token 재사용 탐지/rotation, 로그아웃
+  엔드포인트. 2026-09-15에 사람이 "세션 전체 강제 로그아웃" 방식으로 범위
+  확정, 구현 완료. 상세는 6-6절 참고.
+
+## 6-4. 2026-09-15 2차 재검토 발견 사항 및 후속 Phase 13~15 (완료)
+
+Phase 10/11 반영 후, "설정값이 실제로 쓰이는지", "예외 처리가 흔적을
+남기는지", "CI가 실제로 뭘 검증하는지"까지 점검한 2차 재검토. 전체 근거는
+`AUDIT_2026-09-15_part2_full_recheck.md` 참고.
+
+| Phase | 내용 | 스펙 파일 | 상태 |
+|---|---|---|---|
+| 13 | CI(`mcp-ci.yml`)가 `tests/backend`를 전혀 실행하지 않던 검증 공백 수정 | `specs/13_ci_backend_tests.md` | 완료 (2026-09-15, PR #16) |
+| 14 | `--log-level`/`APEX_MCP_LOG_LEVEL`이 검증만 되고 실제 로깅에 미적용이던 죽은 설정값 수정 | `specs/14_log_level_wiring.md` | 완료 (2026-09-15, PR #17) |
+| 15 | `JwtTokenVerifier._fetch_jwks()`가 조회 실패를 무음으로 삼키던 문제에 로깅 추가 | `specs/15_jwks_failure_logging.md` | 완료 (2026-09-15, PR #18) |
+
+확인했으나 문제 아닌 것으로 판정: `DpapiUnavailableProvider`/
+`UnavailableAiAssistanceProvider`/`UnavailableReportRenderer` (의도된
+null-object 폴백), `report.py`의 `overwrite_policy != "DENY"` 제한(의도된
+증거 무결성 보호), 라우터 `NotImplementedError` DI 스텁(`app.py`가 실제로
+연결함).
+
+## 6-5. Phase 16 — README 최상단 상태표 동기화 (완료)
+
+Phase 1~11·13~15가 main에 merge된 뒤에도 `README.md` 최상단 상태 요약표와
+"별도 담당" 체크리스트가 identity/approval을 여전히 미착수로 서술하고
+있어서, 실제 구현 상태에 맞게 동기화함. 상세는 `specs/16_readme_status_sync.md`
+및 `docs/backend/readme-status-sync/README.md` 참고. 완료 (2026-09-16, PR #19).
+
+## 6-6. Phase 12 최종 결정 — MCP 경로 즉각 차단 범위 (2026-09-16)
+
+Phase 12 구현 검토 중 확인된 사실: `PersistentFrontendSecurityProvider
+.resolve_session`과 `JwtTokenVerifier.verify_token`은 옵션 A 설계(4절 참고)에
+따라 DB를 타지 않고 JWT 서명만으로 검증한다. 그 결과 `POST /auth/logout`이나
+refresh token 재사용 탐지로 세션을 강제 종료해도, **이미 발급된 access
+token은 MCP 도구 호출(Case/Evidence/Search/Report/AI 등 52개 Tool 전체)
+경로에서는 `exp`(만료 시각)까지 계속 통과된다.** `/auth/refresh`와
+`/confirmations`만 DB로 즉시 차단된다.
+
+두 가지 대안을 검토함:
+1. **TTL 완화 (채택)**: `resolve_session`/`verify_token`은 그대로 두고,
+   `APEX_ACCESS_TOKEN_TTL`을 짧게(운영 권장값 300초) 설정해서 노출 구간을
+   최소화. 옵션 A의 "MCP 도구 호출마다 DB 안 탄다"는 성능·내결함성 이점을
+   그대로 유지.
+2. **근본 수정**: `resolve_session`/`verify_token`에 DB 세션 조회를 추가해
+   즉시(0초) 차단. 매 MCP 도구 호출마다 DB 왕복이 생겨 지연 증가, 백엔드
+   DB 장애가 MCP 전체 장애로 번지는 새 실패 지점이 생김. 인증 hot path를
+   건드리는 만큼 회귀 위험도 큼.
+
+**결정 (사람, 2026-09-16): 1번(TTL 완화) 채택.** `APEX_ACCESS_TOKEN_TTL=300`을
+운영 권장값으로 `docs/backend/deployment/README.md`에 명시함. 즉각(0초) 차단이
+실제로 필요해지면, 매 호출 DB 왕복 없이 지연을 초 단위로 줄이는 하이브리드
+(MCP 프로세스가 주기적으로 말소 세션 목록을 폴링해 메모리에 캐시)를 별도
+스펙으로 검토할 것 — 지금은 스펙 없음, 착수 금지.
 
 ## 7. 이 폴더 안내
 
