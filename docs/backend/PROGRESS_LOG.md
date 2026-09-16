@@ -8,8 +8,9 @@
 
 ## 현재 상태
 
-Phase: 1~11, 13, 14, 15 완료 (PR #14~#17 머지 완료, PR #18 머지 대기).
-다음 착수 가능 Phase 없음. Phase 12는 대기하되 착수 전 사람 확인 필요 (범위 미확정).
+Phase: 1~11, 13~16 완료 (PR #14~#19 전부 머지 완료 예정, main 기준 CI green).
+Phase 12는 범위 확정됨(2026-09-15, 재사용 감지 시 세션 전체 강제
+로그아웃 방식) — 바로 착수 가능.
 마지막 업데이트: 2026-09-15
 
 ## 마지막 진행 상황
@@ -52,6 +53,13 @@ Phase 11 완료 (confirmation grant 소비 경쟁 조건 수정, PR #15 머지 �
 갱신. 전체 근거는 `docs/backend/AUDIT_2026-09-15_part2_full_recheck.md`
 참고.
 
+Phase 12 범위 확정(2026-09-15): 재사용 탐지 시 "세션 전체 강제 로그아웃"
+방식으로 사람이 결정함(해당 refresh token만 무효화하는 대안 대비 더
+안전한 쪽 선택, 정상 사용자가 재로그인해야 하는 트레이드오프 감수).
+`specs/12_refresh_token_rotation_logout.md`를 이 결정에 맞춰 전면
+재작성 — jti 기반 rotation, 재사용 감지 시 `UserSession.is_active=False`,
+`POST /auth/logout` 신규, 동시성 처리(Phase 11 패턴 재사용)까지 명시.
+
 Phase 13 완료 (CI tests/backend 검증 공백 수정, PR #16 머지 완료):
 - `.github/workflows/mcp-ci.yml` `contract-and-security` job: `MCP contract tests`
   스텝 바로 뒤에 `Backend tests` 스텝(`uv run --locked pytest -q tests/backend`)
@@ -79,18 +87,26 @@ Phase 15 완료 (JWKS 조회 실패 로깅 추가, PR #18 머지 대기):
 - `docs/backend/jwks-failure-logging/README.md` as-built 신규 작성.
 - 전체 118개 통과 (mcp 66, backend 52), ruff/mypy 클린.
 
+Phase 16 완료 (README.md 상태표·체크리스트 동기화, PR #19 생성):
+- `README.md` line 30 (MCP/LLM Runtime 행): "제품용 영속 identity/approval/billing backend는 별도 통합 대상" → identity/approval 구현 완료(Phase 1~11·13~15), billing만 미완료로 수정.
+- `README.md` line 31 (Frontend/Backend 행): 상태 "별도 담당 및 통합 대상" → "Identity/Approval 완료 · GUI·Billing 별도 담당". 설명에서 Session/Identity·Approval 완료 반영.
+- `README.md` line 34 (마무리 요약): "AI·Frontend·Backend 통합" → "AI·Frontend·Billing 통합".
+- `README.md` line 1736 (체크리스트): `[ ] 영속 Identity / Approval policy / Billing backend` 한 줄 → `[x]` Identity/Approval 완료 + `[ ]` Billing 별도 두 줄 분리.
+- `docs/backend/specs/16_readme_status_sync.md` 신규 작성 (상태: 완료).
+- `docs/backend/readme-status-sync/README.md` as-built 신규 작성.
+
 ## 다음 작업
 
-없음. Phase 12는 대기 (사람 확인 필요).
-
-Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
-`specs/12_refresh_token_rotation_logout.md` "주의" 절 참고, 범위를
-사람과 먼저 확정해야 함.
+Phase 12 착수 가능: `specs/12_refresh_token_rotation_logout.md` — refresh
+token은 매번 rotation 발급하고, 이미 교체된(재사용된) 토큰이 들어오면
+해당 세션 전체를 강제 로그아웃시키는 방식으로 범위 확정됨(2026-09-15,
+사람 결정). `POST /auth/logout` 엔드포인트도 이 Phase에서 같이 만든다.
+스펙 완료 조건에 `ruff check .`를 전체 리포 기준으로 확인하라고
+명시해뒀음 — Phase 15 때 `tests/backend`를 빠뜨렸던 실수 반복 금지.
 
 보류 중인 항목(착수 금지):
 - Windows Desktop bundle 제품 통합 검증 — 프론트/패키징 담당과 협의 필요
 - Case/Evidence/Search 신규 Domain Tool — Core Descriptor 열릴 때까지 대기
-- Phase 12 (refresh token rotation/로그아웃) — 범위 확정 전까지 대기
 - `tests/unit`(Core)/`tests/integration`을 CI에 추가하는 것 — Core 담당과
   별도 상의 필요, 백엔드가 일방적으로 진행하지 말 것
 
@@ -193,4 +209,6 @@ Phase 12는 대기만 시켜두고 스스로 시작하지 말 것 —
   스텝 추가. 로컬 45/45 통과 확인. PR #16 생성 (머지 완료).
 - Phase 14 완료: `--log-level` 죽은 설정값 실제 로깅 적용. PR #17 생성 (머지 완료).
 - Phase 15 완료: `JwtTokenVerifier._fetch_jwks()` JWKS 조회 실패 로깅 추가.
-  PR #18 생성 (머지 대기).
+  PR #18 생성 (머지 완료, ruff SIM117/E501 후속 수정 포함).
+- Phase 16 완료: README.md 상태표·체크리스트 동기화 (identity/approval 완료 반영).
+  PR #19 생성.

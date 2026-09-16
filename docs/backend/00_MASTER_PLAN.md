@@ -116,7 +116,7 @@ Phase 하나 끝날 때마다 `PROGRESS_LOG.md`를 갱신한다 (필수, 생략 
 | 9 | 레거시 `mcp_server/` 스캐폴드 제거 | `specs/09_remove_legacy_mcp_server_scaffold.md` | 완료 (2026-09-15) |
 | 10 | apex-mcp CLI를 새 JWT 인증 체인에 실제로 배선 (실제 버그) | `specs/10_cli_jwt_wiring_fix.md` | 완료 (2026-09-15) |
 | 11 | confirmation grant 1회 소비 경쟁 조건 수정 (실제 버그) | `specs/11_confirmation_grant_race_fix.md` | 대기 |
-| 12 | refresh token rotation/로그아웃 엔드포인트 (선택, 낮은 우선순위) | `specs/12_refresh_token_rotation_logout.md` | 대기 (착수 전 사람 확인 필요) |
+| 12 | refresh token rotation(재사용 시 세션 전체 로그아웃) + 로그아웃 엔드포인트 | `specs/12_refresh_token_rotation_logout.md` | 대기 (범위 확정됨, 바로 착수 가능) |
 
 ## 6. 완료 기준 (전체)
 
