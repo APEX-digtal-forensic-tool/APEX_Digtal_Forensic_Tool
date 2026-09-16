@@ -15,7 +15,12 @@ for (const key of ['target_commit', 'build_commit', 'head_commit']) {
   assert.match(config[key], /^[a-f0-9]{40}$/);
 }
 const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
-const api = (resource) => JSON.parse(gh('api', `repos/${repo}/${resource}`));
+const api = (resource, body) => JSON.parse(execFileSync('gh', [
+  'api', `repos/${repo}/${resource}`, ...(body ? ['--method', 'POST', '--input', '-'] : []),
+], {
+  encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
+  input: body ? JSON.stringify(body) : undefined,
+}));
 const digest = (file) => `sha256:${createHash('sha256').update(readFileSync(file)).digest('hex')}`;
 const version = config.tag.slice(1);
 const releaseURL = `https://github.com/${repo}/releases/tag/${config.tag}`;
@@ -97,9 +102,11 @@ if (process.argv[2] === 'verify') {
   const notes = readFileSync(config.notes, 'utf8');
   let release = api('releases?per_page=100').find((item) => item.tag_name === config.tag);
   if (!release) {
-    gh('release', 'create', config.tag, '--target', config.target_commit,
-      '--title', config.title, '--notes-file', config.notes, '--prerelease', '--draft');
-    release = api('releases?per_page=100').find((item) => item.tag_name === config.tag);
+    // Use the creation response; the releases list can lag behind a successful write.
+    release = api('releases', {
+      tag_name: config.tag, target_commitish: config.target_commit, name: config.title,
+      body: notes, prerelease: true, draft: true, make_latest: 'false',
+    });
   }
   assert.ok(release, 'Draft release was not created');
   assert.equal(release.target_commitish, config.target_commit);
