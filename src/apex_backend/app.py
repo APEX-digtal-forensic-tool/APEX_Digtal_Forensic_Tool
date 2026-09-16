@@ -10,12 +10,12 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from apex_backend.auth.confirmation_router import _get_db as _conf_get_db
-from apex_backend.auth.confirmation_router import _get_jwt_verifier
+from apex_backend.auth.confirmation_router import _get_jwt_verifier as _conf_get_jwt_verifier
 from apex_backend.auth.confirmation_router import router as confirmation_router
 from apex_backend.auth.jwt_utils import AUDIENCE, ISSUER
 from apex_backend.auth.jwt_verifier import JwtTokenVerifier
 from apex_backend.auth.keys import load_private_key, public_key_to_jwk
-from apex_backend.auth.router import _get_auth_service, _get_db
+from apex_backend.auth.router import _get_auth_service, _get_db, _get_jwt_verifier
 from apex_backend.auth.router import router as auth_router
 from apex_backend.auth.service import AuthService
 from apex_backend.database import Base
@@ -60,6 +60,7 @@ def create_app(database_url: str) -> FastAPI:
     app.dependency_overrides[_conf_get_db] = _db_dep
     app.dependency_overrides[_get_auth_service] = lambda: auth_service
     app.dependency_overrides[_get_jwt_verifier] = lambda: jwt_verifier
+    app.dependency_overrides[_conf_get_jwt_verifier] = lambda: jwt_verifier
 
     app.include_router(auth_router)
     app.include_router(confirmation_router)

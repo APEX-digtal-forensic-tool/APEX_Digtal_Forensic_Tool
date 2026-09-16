@@ -28,6 +28,12 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutResponse(BaseModel):
+    """POST /auth/logout response."""
+
+    detail: str = "Logged out."
+
+
 class ConfirmationRequest(BaseModel):
     """POST /confirmations request body."""
 
@@ -47,6 +53,7 @@ __all__ = [
     "ConfirmationRequest",
     "ConfirmationResponse",
     "LoginRequest",
+    "LogoutResponse",
     "RefreshRequest",
     "TokenResponse",
 ]

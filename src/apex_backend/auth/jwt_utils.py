@@ -77,14 +77,19 @@ def issue_refresh_token(
     kid: str,
     actor_id: str,
     session_id: str,
+    jti: str | None = None,
 ) -> str:
-    """Issue a signed RS256 refresh JWT tied to *session_id*."""
+    """Issue a signed RS256 refresh JWT tied to *session_id*.
+
+    *jti* allows the caller to supply the UUID that is already stored in DB,
+    so the token and DB row stay in sync for rotation tracking.
+    """
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "iss": ISSUER,
         "aud": AUDIENCE,
         "sub": actor_id,
-        "jti": str(uuid.uuid4()),
+        "jti": jti if jti is not None else str(uuid.uuid4()),
         "iat": now,
         "exp": now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
         "session_id": session_id,

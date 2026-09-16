@@ -1,4 +1,4 @@
-"""AuthService: login, token issuance, and refresh logic."""
+"""AuthService: login, token issuance, refresh, and logout logic."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from jose import JWTError
 from passlib.context import CryptContext
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apex_backend.auth import jwt_utils
@@ -71,12 +72,14 @@ class AuthService:
         roles = list({t.role for t in tenancies})
         scopes = sorted(scopes_for_roles(frozenset(roles)))
 
+        refresh_jti = str(uuid.uuid4())
         session = UserSession(
             session_id=str(uuid.uuid4()),
             actor_id=user.id,
             tenant_id=tenant_id,
             created_at=datetime.now(UTC),
             expires_at=datetime.now(UTC) + timedelta(seconds=jwt_utils.REFRESH_TOKEN_TTL_SECONDS),
+            current_refresh_jti=refresh_jti,
         )
         db.add(session)
         await db.commit()
@@ -96,13 +99,15 @@ class AuthService:
             kid=self._kid,
             actor_id=user.id,
             session_id=session.session_id,
+            jti=refresh_jti,
         )
         return access, refresh
 
     async def refresh(self, db: AsyncSession, *, refresh_token: str) -> tuple[str, str]:
-        """Validate refresh token, check session liveness, return new token pair.
+        """Validate refresh token, rotate jti, return new token pair.
 
-        Raises AuthError on failure.
+        Raises AuthError on any failure. Reuse of an already-rotated token
+        triggers session-wide forced logout (revoked_at set).
         """
         try:
             claims = jwt_utils.decode_refresh_token(refresh_token, self._public_key_pem)
@@ -111,10 +116,46 @@ class AuthService:
 
         session_id: str = claims["session_id"]
         actor_id: str = claims["sub"]
+        incoming_jti: str = claims["jti"]
+        new_jti = str(uuid.uuid4())
 
-        session = await db.get(UserSession, session_id)
-        if session is None or not session.is_active:
-            raise AuthError("Session revoked or not found.")
+        # Atomic rotation: only update if the stored jti still matches.
+        result: CursorResult[tuple[()]] = await db.execute(  # type: ignore[assignment]
+            update(UserSession)
+            .where(
+                UserSession.session_id == session_id,
+                UserSession.current_refresh_jti == incoming_jti,
+                UserSession.revoked_at.is_(None),
+            )
+            .values(current_refresh_jti=new_jti)
+        )
+        await db.commit()
+
+        if result.rowcount == 0:
+            # Fresh select to avoid SQLAlchemy identity-map cache.
+            session = (
+                await db.execute(select(UserSession).where(UserSession.session_id == session_id))
+            ).scalar_one_or_none()
+
+            if session is None or not session.is_active:
+                raise AuthError("Session revoked or not found.")
+
+            # NULL jti means session was created before rotation was deployed.
+            if session.current_refresh_jti is None:
+                raise AuthError("Session requires re-login after server upgrade.")
+
+            # Non-null jti mismatch — token reuse detected, revoke entire session.
+            session.revoked_at = datetime.now(UTC)
+            await db.commit()
+            raise AuthError("Refresh token reuse detected. Session revoked.")
+
+        # Rotation succeeded — fetch session for metadata.
+        session = (
+            await db.execute(select(UserSession).where(UserSession.session_id == session_id))
+        ).scalar_one_or_none()
+        if session is None:
+            raise AuthError("Session not found after rotation.")
+
         now = datetime.now(UTC)
         expires_at = session.expires_at
         if expires_at.tzinfo is None:
@@ -147,8 +188,21 @@ class AuthService:
             kid=self._kid,
             actor_id=actor_id,
             session_id=session_id,
+            jti=new_jti,
         )
         return access, new_refresh
+
+    async def logout(self, db: AsyncSession, *, session_id: str) -> None:
+        """Revoke the session identified by *session_id*.
+
+        Idempotent: silently succeeds if already revoked or not found.
+        """
+        session = (
+            await db.execute(select(UserSession).where(UserSession.session_id == session_id))
+        ).scalar_one_or_none()
+        if session is not None and session.is_active:
+            session.revoked_at = datetime.now(UTC)
+            await db.commit()
 
     @staticmethod
     async def _fetch_user(
