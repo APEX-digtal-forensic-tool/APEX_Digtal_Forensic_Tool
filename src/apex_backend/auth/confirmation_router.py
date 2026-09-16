@@ -65,14 +65,14 @@ async def issue_confirmation(
             detail="Token missing required claims.",
         )
 
-    # Verify the session is still active in DB (catches post-logout access tokens).
+    # Reject if the session exists in DB but has been revoked (catches post-logout tokens).
     db_session = (
         await db.execute(select(UserSession).where(UserSession.session_id == session_id))
     ).scalar_one_or_none()
-    if db_session is None or not db_session.is_active:
+    if db_session is not None and not db_session.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session revoked or not found.",
+            detail="Session revoked.",
         )
 
     allowed_case_ids: list[str] = claims.get("allowed_case_ids") or []
