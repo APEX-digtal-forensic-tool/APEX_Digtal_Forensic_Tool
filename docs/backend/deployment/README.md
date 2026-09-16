@@ -139,6 +139,33 @@ uv add psycopg2-binary --extra backend
 
 SQLite(테스트용)는 추가 드라이버 불필요.
 
+## 세션 관리 운영 참고
+
+### 로그아웃
+
+`POST /auth/logout`에 Bearer access token을 보내면 해당 세션이 즉시 무효화된다.
+이후 동일 세션의 refresh token은 `401 Session revoked or not found`로 거부된다.
+
+MCP 경로(`apex_mcp`)는 JWT 서명만 검증하므로 **로그아웃 후에도 access token의 JWT
+만료 시간(`exp`)까지는 MCP 요청이 기술적으로 통과될 수 있다**. `POST /confirmations`
+는 DB 세션 상태를 확인하므로 즉시 차단된다. MCP 경로의 즉각 차단이 필요하면
+access token TTL을 짧게 유지할 것.
+
+### refresh token 재사용 탐지
+
+세션이 갑자기 강제 로그아웃되고 이유를 모르겠다면 **refresh token 재사용 탐지가
+발동한 것**이다. 클라이언트 측에서 같은 refresh token을 중복 사용하는 버그를 먼저
+의심할 것. 탐지 시 `revoked_at`이 설정되며 해당 세션의 모든 토큰이 이후 거부된다.
+
+로그에서 `AuthError: Refresh token reuse detected. Session revoked.` 를 검색하면
+어느 세션이 탐지를 발동시켰는지 확인할 수 있다.
+
+### DB 마이그레이션 (Phase 12 이전 세션)
+
+Phase 12 배포 후 기존 세션(`current_refresh_jti IS NULL`)은 다음 refresh 시도에서
+`401 Session requires re-login after server upgrade.`를 받는다. 세션은 자동 말소되지
+않으며 사용자는 재로그인해야 한다.
+
 ## 프로덕션 체크리스트
 
 - [ ] `APEX_RS256_PRIVATE_KEY_PEM` 환경변수로 키 주입 (in-memory 자동생성 금지)
