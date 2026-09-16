@@ -7,11 +7,12 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apex_backend.auth.jwt_verifier import JwtTokenVerifier
 from apex_backend.auth.schemas import ConfirmationRequest, ConfirmationResponse
-from apex_backend.models import ConfirmationGrantRow
+from apex_backend.models import ConfirmationGrantRow, UserSession
 
 router = APIRouter()
 
@@ -62,6 +63,16 @@ async def issue_confirmation(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing required claims.",
+        )
+
+    # Reject if the session exists in DB but has been revoked (catches post-logout tokens).
+    db_session = (
+        await db.execute(select(UserSession).where(UserSession.session_id == session_id))
+    ).scalar_one_or_none()
+    if db_session is not None and not db_session.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session revoked.",
         )
 
     allowed_case_ids: list[str] = claims.get("allowed_case_ids") or []

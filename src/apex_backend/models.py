@@ -100,6 +100,9 @@ class UserSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    current_refresh_jti: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, default=None
+    )
 
     user: Mapped[User] = relationship("User", back_populates="sessions")
 

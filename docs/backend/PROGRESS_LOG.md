@@ -8,12 +8,24 @@
 
 ## 현재 상태
 
-Phase: 1~11, 13~16 완료 (PR #14~#19 전부 머지 완료 예정, main 기준 CI green).
-Phase 12는 범위 확정됨(2026-09-15, 재사용 감지 시 세션 전체 강제
-로그아웃 방식) — 바로 착수 가능.
-마지막 업데이트: 2026-09-15
+Phase: 1~16 완료 (PR #14~#19 머지 완료, Phase 12 PR #20 생성 완료, main 기준 CI green).
+마지막 업데이트: 2026-09-16
 
 ## 마지막 진행 상황
+
+Phase 12 완료 (refresh token rotation, 세션 강제 로그아웃, PR #20 생성):
+- `models.py`: `UserSession.current_refresh_jti VARCHAR(36) NULL` 추가.
+- `alembic/versions/0002_refresh_jti.py`: DB 마이그레이션 신규.
+- `jwt_utils.py`: `issue_refresh_token(jti=)` 파라미터 추가.
+- `service.py`: `login()` jti 저장, `refresh()` atomic jti rotation + 3방향 분기 (정상/레거시-NULL/재사용-감지), `logout()` 신규.
+- `router.py`: `POST /auth/logout` 엔드포인트 신규.
+- `schemas.py`: `LogoutResponse` 추가.
+- `confirmation_router.py`: 세션 말소 체크 (존재 + `is_active == False`이면 401).
+- `app.py`: auth_router에 `_get_jwt_verifier` dependency 배선.
+- `tests/backend/test_refresh_rotation.py` 신규 (9개): jti 저장, 기본 rotation, 재사용 감지 + 세션 말소, 동시 refresh, logout, NULL jti 레거시, HTTP logout 엔드포인트, 말소 세션 confirmation 거부.
+- 전체 61개 통과, ruff/mypy 클린.
+- `docs/backend/refresh-rotation-logout/README.md` as-built 신규.
+- `docs/backend/deployment/README.md` 운영 참고 섹션 추가.
 
 Phase 10 완료 (apex-mcp CLI JWT 인증 체인 배선, PR #14 머지됨):
 - `src/apex_mcp/__main__.py`: `--http-jwks-uri`/`APEX_JWKS_URI`,
@@ -97,12 +109,7 @@ Phase 16 완료 (README.md 상태표·체크리스트 동기화, PR #19 생성):
 
 ## 다음 작업
 
-Phase 12 착수 가능: `specs/12_refresh_token_rotation_logout.md` — refresh
-token은 매번 rotation 발급하고, 이미 교체된(재사용된) 토큰이 들어오면
-해당 세션 전체를 강제 로그아웃시키는 방식으로 범위 확정됨(2026-09-15,
-사람 결정). `POST /auth/logout` 엔드포인트도 이 Phase에서 같이 만든다.
-스펙 완료 조건에 `ruff check .`를 전체 리포 기준으로 확인하라고
-명시해뒀음 — Phase 15 때 `tests/backend`를 빠뜨렸던 실수 반복 금지.
+모든 계획된 백엔드 Phase (1~16 + 12) 완료.
 
 보류 중인 항목(착수 금지):
 - Windows Desktop bundle 제품 통합 검증 — 프론트/패키징 담당과 협의 필요
@@ -212,3 +219,8 @@ token은 매번 rotation 발급하고, 이미 교체된(재사용된) 토큰이 
   PR #18 생성 (머지 완료, ruff SIM117/E501 후속 수정 포함).
 - Phase 16 완료: README.md 상태표·체크리스트 동기화 (identity/approval 완료 반영).
   PR #19 생성.
+
+### 2026-09-16
+- Phase 12 완료: refresh token rotation(jti 기반), 재사용 탐지 시 세션 전체 강제
+  로그아웃, `POST /auth/logout` 엔드포인트. migration 0002, 9개 신규 테스트.
+  61/61 통과, ruff/mypy 클린. PR #20 생성.
