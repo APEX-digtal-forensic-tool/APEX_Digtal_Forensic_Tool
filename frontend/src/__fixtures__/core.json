@@ -1,0 +1,2618 @@
+{
+  "cases": [
+    {
+      "id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+      "name": "교육용 모의 사건",
+      "description": null,
+      "status": "OPEN",
+      "locale": "ko-KR",
+      "timezone": "Asia/Seoul",
+      "created_at": "2026-09-15T06:25:33.839025Z",
+      "created_by": "교육용 분석자",
+      "closed_at": null,
+      "engine_version": "0.1.0",
+      "metadata": {
+        "investigator": "교육용 분석자",
+        "updated_at": "2026-09-15T06:25:33.839025Z",
+        "domain_case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1"
+      },
+      "timezone_decision_id": null
+    }
+  ],
+  "evidence": [
+    {
+      "id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+      "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+      "display_name": "교육용-증거",
+      "format": "DIRECTORY",
+      "status": "REGISTERED",
+      "size_bytes": 4096,
+      "sector_size": null,
+      "read_only": true,
+      "acquired_at": null,
+      "registered_at": "2026-09-15T06:25:33.839310Z",
+      "reader": {
+        "id": "apex.directory_metadata_reader",
+        "version": "0.1.0"
+      },
+      "capabilities": [
+        "METADATA",
+        "FILESYSTEM_INDEX"
+      ],
+      "hashes": [],
+      "metadata": {
+        "reader_id": "apex.directory_metadata_reader",
+        "reader_version": "0.1.0",
+        "capabilities": [
+          "METADATA",
+          "FILESYSTEM_INDEX"
+        ],
+        "source_path_policy": "NO_SYMLINK_FOLLOW",
+        "sector_size": null,
+        "phase_note": "Directory metadata is indexed without reading file bodies.",
+        "source_path": "/tmp/tmpdwqm18kg/교육용-증거",
+        "updated_at": "2026-09-15T06:25:33.839310Z"
+      },
+      "fingerprint": null
+    }
+  ],
+  "roots": [
+    {
+      "id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+      "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+      "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+      "filesystem_provider": {
+        "id": "apex.logical_directory_provider",
+        "version": "0.1.0"
+      },
+      "parent_node_id": null,
+      "original_name": "교육용-증거",
+      "original_relative_path": "",
+      "display_path": "/",
+      "comparison_path": "",
+      "node_type": "ROOT",
+      "file_size": null,
+      "extension": null,
+      "mime_candidate": null,
+      "mime_confidence": "UNKNOWN",
+      "fs_metadata": {
+        "device": 28,
+        "inode": 288077,
+        "mode": 493,
+        "nlink": 3
+      },
+      "platform": "linux",
+      "timestamp_meanings": {
+        "accessed": "last_accessed",
+        "changed": "metadata_changed",
+        "created": "birth_time_or_metadata_change",
+        "modified": "content_modified"
+      },
+      "raw_timestamps": {
+        "accessed": 1789453533821772566,
+        "changed": 1789453533826353929,
+        "created": 1789453533826353929,
+        "modified": 1789453533826353929
+      },
+      "utc_timestamps": {
+        "accessed": "2026-09-15T06:25:33.821773Z",
+        "changed": "2026-09-15T06:25:33.826354Z",
+        "created": "2026-09-15T06:25:33.826354Z",
+        "modified": "2026-09-15T06:25:33.826354Z"
+      },
+      "timestamp_sources": {
+        "accessed": "os.stat",
+        "changed": "os.stat",
+        "created": "os.stat",
+        "modified": "os.stat"
+      },
+      "is_deleted": false,
+      "is_readable": true,
+      "is_link": false,
+      "is_traversed": true,
+      "raw_locator": {
+        "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+        "locator_type": "LOGICAL_PATH",
+        "provider_id": "apex.logical_directory_provider",
+        "provider_version": "0.1.0",
+        "reads_file_body": false,
+        "relative_path": ""
+      },
+      "provider_metadata": {
+        "entry_sort_key": "",
+        "followed_symlink": false,
+        "source_path_kind": "directory"
+      },
+      "is_partial": false,
+      "index_revision": 1,
+      "created_at": "2026-09-15T06:25:33.840379Z",
+      "updated_at": "2026-09-15T06:25:33.840379Z"
+    }
+  ],
+  "files": {
+    "items": [
+      {
+        "id": "d04e475b-cb60-5ddd-bfbf-040388504678",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+        "filesystem_provider": {
+          "id": "apex.logical_directory_provider",
+          "version": "0.1.0"
+        },
+        "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+        "original_name": "README.txt",
+        "original_relative_path": "README.txt",
+        "display_path": "/README.txt",
+        "comparison_path": "readme.txt",
+        "node_type": "FILE",
+        "file_size": 55,
+        "extension": "txt",
+        "mime_candidate": "text/plain",
+        "mime_confidence": "LOW",
+        "fs_metadata": {
+          "device": 28,
+          "inode": 288081,
+          "mode": 420,
+          "nlink": 1
+        },
+        "platform": "linux",
+        "timestamp_meanings": {
+          "accessed": "last_accessed",
+          "changed": "metadata_changed",
+          "created": "birth_time_or_metadata_change",
+          "modified": "content_modified"
+        },
+        "raw_timestamps": {
+          "accessed": 1789453533826353929,
+          "changed": 1789453533826385797,
+          "created": 1789453533826385797,
+          "modified": 1789453533826385797
+        },
+        "utc_timestamps": {
+          "accessed": "2026-09-15T06:25:33.826354Z",
+          "changed": "2026-09-15T06:25:33.826386Z",
+          "created": "2026-09-15T06:25:33.826386Z",
+          "modified": "2026-09-15T06:25:33.826386Z"
+        },
+        "timestamp_sources": {
+          "accessed": "os.stat",
+          "changed": "os.stat",
+          "created": "os.stat",
+          "modified": "os.stat"
+        },
+        "is_deleted": false,
+        "is_readable": true,
+        "is_link": false,
+        "is_traversed": false,
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "README.txt"
+        },
+        "provider_metadata": {
+          "entry_sort_key": "readme.txt\u0000README.txt",
+          "followed_symlink": false,
+          "source_path_kind": "directory"
+        },
+        "is_partial": false,
+        "index_revision": 1,
+        "created_at": "2026-09-15T06:25:33.841262Z",
+        "updated_at": "2026-09-15T06:25:33.841262Z"
+      },
+      {
+        "id": "b269e2b1-7925-58ff-8a4e-0901904f83c1",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+        "filesystem_provider": {
+          "id": "apex.logical_directory_provider",
+          "version": "0.1.0"
+        },
+        "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+        "original_name": "다운로드-내역.csv",
+        "original_relative_path": "다운로드-내역.csv",
+        "display_path": "/다운로드-내역.csv",
+        "comparison_path": "다운로드-내역.csv",
+        "node_type": "FILE",
+        "file_size": 31,
+        "extension": "csv",
+        "mime_candidate": "text/csv",
+        "mime_confidence": "LOW",
+        "fs_metadata": {
+          "device": 28,
+          "inode": 288080,
+          "mode": 420,
+          "nlink": 1
+        },
+        "platform": "linux",
+        "timestamp_meanings": {
+          "accessed": "last_accessed",
+          "changed": "metadata_changed",
+          "created": "birth_time_or_metadata_change",
+          "modified": "content_modified"
+        },
+        "raw_timestamps": {
+          "accessed": 1789453533826314459,
+          "changed": 1789453533826353929,
+          "created": 1789453533826353929,
+          "modified": 1789453533826353929
+        },
+        "utc_timestamps": {
+          "accessed": "2026-09-15T06:25:33.826314Z",
+          "changed": "2026-09-15T06:25:33.826354Z",
+          "created": "2026-09-15T06:25:33.826354Z",
+          "modified": "2026-09-15T06:25:33.826354Z"
+        },
+        "timestamp_sources": {
+          "accessed": "os.stat",
+          "changed": "os.stat",
+          "created": "os.stat",
+          "modified": "os.stat"
+        },
+        "is_deleted": false,
+        "is_readable": true,
+        "is_link": false,
+        "is_traversed": false,
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "다운로드-내역.csv"
+        },
+        "provider_metadata": {
+          "entry_sort_key": "다운로드-내역.csv\u0000다운로드-내역.csv",
+          "followed_symlink": false,
+          "source_path_kind": "directory"
+        },
+        "is_partial": false,
+        "index_revision": 1,
+        "created_at": "2026-09-15T06:25:33.843066Z",
+        "updated_at": "2026-09-15T06:25:33.843066Z"
+      },
+      {
+        "id": "fc907474-0b24-50d3-8938-6d94c80840b8",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+        "filesystem_provider": {
+          "id": "apex.logical_directory_provider",
+          "version": "0.1.0"
+        },
+        "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+        "original_name": "문서",
+        "original_relative_path": "문서",
+        "display_path": "/문서",
+        "comparison_path": "문서",
+        "node_type": "DIRECTORY",
+        "file_size": 4096,
+        "extension": null,
+        "mime_candidate": null,
+        "mime_confidence": "UNKNOWN",
+        "fs_metadata": {
+          "device": 28,
+          "inode": 288078,
+          "mode": 493,
+          "nlink": 2
+        },
+        "platform": "linux",
+        "timestamp_meanings": {
+          "accessed": "last_accessed",
+          "changed": "metadata_changed",
+          "created": "birth_time_or_metadata_change",
+          "modified": "content_modified"
+        },
+        "raw_timestamps": {
+          "accessed": 1789453533821772566,
+          "changed": 1789453533821772566,
+          "created": 1789453533821772566,
+          "modified": 1789453533821772566
+        },
+        "utc_timestamps": {
+          "accessed": "2026-09-15T06:25:33.821773Z",
+          "changed": "2026-09-15T06:25:33.821773Z",
+          "created": "2026-09-15T06:25:33.821773Z",
+          "modified": "2026-09-15T06:25:33.821773Z"
+        },
+        "timestamp_sources": {
+          "accessed": "os.stat",
+          "changed": "os.stat",
+          "created": "os.stat",
+          "modified": "os.stat"
+        },
+        "is_deleted": false,
+        "is_readable": true,
+        "is_link": false,
+        "is_traversed": true,
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "문서"
+        },
+        "provider_metadata": {
+          "entry_sort_key": "문서\u0000문서",
+          "followed_symlink": false,
+          "source_path_kind": "directory"
+        },
+        "is_partial": false,
+        "index_revision": 1,
+        "created_at": "2026-09-15T06:25:33.843301Z",
+        "updated_at": "2026-09-15T06:25:33.843301Z"
+      },
+      {
+        "id": "47371a0c-213d-5b98-96d6-06f5320ce196",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+        "filesystem_provider": {
+          "id": "apex.logical_directory_provider",
+          "version": "0.1.0"
+        },
+        "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+        "original_name": "한글-분석노트.txt",
+        "original_relative_path": "한글-분석노트.txt",
+        "display_path": "/한글-분석노트.txt",
+        "comparison_path": "한글-분석노트.txt",
+        "node_type": "FILE",
+        "file_size": 60,
+        "extension": "txt",
+        "mime_candidate": "text/plain",
+        "mime_confidence": "LOW",
+        "fs_metadata": {
+          "device": 28,
+          "inode": 288079,
+          "mode": 420,
+          "nlink": 1
+        },
+        "platform": "linux",
+        "timestamp_meanings": {
+          "accessed": "last_accessed",
+          "changed": "metadata_changed",
+          "created": "birth_time_or_metadata_change",
+          "modified": "content_modified"
+        },
+        "raw_timestamps": {
+          "accessed": 1789453533821772566,
+          "changed": 1789453533826314459,
+          "created": 1789453533826314459,
+          "modified": 1789453533826314459
+        },
+        "utc_timestamps": {
+          "accessed": "2026-09-15T06:25:33.821773Z",
+          "changed": "2026-09-15T06:25:33.826314Z",
+          "created": "2026-09-15T06:25:33.826314Z",
+          "modified": "2026-09-15T06:25:33.826314Z"
+        },
+        "timestamp_sources": {
+          "accessed": "os.stat",
+          "changed": "os.stat",
+          "created": "os.stat",
+          "modified": "os.stat"
+        },
+        "is_deleted": false,
+        "is_readable": true,
+        "is_link": false,
+        "is_traversed": false,
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "한글-분석노트.txt"
+        },
+        "provider_metadata": {
+          "entry_sort_key": "한글-분석노트.txt\u0000한글-분석노트.txt",
+          "followed_symlink": false,
+          "source_path_kind": "directory"
+        },
+        "is_partial": false,
+        "index_revision": 1,
+        "created_at": "2026-09-15T06:25:33.843349Z",
+        "updated_at": "2026-09-15T06:25:33.843349Z"
+      }
+    ],
+    "page": {
+      "next_cursor": null,
+      "has_more": false,
+      "returned": 4
+    },
+    "coverage": {
+      "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+      "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+      "filesystem_provider": {
+        "id": "apex.logical_directory_provider",
+        "version": "0.1.0"
+      },
+      "profile_type": "FULL_ANALYSIS",
+      "option_fingerprint": "f7f807662aedfc6993e52743e43476c72f034f8f5a6de05fedf54819f89c28bd",
+      "status": "COMPLETE",
+      "discovered_items": 5,
+      "processed_items": 2,
+      "skipped_items": 0,
+      "warning_count": 0,
+      "error_count": 0,
+      "current_path": "/문서",
+      "elapsed_seconds": 0.0040647370005899575,
+      "throughput_items_per_second": 984.0735081800959,
+      "estimated_remaining_seconds": null,
+      "eta_confidence": "UNKNOWN",
+      "index_revision": 1,
+      "job_id": "48dfcdda-35b7-4d58-a547-3c0480b79276",
+      "created_at": "2026-09-15T06:25:33.840187Z",
+      "updated_at": "2026-09-15T06:25:33.844918Z"
+    }
+  },
+  "context": {
+    "session_context_id": "a9f820fd-6e81-4bec-acda-7f6871dc1c05",
+    "session_id": "demo-session",
+    "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+    "actor_id": "demo-analyst",
+    "locale": "ko-KR",
+    "timezone": "Asia/Seoul",
+    "current_route": "CASE_OVERVIEW",
+    "current_panel": null,
+    "active_evidence_id": null,
+    "selected_file_node_ids": [],
+    "selected_artifact_ids": [],
+    "selected_timeline_event_ids": [],
+    "selected_search_result_ids": [],
+    "selected_media_artifact_ids": [],
+    "selected_browser_artifact_ids": [],
+    "selected_candidate_ids": [],
+    "active_filters": {},
+    "active_sort": {},
+    "active_time_range": {},
+    "active_keyword_set_id": null,
+    "active_keyword_set_version": null,
+    "active_search_execution_id": null,
+    "active_timeline_revision": null,
+    "active_context_scope": "case",
+    "ui_preferences": {},
+    "context_revision": 1,
+    "source_revision_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "is_partial": false,
+    "stale_reasons": [],
+    "created_at": "2026-09-15T06:25:33.845478Z",
+    "updated_at": "2026-09-15T06:25:33.845478Z",
+    "expires_at": "2026-09-15T14:25:33.845478Z"
+  },
+  "views": {
+    "d04e475b-cb60-5ddd-bfbf-040388504678": {
+      "SIMPLE": {
+        "projection_id": "8f819794-8a39-4e15-b6ab-e96736829d6a",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "d04e475b-cb60-5ddd-bfbf-040388504678",
+        "view_mode": "SIMPLE",
+        "title": "/README.txt",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/README.txt",
+          "label_resource_key": "resource.file_system_node",
+          "citation_count": 0,
+          "next_recommended_view": "DETAILED"
+        },
+        "secondary_fields": {},
+        "technical_fields": {},
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826353929,
+            "changed": 1789453533826385797,
+            "created": 1789453533826385797,
+            "modified": 1789453533826385797
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826354Z",
+            "changed": "2026-09-15T06:25:33.826386Z",
+            "created": "2026-09-15T06:25:33.826386Z",
+            "modified": "2026-09-15T06:25:33.826386Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.841262Z",
+          "updated_at": "2026-09-15T06:25:33.841262Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "README.txt"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.846012Z"
+      },
+      "DETAILED": {
+        "projection_id": "fd707b38-931b-4b11-869e-11c484c8a9f1",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "d04e475b-cb60-5ddd-bfbf-040388504678",
+        "view_mode": "DETAILED",
+        "title": "/README.txt",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/README.txt"
+        },
+        "secondary_fields": {
+          "id": "d04e475b-cb60-5ddd-bfbf-040388504678",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "README.txt",
+          "original_relative_path": "README.txt",
+          "display_path": "/README.txt",
+          "comparison_path": "readme.txt",
+          "node_type": "FILE",
+          "file_size": 55,
+          "extension": "txt",
+          "mime_candidate": "text/plain",
+          "mime_confidence": "LOW",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288081,
+            "mode": 420,
+            "nlink": 1
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826353929,
+            "changed": 1789453533826385797,
+            "created": 1789453533826385797,
+            "modified": 1789453533826385797
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826354Z",
+            "changed": "2026-09-15T06:25:33.826386Z",
+            "created": "2026-09-15T06:25:33.826386Z",
+            "modified": "2026-09-15T06:25:33.826386Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": false,
+          "provider_metadata": {
+            "entry_sort_key": "readme.txt\u0000README.txt",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.841262Z",
+          "updated_at": "2026-09-15T06:25:33.841262Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826353929,
+            "changed": 1789453533826385797,
+            "created": 1789453533826385797,
+            "modified": 1789453533826385797
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826354Z",
+            "changed": "2026-09-15T06:25:33.826386Z",
+            "created": "2026-09-15T06:25:33.826386Z",
+            "modified": "2026-09-15T06:25:33.826386Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.841262Z",
+          "updated_at": "2026-09-15T06:25:33.841262Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "README.txt"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.846254Z"
+      },
+      "RAW": {
+        "projection_id": "403c427b-f9c6-4d73-ac60-ac56decb88bb",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "d04e475b-cb60-5ddd-bfbf-040388504678",
+        "view_mode": "RAW",
+        "title": "/README.txt",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/README.txt"
+        },
+        "secondary_fields": {
+          "id": "d04e475b-cb60-5ddd-bfbf-040388504678",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "README.txt",
+          "original_relative_path": "README.txt",
+          "display_path": "/README.txt",
+          "comparison_path": "readme.txt",
+          "node_type": "FILE",
+          "file_size": 55,
+          "extension": "txt",
+          "mime_candidate": "text/plain",
+          "mime_confidence": "LOW",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288081,
+            "mode": 420,
+            "nlink": 1
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826353929,
+            "changed": 1789453533826385797,
+            "created": 1789453533826385797,
+            "modified": 1789453533826385797
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826354Z",
+            "changed": "2026-09-15T06:25:33.826386Z",
+            "created": "2026-09-15T06:25:33.826386Z",
+            "modified": "2026-09-15T06:25:33.826386Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": false,
+          "provider_metadata": {
+            "entry_sort_key": "readme.txt\u0000README.txt",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.841262Z",
+          "updated_at": "2026-09-15T06:25:33.841262Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {
+          "raw_locator": {
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "locator_type": "LOGICAL_PATH",
+            "provider_id": "apex.logical_directory_provider",
+            "provider_version": "0.1.0",
+            "reads_file_body": false,
+            "relative_path": "README.txt"
+          },
+          "structured_fields": {
+            "id": "d04e475b-cb60-5ddd-bfbf-040388504678",
+            "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "filesystem_provider": {
+              "id": "apex.logical_directory_provider",
+              "version": "0.1.0"
+            },
+            "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+            "original_name": "README.txt",
+            "original_relative_path": "README.txt",
+            "display_path": "/README.txt",
+            "comparison_path": "readme.txt",
+            "node_type": "FILE",
+            "file_size": 55,
+            "extension": "txt",
+            "mime_candidate": "text/plain",
+            "mime_confidence": "LOW",
+            "fs_metadata": {
+              "device": 28,
+              "inode": 288081,
+              "mode": 420,
+              "nlink": 1
+            },
+            "platform": "linux",
+            "timestamp_meanings": {
+              "accessed": "last_accessed",
+              "changed": "metadata_changed",
+              "created": "birth_time_or_metadata_change",
+              "modified": "content_modified"
+            },
+            "raw_timestamps": {
+              "accessed": 1789453533826353929,
+              "changed": 1789453533826385797,
+              "created": 1789453533826385797,
+              "modified": 1789453533826385797
+            },
+            "utc_timestamps": {
+              "accessed": "2026-09-15T06:25:33.826354Z",
+              "changed": "2026-09-15T06:25:33.826386Z",
+              "created": "2026-09-15T06:25:33.826386Z",
+              "modified": "2026-09-15T06:25:33.826386Z"
+            },
+            "timestamp_sources": {
+              "accessed": "os.stat",
+              "changed": "os.stat",
+              "created": "os.stat",
+              "modified": "os.stat"
+            },
+            "is_deleted": false,
+            "is_readable": true,
+            "is_link": false,
+            "is_traversed": false,
+            "raw_locator": {
+              "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+              "locator_type": "LOGICAL_PATH",
+              "provider_id": "apex.logical_directory_provider",
+              "provider_version": "0.1.0",
+              "reads_file_body": false,
+              "relative_path": "README.txt"
+            },
+            "provider_metadata": {
+              "entry_sort_key": "readme.txt\u0000README.txt",
+              "followed_symlink": false,
+              "source_path_kind": "directory"
+            },
+            "is_partial": false,
+            "index_revision": 1,
+            "created_at": "2026-09-15T06:25:33.841262Z",
+            "updated_at": "2026-09-15T06:25:33.841262Z"
+          },
+          "raw_included": false,
+          "raw_access": "use raw-read for bounded chunks"
+        },
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826353929,
+            "changed": 1789453533826385797,
+            "created": 1789453533826385797,
+            "modified": 1789453533826385797
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826354Z",
+            "changed": "2026-09-15T06:25:33.826386Z",
+            "created": "2026-09-15T06:25:33.826386Z",
+            "modified": "2026-09-15T06:25:33.826386Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.841262Z",
+          "updated_at": "2026-09-15T06:25:33.841262Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "README.txt"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.846449Z"
+      }
+    },
+    "b269e2b1-7925-58ff-8a4e-0901904f83c1": {
+      "SIMPLE": {
+        "projection_id": "415758b7-6aeb-422e-a34f-8a9dbda69572",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "b269e2b1-7925-58ff-8a4e-0901904f83c1",
+        "view_mode": "SIMPLE",
+        "title": "/다운로드-내역.csv",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/다운로드-내역.csv",
+          "label_resource_key": "resource.file_system_node",
+          "citation_count": 0,
+          "next_recommended_view": "DETAILED"
+        },
+        "secondary_fields": {},
+        "technical_fields": {},
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826314459,
+            "changed": 1789453533826353929,
+            "created": 1789453533826353929,
+            "modified": 1789453533826353929
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826314Z",
+            "changed": "2026-09-15T06:25:33.826354Z",
+            "created": "2026-09-15T06:25:33.826354Z",
+            "modified": "2026-09-15T06:25:33.826354Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843066Z",
+          "updated_at": "2026-09-15T06:25:33.843066Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "다운로드-내역.csv"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.846696Z"
+      },
+      "DETAILED": {
+        "projection_id": "1013fc6a-8a7b-4c1e-9dd4-0b2e26ab3f46",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "b269e2b1-7925-58ff-8a4e-0901904f83c1",
+        "view_mode": "DETAILED",
+        "title": "/다운로드-내역.csv",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/다운로드-내역.csv"
+        },
+        "secondary_fields": {
+          "id": "b269e2b1-7925-58ff-8a4e-0901904f83c1",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "다운로드-내역.csv",
+          "original_relative_path": "다운로드-내역.csv",
+          "display_path": "/다운로드-내역.csv",
+          "comparison_path": "다운로드-내역.csv",
+          "node_type": "FILE",
+          "file_size": 31,
+          "extension": "csv",
+          "mime_candidate": "text/csv",
+          "mime_confidence": "LOW",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288080,
+            "mode": 420,
+            "nlink": 1
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826314459,
+            "changed": 1789453533826353929,
+            "created": 1789453533826353929,
+            "modified": 1789453533826353929
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826314Z",
+            "changed": "2026-09-15T06:25:33.826354Z",
+            "created": "2026-09-15T06:25:33.826354Z",
+            "modified": "2026-09-15T06:25:33.826354Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": false,
+          "provider_metadata": {
+            "entry_sort_key": "다운로드-내역.csv\u0000다운로드-내역.csv",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.843066Z",
+          "updated_at": "2026-09-15T06:25:33.843066Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826314459,
+            "changed": 1789453533826353929,
+            "created": 1789453533826353929,
+            "modified": 1789453533826353929
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826314Z",
+            "changed": "2026-09-15T06:25:33.826354Z",
+            "created": "2026-09-15T06:25:33.826354Z",
+            "modified": "2026-09-15T06:25:33.826354Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843066Z",
+          "updated_at": "2026-09-15T06:25:33.843066Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "다운로드-내역.csv"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.846880Z"
+      },
+      "RAW": {
+        "projection_id": "4a9cbb22-876e-417b-8d03-7f7cdd3f8488",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "b269e2b1-7925-58ff-8a4e-0901904f83c1",
+        "view_mode": "RAW",
+        "title": "/다운로드-내역.csv",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/다운로드-내역.csv"
+        },
+        "secondary_fields": {
+          "id": "b269e2b1-7925-58ff-8a4e-0901904f83c1",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "다운로드-내역.csv",
+          "original_relative_path": "다운로드-내역.csv",
+          "display_path": "/다운로드-내역.csv",
+          "comparison_path": "다운로드-내역.csv",
+          "node_type": "FILE",
+          "file_size": 31,
+          "extension": "csv",
+          "mime_candidate": "text/csv",
+          "mime_confidence": "LOW",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288080,
+            "mode": 420,
+            "nlink": 1
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826314459,
+            "changed": 1789453533826353929,
+            "created": 1789453533826353929,
+            "modified": 1789453533826353929
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826314Z",
+            "changed": "2026-09-15T06:25:33.826354Z",
+            "created": "2026-09-15T06:25:33.826354Z",
+            "modified": "2026-09-15T06:25:33.826354Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": false,
+          "provider_metadata": {
+            "entry_sort_key": "다운로드-내역.csv\u0000다운로드-내역.csv",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.843066Z",
+          "updated_at": "2026-09-15T06:25:33.843066Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {
+          "raw_locator": {
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "locator_type": "LOGICAL_PATH",
+            "provider_id": "apex.logical_directory_provider",
+            "provider_version": "0.1.0",
+            "reads_file_body": false,
+            "relative_path": "다운로드-내역.csv"
+          },
+          "structured_fields": {
+            "id": "b269e2b1-7925-58ff-8a4e-0901904f83c1",
+            "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "filesystem_provider": {
+              "id": "apex.logical_directory_provider",
+              "version": "0.1.0"
+            },
+            "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+            "original_name": "다운로드-내역.csv",
+            "original_relative_path": "다운로드-내역.csv",
+            "display_path": "/다운로드-내역.csv",
+            "comparison_path": "다운로드-내역.csv",
+            "node_type": "FILE",
+            "file_size": 31,
+            "extension": "csv",
+            "mime_candidate": "text/csv",
+            "mime_confidence": "LOW",
+            "fs_metadata": {
+              "device": 28,
+              "inode": 288080,
+              "mode": 420,
+              "nlink": 1
+            },
+            "platform": "linux",
+            "timestamp_meanings": {
+              "accessed": "last_accessed",
+              "changed": "metadata_changed",
+              "created": "birth_time_or_metadata_change",
+              "modified": "content_modified"
+            },
+            "raw_timestamps": {
+              "accessed": 1789453533826314459,
+              "changed": 1789453533826353929,
+              "created": 1789453533826353929,
+              "modified": 1789453533826353929
+            },
+            "utc_timestamps": {
+              "accessed": "2026-09-15T06:25:33.826314Z",
+              "changed": "2026-09-15T06:25:33.826354Z",
+              "created": "2026-09-15T06:25:33.826354Z",
+              "modified": "2026-09-15T06:25:33.826354Z"
+            },
+            "timestamp_sources": {
+              "accessed": "os.stat",
+              "changed": "os.stat",
+              "created": "os.stat",
+              "modified": "os.stat"
+            },
+            "is_deleted": false,
+            "is_readable": true,
+            "is_link": false,
+            "is_traversed": false,
+            "raw_locator": {
+              "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+              "locator_type": "LOGICAL_PATH",
+              "provider_id": "apex.logical_directory_provider",
+              "provider_version": "0.1.0",
+              "reads_file_body": false,
+              "relative_path": "다운로드-내역.csv"
+            },
+            "provider_metadata": {
+              "entry_sort_key": "다운로드-내역.csv\u0000다운로드-내역.csv",
+              "followed_symlink": false,
+              "source_path_kind": "directory"
+            },
+            "is_partial": false,
+            "index_revision": 1,
+            "created_at": "2026-09-15T06:25:33.843066Z",
+            "updated_at": "2026-09-15T06:25:33.843066Z"
+          },
+          "raw_included": false,
+          "raw_access": "use raw-read for bounded chunks"
+        },
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533826314459,
+            "changed": 1789453533826353929,
+            "created": 1789453533826353929,
+            "modified": 1789453533826353929
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.826314Z",
+            "changed": "2026-09-15T06:25:33.826354Z",
+            "created": "2026-09-15T06:25:33.826354Z",
+            "modified": "2026-09-15T06:25:33.826354Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843066Z",
+          "updated_at": "2026-09-15T06:25:33.843066Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "다운로드-내역.csv"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.847064Z"
+      }
+    },
+    "fc907474-0b24-50d3-8938-6d94c80840b8": {
+      "SIMPLE": {
+        "projection_id": "c01f2a72-74c2-46be-870a-95e35bf2c6f3",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "fc907474-0b24-50d3-8938-6d94c80840b8",
+        "view_mode": "SIMPLE",
+        "title": "/문서",
+        "subtitle": "DIRECTORY",
+        "summary": "DIRECTORY",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/문서",
+          "label_resource_key": "resource.file_system_node",
+          "citation_count": 0,
+          "next_recommended_view": "DETAILED"
+        },
+        "secondary_fields": {},
+        "technical_fields": {},
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533821772566,
+            "created": 1789453533821772566,
+            "modified": 1789453533821772566
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.821773Z",
+            "created": "2026-09-15T06:25:33.821773Z",
+            "modified": "2026-09-15T06:25:33.821773Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843301Z",
+          "updated_at": "2026-09-15T06:25:33.843301Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "문서"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.847255Z"
+      },
+      "DETAILED": {
+        "projection_id": "48601cc5-a377-4eb1-a57c-208d475e84db",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "fc907474-0b24-50d3-8938-6d94c80840b8",
+        "view_mode": "DETAILED",
+        "title": "/문서",
+        "subtitle": "DIRECTORY",
+        "summary": "DIRECTORY",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/문서"
+        },
+        "secondary_fields": {
+          "id": "fc907474-0b24-50d3-8938-6d94c80840b8",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "문서",
+          "original_relative_path": "문서",
+          "display_path": "/문서",
+          "comparison_path": "문서",
+          "node_type": "DIRECTORY",
+          "file_size": 4096,
+          "mime_confidence": "UNKNOWN",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288078,
+            "mode": 493,
+            "nlink": 2
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533821772566,
+            "created": 1789453533821772566,
+            "modified": 1789453533821772566
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.821773Z",
+            "created": "2026-09-15T06:25:33.821773Z",
+            "modified": "2026-09-15T06:25:33.821773Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": true,
+          "provider_metadata": {
+            "entry_sort_key": "문서\u0000문서",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.843301Z",
+          "updated_at": "2026-09-15T06:25:33.843301Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533821772566,
+            "created": 1789453533821772566,
+            "modified": 1789453533821772566
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.821773Z",
+            "created": "2026-09-15T06:25:33.821773Z",
+            "modified": "2026-09-15T06:25:33.821773Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843301Z",
+          "updated_at": "2026-09-15T06:25:33.843301Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "문서"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.847409Z"
+      },
+      "RAW": {
+        "projection_id": "4bac9319-c1b3-4b80-99db-b4d31ab4fdf8",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "fc907474-0b24-50d3-8938-6d94c80840b8",
+        "view_mode": "RAW",
+        "title": "/문서",
+        "subtitle": "DIRECTORY",
+        "summary": "DIRECTORY",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/문서"
+        },
+        "secondary_fields": {
+          "id": "fc907474-0b24-50d3-8938-6d94c80840b8",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "문서",
+          "original_relative_path": "문서",
+          "display_path": "/문서",
+          "comparison_path": "문서",
+          "node_type": "DIRECTORY",
+          "file_size": 4096,
+          "mime_confidence": "UNKNOWN",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288078,
+            "mode": 493,
+            "nlink": 2
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533821772566,
+            "created": 1789453533821772566,
+            "modified": 1789453533821772566
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.821773Z",
+            "created": "2026-09-15T06:25:33.821773Z",
+            "modified": "2026-09-15T06:25:33.821773Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": true,
+          "provider_metadata": {
+            "entry_sort_key": "문서\u0000문서",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.843301Z",
+          "updated_at": "2026-09-15T06:25:33.843301Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {
+          "raw_locator": {
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "locator_type": "LOGICAL_PATH",
+            "provider_id": "apex.logical_directory_provider",
+            "provider_version": "0.1.0",
+            "reads_file_body": false,
+            "relative_path": "문서"
+          },
+          "structured_fields": {
+            "id": "fc907474-0b24-50d3-8938-6d94c80840b8",
+            "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "filesystem_provider": {
+              "id": "apex.logical_directory_provider",
+              "version": "0.1.0"
+            },
+            "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+            "original_name": "문서",
+            "original_relative_path": "문서",
+            "display_path": "/문서",
+            "comparison_path": "문서",
+            "node_type": "DIRECTORY",
+            "file_size": 4096,
+            "extension": null,
+            "mime_candidate": null,
+            "mime_confidence": "UNKNOWN",
+            "fs_metadata": {
+              "device": 28,
+              "inode": 288078,
+              "mode": 493,
+              "nlink": 2
+            },
+            "platform": "linux",
+            "timestamp_meanings": {
+              "accessed": "last_accessed",
+              "changed": "metadata_changed",
+              "created": "birth_time_or_metadata_change",
+              "modified": "content_modified"
+            },
+            "raw_timestamps": {
+              "accessed": 1789453533821772566,
+              "changed": 1789453533821772566,
+              "created": 1789453533821772566,
+              "modified": 1789453533821772566
+            },
+            "utc_timestamps": {
+              "accessed": "2026-09-15T06:25:33.821773Z",
+              "changed": "2026-09-15T06:25:33.821773Z",
+              "created": "2026-09-15T06:25:33.821773Z",
+              "modified": "2026-09-15T06:25:33.821773Z"
+            },
+            "timestamp_sources": {
+              "accessed": "os.stat",
+              "changed": "os.stat",
+              "created": "os.stat",
+              "modified": "os.stat"
+            },
+            "is_deleted": false,
+            "is_readable": true,
+            "is_link": false,
+            "is_traversed": true,
+            "raw_locator": {
+              "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+              "locator_type": "LOGICAL_PATH",
+              "provider_id": "apex.logical_directory_provider",
+              "provider_version": "0.1.0",
+              "reads_file_body": false,
+              "relative_path": "문서"
+            },
+            "provider_metadata": {
+              "entry_sort_key": "문서\u0000문서",
+              "followed_symlink": false,
+              "source_path_kind": "directory"
+            },
+            "is_partial": false,
+            "index_revision": 1,
+            "created_at": "2026-09-15T06:25:33.843301Z",
+            "updated_at": "2026-09-15T06:25:33.843301Z"
+          },
+          "raw_included": false,
+          "raw_access": "use raw-read for bounded chunks"
+        },
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533821772566,
+            "created": 1789453533821772566,
+            "modified": 1789453533821772566
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.821773Z",
+            "created": "2026-09-15T06:25:33.821773Z",
+            "modified": "2026-09-15T06:25:33.821773Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843301Z",
+          "updated_at": "2026-09-15T06:25:33.843301Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "문서"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.847601Z"
+      }
+    },
+    "47371a0c-213d-5b98-96d6-06f5320ce196": {
+      "SIMPLE": {
+        "projection_id": "4413568a-9dec-4317-aaf3-a148fa2a7beb",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "47371a0c-213d-5b98-96d6-06f5320ce196",
+        "view_mode": "SIMPLE",
+        "title": "/한글-분석노트.txt",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/한글-분석노트.txt",
+          "label_resource_key": "resource.file_system_node",
+          "citation_count": 0,
+          "next_recommended_view": "DETAILED"
+        },
+        "secondary_fields": {},
+        "technical_fields": {},
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533826314459,
+            "created": 1789453533826314459,
+            "modified": 1789453533826314459
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.826314Z",
+            "created": "2026-09-15T06:25:33.826314Z",
+            "modified": "2026-09-15T06:25:33.826314Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843349Z",
+          "updated_at": "2026-09-15T06:25:33.843349Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "한글-분석노트.txt"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.847854Z"
+      },
+      "DETAILED": {
+        "projection_id": "95b20f71-962b-4252-8bda-c25f85279745",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "47371a0c-213d-5b98-96d6-06f5320ce196",
+        "view_mode": "DETAILED",
+        "title": "/한글-분석노트.txt",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/한글-분석노트.txt"
+        },
+        "secondary_fields": {
+          "id": "47371a0c-213d-5b98-96d6-06f5320ce196",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "한글-분석노트.txt",
+          "original_relative_path": "한글-분석노트.txt",
+          "display_path": "/한글-분석노트.txt",
+          "comparison_path": "한글-분석노트.txt",
+          "node_type": "FILE",
+          "file_size": 60,
+          "extension": "txt",
+          "mime_candidate": "text/plain",
+          "mime_confidence": "LOW",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288079,
+            "mode": 420,
+            "nlink": 1
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533826314459,
+            "created": 1789453533826314459,
+            "modified": 1789453533826314459
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.826314Z",
+            "created": "2026-09-15T06:25:33.826314Z",
+            "modified": "2026-09-15T06:25:33.826314Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": false,
+          "provider_metadata": {
+            "entry_sort_key": "한글-분석노트.txt\u0000한글-분석노트.txt",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.843349Z",
+          "updated_at": "2026-09-15T06:25:33.843349Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {},
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533826314459,
+            "created": 1789453533826314459,
+            "modified": 1789453533826314459
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.826314Z",
+            "created": "2026-09-15T06:25:33.826314Z",
+            "modified": "2026-09-15T06:25:33.826314Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843349Z",
+          "updated_at": "2026-09-15T06:25:33.843349Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "한글-분석노트.txt"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.848022Z"
+      },
+      "RAW": {
+        "projection_id": "ec80a8c7-e0c1-45fb-ac74-396c84b77126",
+        "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+        "resource_type": "FILE_SYSTEM_NODE",
+        "resource_id": "47371a0c-213d-5b98-96d6-06f5320ce196",
+        "view_mode": "RAW",
+        "title": "/한글-분석노트.txt",
+        "subtitle": "FILE",
+        "summary": "FILE",
+        "severity": null,
+        "badges": [
+          "FILE_SYSTEM_NODE"
+        ],
+        "primary_fields": {
+          "display_path": "/한글-분석노트.txt"
+        },
+        "secondary_fields": {
+          "id": "47371a0c-213d-5b98-96d6-06f5320ce196",
+          "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "filesystem_provider": {
+            "id": "apex.logical_directory_provider",
+            "version": "0.1.0"
+          },
+          "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+          "original_name": "한글-분석노트.txt",
+          "original_relative_path": "한글-분석노트.txt",
+          "display_path": "/한글-분석노트.txt",
+          "comparison_path": "한글-분석노트.txt",
+          "node_type": "FILE",
+          "file_size": 60,
+          "extension": "txt",
+          "mime_candidate": "text/plain",
+          "mime_confidence": "LOW",
+          "fs_metadata": {
+            "device": 28,
+            "inode": 288079,
+            "mode": 420,
+            "nlink": 1
+          },
+          "platform": "linux",
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533826314459,
+            "created": 1789453533826314459,
+            "modified": 1789453533826314459
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.826314Z",
+            "created": "2026-09-15T06:25:33.826314Z",
+            "modified": "2026-09-15T06:25:33.826314Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "is_deleted": false,
+          "is_readable": true,
+          "is_link": false,
+          "is_traversed": false,
+          "provider_metadata": {
+            "entry_sort_key": "한글-분석노트.txt\u0000한글-분석노트.txt",
+            "followed_symlink": false,
+            "source_path_kind": "directory"
+          },
+          "is_partial": false,
+          "index_revision": 1,
+          "created_at": "2026-09-15T06:25:33.843349Z",
+          "updated_at": "2026-09-15T06:25:33.843349Z"
+        },
+        "technical_fields": {
+          "source_revision": 1,
+          "analyzer_id": "apex.logical_directory_provider",
+          "analyzer_version": "0.1.0",
+          "resource_semantics": "observed_fact"
+        },
+        "raw_fields": {
+          "raw_locator": {
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "locator_type": "LOGICAL_PATH",
+            "provider_id": "apex.logical_directory_provider",
+            "provider_version": "0.1.0",
+            "reads_file_body": false,
+            "relative_path": "한글-분석노트.txt"
+          },
+          "structured_fields": {
+            "id": "47371a0c-213d-5b98-96d6-06f5320ce196",
+            "case_id": "fcf65b3d-1d4e-439e-8345-cf23ed2f25a1",
+            "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+            "filesystem_provider": {
+              "id": "apex.logical_directory_provider",
+              "version": "0.1.0"
+            },
+            "parent_node_id": "1d097f54-7131-5b0d-a7f4-823bfeff06d6",
+            "original_name": "한글-분석노트.txt",
+            "original_relative_path": "한글-분석노트.txt",
+            "display_path": "/한글-분석노트.txt",
+            "comparison_path": "한글-분석노트.txt",
+            "node_type": "FILE",
+            "file_size": 60,
+            "extension": "txt",
+            "mime_candidate": "text/plain",
+            "mime_confidence": "LOW",
+            "fs_metadata": {
+              "device": 28,
+              "inode": 288079,
+              "mode": 420,
+              "nlink": 1
+            },
+            "platform": "linux",
+            "timestamp_meanings": {
+              "accessed": "last_accessed",
+              "changed": "metadata_changed",
+              "created": "birth_time_or_metadata_change",
+              "modified": "content_modified"
+            },
+            "raw_timestamps": {
+              "accessed": 1789453533821772566,
+              "changed": 1789453533826314459,
+              "created": 1789453533826314459,
+              "modified": 1789453533826314459
+            },
+            "utc_timestamps": {
+              "accessed": "2026-09-15T06:25:33.821773Z",
+              "changed": "2026-09-15T06:25:33.826314Z",
+              "created": "2026-09-15T06:25:33.826314Z",
+              "modified": "2026-09-15T06:25:33.826314Z"
+            },
+            "timestamp_sources": {
+              "accessed": "os.stat",
+              "changed": "os.stat",
+              "created": "os.stat",
+              "modified": "os.stat"
+            },
+            "is_deleted": false,
+            "is_readable": true,
+            "is_link": false,
+            "is_traversed": false,
+            "raw_locator": {
+              "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+              "locator_type": "LOGICAL_PATH",
+              "provider_id": "apex.logical_directory_provider",
+              "provider_version": "0.1.0",
+              "reads_file_body": false,
+              "relative_path": "한글-분석노트.txt"
+            },
+            "provider_metadata": {
+              "entry_sort_key": "한글-분석노트.txt\u0000한글-분석노트.txt",
+              "followed_symlink": false,
+              "source_path_kind": "directory"
+            },
+            "is_partial": false,
+            "index_revision": 1,
+            "created_at": "2026-09-15T06:25:33.843349Z",
+            "updated_at": "2026-09-15T06:25:33.843349Z"
+          },
+          "raw_included": false,
+          "raw_access": "use raw-read for bounded chunks"
+        },
+        "timestamps": {
+          "timestamp_meanings": {
+            "accessed": "last_accessed",
+            "changed": "metadata_changed",
+            "created": "birth_time_or_metadata_change",
+            "modified": "content_modified"
+          },
+          "raw_timestamps": {
+            "accessed": 1789453533821772566,
+            "changed": 1789453533826314459,
+            "created": 1789453533826314459,
+            "modified": 1789453533826314459
+          },
+          "utc_timestamps": {
+            "accessed": "2026-09-15T06:25:33.821773Z",
+            "changed": "2026-09-15T06:25:33.826314Z",
+            "created": "2026-09-15T06:25:33.826314Z",
+            "modified": "2026-09-15T06:25:33.826314Z"
+          },
+          "timestamp_sources": {
+            "accessed": "os.stat",
+            "changed": "os.stat",
+            "created": "os.stat",
+            "modified": "os.stat"
+          },
+          "created_at": "2026-09-15T06:25:33.843349Z",
+          "updated_at": "2026-09-15T06:25:33.843349Z"
+        },
+        "timezone": null,
+        "confidence": null,
+        "partial_state": {
+          "is_partial": false
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "warnings": [],
+        "citations": [],
+        "raw_locator": {
+          "evidence_id": "364b0f1c-f233-4951-8076-4b0c22c7ca83",
+          "locator_type": "LOGICAL_PATH",
+          "provider_id": "apex.logical_directory_provider",
+          "provider_version": "0.1.0",
+          "reads_file_body": false,
+          "relative_path": "한글-분석노트.txt"
+        },
+        "available_actions": [
+          "view.simple",
+          "view.detailed",
+          "view.raw",
+          "view.raw-read"
+        ],
+        "source_revision": 1,
+        "analyzer_id": "apex.logical_directory_provider",
+        "analyzer_version": "0.1.0",
+        "projection_version": "1.0.0",
+        "created_at": "2026-09-15T06:25:33.848206Z"
+      }
+    }
+  },
+  "runtime": {
+    "capabilities": {
+      "schema_version": "1.0.0",
+      "engine_version": "0.1.0",
+      "status": "AVAILABLE_WITH_LIMITATIONS",
+      "host": {
+        "os": "Linux",
+        "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+        "python_version": "3.12.14",
+        "python_implementation": "CPython",
+        "cpu_count": 9
+      },
+      "summary": {
+        "capability_count": 30,
+        "unavailable_count": 14,
+        "host_verification_required_count": 1,
+        "secret_values_emitted": false,
+        "environment_values_emitted": false,
+        "environment_names_emitted": false
+      },
+      "capabilities": [
+        {
+          "id": "python",
+          "status": "AVAILABLE",
+          "version": "3.12.14",
+          "reason": null,
+          "probe": "ACTIVE_INTERPRETER",
+          "details": {
+            "executable_basename": "python"
+          }
+        },
+        {
+          "id": "sqlite",
+          "status": "AVAILABLE",
+          "version": "3.53.1",
+          "reason": null,
+          "probe": "IN_MEMORY_QUERY",
+          "details": {}
+        },
+        {
+          "id": "sqlite-fts5",
+          "status": "AVAILABLE",
+          "version": "3.53.1",
+          "reason": null,
+          "probe": "IN_MEMORY_FTS5_QUERY",
+          "details": {}
+        },
+        {
+          "id": "raw-dd-img",
+          "status": "AVAILABLE",
+          "version": "0.1.0",
+          "reason": null,
+          "probe": "ENGINE_MODULE_IMPORT",
+          "details": {}
+        },
+        {
+          "id": "pytsk3",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "pytsk3"
+          }
+        },
+        {
+          "id": "e01-libewf",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "pyewf"
+          }
+        },
+        {
+          "id": "vhd-libvhdi",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "pyvhdilib"
+          }
+        },
+        {
+          "id": "vhdx-qemu-img",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "EXECUTABLE_NOT_FOUND",
+          "probe": "PATH_AND_VERSION_COMMAND",
+          "details": {
+            "executable": "qemu-img"
+          }
+        },
+        {
+          "id": "filesystem-provider",
+          "status": "AVAILABLE",
+          "version": "0.1.0",
+          "reason": null,
+          "probe": "ENGINE_MODULE_IMPORT",
+          "details": {}
+        },
+        {
+          "id": "registry-parser",
+          "status": "AVAILABLE",
+          "version": "0.1.0",
+          "reason": null,
+          "probe": "ENGINE_MODULE_IMPORT",
+          "details": {}
+        },
+        {
+          "id": "registry-binary-parser",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "python-registry"
+          }
+        },
+        {
+          "id": "registry-deleted-cell-carving",
+          "status": "AVAILABLE",
+          "version": "0.1.0",
+          "reason": null,
+          "probe": "ENGINE_MODULE_IMPORT",
+          "details": {}
+        },
+        {
+          "id": "event-log-parser",
+          "status": "AVAILABLE",
+          "version": "0.1.0",
+          "reason": null,
+          "probe": "ENGINE_MODULE_IMPORT",
+          "details": {}
+        },
+        {
+          "id": "event-log-binary-parser",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "python-evtx"
+          }
+        },
+        {
+          "id": "prefetch-parser",
+          "status": "AVAILABLE",
+          "version": "0.1.0",
+          "reason": null,
+          "probe": "ENGINE_MODULE_IMPORT",
+          "details": {}
+        },
+        {
+          "id": "prefetch-mam",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "dissect.util"
+          }
+        },
+        {
+          "id": "windows-event-message-renderer",
+          "status": "HOST_VERIFICATION_REQUIRED",
+          "version": null,
+          "reason": "WINDOWS_HOST_REQUIRED",
+          "probe": "PLATFORM_AND_PYWIN32_API_CHECK",
+          "details": {}
+        },
+        {
+          "id": "pillow",
+          "status": "AVAILABLE",
+          "version": "12.3.0",
+          "reason": null,
+          "probe": "IN_MEMORY_IMAGE_ROUND_TRIP",
+          "details": {}
+        },
+        {
+          "id": "browser-cryptography",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "cryptography"
+          }
+        },
+        {
+          "id": "ffmpeg",
+          "status": "AVAILABLE",
+          "version": null,
+          "reason": null,
+          "probe": "PATH_AND_VERSION_COMMAND",
+          "details": {
+            "executable": "ffmpeg",
+            "returncode": 0
+          }
+        },
+        {
+          "id": "ffprobe",
+          "status": "AVAILABLE",
+          "version": null,
+          "reason": null,
+          "probe": "PATH_AND_VERSION_COMMAND",
+          "details": {
+            "executable": "ffprobe",
+            "returncode": 0
+          }
+        },
+        {
+          "id": "rapidocr",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "rapidocr"
+          }
+        },
+        {
+          "id": "onnx-runtime",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "onnxruntime"
+          }
+        },
+        {
+          "id": "faster-whisper",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "faster-whisper"
+          }
+        },
+        {
+          "id": "firefox-nss",
+          "status": "AVAILABLE_WITH_LIMITATIONS",
+          "version": null,
+          "reason": "SYNTHETIC_PROFILE_DECRYPT_NOT_RUN",
+          "probe": "DYNAMIC_LIBRARY_SYMBOL_CHECK",
+          "details": {
+            "decrypt_symbols_available": true,
+            "fixture_generation_symbol_available": true
+          }
+        },
+        {
+          "id": "dpapi-impacket",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "DEPENDENCY_NOT_INSTALLED",
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {
+            "dependency": "impacket"
+          }
+        },
+        {
+          "id": "html-renderer",
+          "status": "AVAILABLE",
+          "version": "0.1.0",
+          "reason": null,
+          "probe": "ENGINE_MODULE_IMPORT",
+          "details": {}
+        },
+        {
+          "id": "pdf-renderer",
+          "status": "AVAILABLE",
+          "version": "5.0.1",
+          "reason": null,
+          "probe": "IMPORT_AND_ATTRIBUTE_CHECK",
+          "details": {}
+        },
+        {
+          "id": "ai-provider-openai-compatible",
+          "status": "EXTERNAL_CONFIGURATION_REQUIRED",
+          "version": null,
+          "reason": "PROVIDER_CONFIGURATION_MISSING",
+          "probe": "CONFIGURATION_PRESENCE_ONLY",
+          "details": {
+            "configured": false,
+            "live_request_performed": false
+          }
+        },
+        {
+          "id": "kakaotalk-existing",
+          "status": "CAPABILITY_UNAVAILABLE",
+          "version": null,
+          "reason": "CRYPTOGRAPHY_DEPENDENCY_NOT_INSTALLED",
+          "probe": "EXISTING_DEPENDENCY_STATUS_ONLY",
+          "details": {
+            "automatic_key_acquisition_status": "BLOCKED_EXTERNAL_FIXTURE",
+            "external_key_only": true,
+            "android_supported": false,
+            "ios_supported": false
+          }
+        }
+      ]
+    },
+    "mode": "DEMO_READ_ONLY",
+    "renderer": {
+      "supported_formats": [
+        "HTML"
+      ]
+    },
+    "operations": [],
+    "actor_id": "demo-analyst",
+    "session_id": "demo-session"
+  }
+}

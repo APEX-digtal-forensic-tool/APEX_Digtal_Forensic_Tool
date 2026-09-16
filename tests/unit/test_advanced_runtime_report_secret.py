@@ -501,3 +501,20 @@ def test_report_service_renders_html_with_runtime_adapter(services: Any, tmp_pat
         reopened.close()
     assert reopened_status["manifest"]["status"] == "COMPLETED"
     assert reopened_status["artifacts"][0]["sha256"] == status["artifacts"][0]["sha256"]
+
+
+def test_report_localizes_fixed_labels_and_preserves_escaped_content() -> None:
+    from dataclasses import replace
+
+    package = _package()
+    korean = report_runtime._render_html(package).decode()
+    assert "<h2>증거 요약</h2>" in korean
+    assert "<h2>해시 무결성</h2>" in korean
+    assert "<h2>제한 사항</h2>" in korean
+    assert "<h3>섹션 인용 근거</h3>" in korean
+    assert "<p><p>" not in korean
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in korean
+    assert "Summary &lt;b&gt;escaped&lt;/b&gt;" in korean
+    english = report_runtime._render_html(replace(package, locale="en-US")).decode()
+    assert "<h2>Evidence Summary</h2>" in english
+    assert "<h2>Limitations</h2>" in english

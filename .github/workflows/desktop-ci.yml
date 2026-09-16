@@ -1,0 +1,59 @@
+name: Desktop Windows and macOS
+on:
+  pull_request:
+    paths: ['frontend/**', 'src/apex_desktop/**', 'src/apex_forensic/**', 'schemas/**', 'tests/desktop/**', 'tools/*desktop*', 'pyproject.toml', 'uv.lock', '.github/workflows/desktop-ci.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows-x64
+            package: dist:win
+          - os: macos-15
+            label: macOS-arm64
+            package: dist:mac
+          - os: macos-15-intel
+            label: macOS-x64
+            package: dist:mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      PYTHONUTF8: '1'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.11'
+      - run: uv python install 3.12
+      - run: uv python pin 3.12
+      - run: uv sync --locked --extra desktop --extra desktop-build --extra report-renderer --extra dev
+      - run: uv run --no-sync pytest tests/desktop
+      - run: uv run --no-sync ruff check src/apex_desktop tests/desktop tools/build_desktop_runtime.py tools/verify_desktop_runtime.py
+      - run: uv run --no-sync mypy --strict src/apex_desktop
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: uv run --no-sync python tools/build_desktop_runtime.py
+      - run: uv run --no-sync python tools/verify_desktop_runtime.py
+      - run: npm run ${{ matrix.package }}
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APEX-${{ matrix.label }}
+          path: |
+            frontend/release/*.exe
+            frontend/release/*.dmg
+            frontend/release/*.zip
+          if-no-files-found: error

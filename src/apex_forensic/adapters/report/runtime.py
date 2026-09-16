@@ -57,42 +57,68 @@ _HTML_TEMPLATE = Template(
 <body>
   <header>
     <h1>$title</h1>
-    <p>$summary</p>
-    <p>Version $version_number · $locale · $timezone</p>
+    $summary
+    <p>$version_label $version_number · $locale · $timezone</p>
   </header>
   <nav>
-    <h2>Table of Contents</h2>
+    <h2>$contents_label</h2>
     <ol>$toc</ol>
   </nav>
   <main>$sections</main>
   <section>
-    <h2>Evidence Summary</h2>
+    <h2>$evidence_label</h2>
     $evidence
   </section>
   <section>
-    <h2>Hash Integrity</h2>
+    <h2>$hashes_label</h2>
     $hashes
   </section>
   <section>
-    <h2>Chain of Custody</h2>
+    <h2>$custody_label</h2>
     $custody
   </section>
   <section>
-    <h2>Limitations</h2>
+    <h2>$limitations_label</h2>
     $limitations
   </section>
   <section>
-    <h2>Citations</h2>
+    <h2>$citations_label</h2>
     $citations
   </section>
   <footer>
-    <p>Renderer: $renderer_id $renderer_version</p>
-    <p>Package fingerprint: $package_fingerprint</p>
+    <p>$renderer_label: $renderer_id $renderer_version</p>
+    <p>$fingerprint_label: $package_fingerprint</p>
   </footer>
 </body>
 </html>
 """
 )
+
+
+_REPORT_KO = {
+    "Version": "버전",
+    "Table of Contents": "목차",
+    "Evidence Summary": "증거 요약",
+    "Hash Integrity": "해시 무결성",
+    "Chain of Custody": "증거 보관 이력",
+    "Limitations": "제한 사항",
+    "Citations": "인용 근거",
+    "Renderer": "렌더러",
+    "Package fingerprint": "패키지 지문",
+    "Report": "보고서",
+    "Section Citations": "섹션 인용 근거",
+    "Structured Data": "구조화 데이터",
+    "None": "없음",
+    "No custody snapshot linked.": "연결된 증거 보관 이력 스냅샷이 없습니다.",
+    "Partial or stale report section. Review limitations.": (
+        "일부 결과 또는 갱신이 필요한 섹션입니다. 제한 사항을 확인하세요."
+    ),
+    "Page": "페이지",
+}
+
+
+def _label(value: str, locale: str) -> str:
+    return _REPORT_KO.get(value, value) if locale.lower().startswith("ko") else value
 
 
 class RuntimeReportRenderer:
@@ -340,10 +366,19 @@ def _cleanup_temp_output(temp_path: Path, *, original_error: Exception) -> None:
 
 def _render_html(package: ReportRenderPackage) -> bytes:
     metadata = package.report_metadata
-    title = _text(metadata.get("title") or "Report")
+    title = _text(metadata.get("title") or _label("Report", package.locale))
     summary = _paragraph(_text(metadata.get("executive_summary") or ""))
     sections = list(package.sections)
     values = {
+        "version_label": _label("Version", package.locale),
+        "contents_label": _label("Table of Contents", package.locale),
+        "evidence_label": _label("Evidence Summary", package.locale),
+        "hashes_label": _label("Hash Integrity", package.locale),
+        "custody_label": _label("Chain of Custody", package.locale),
+        "limitations_label": _label("Limitations", package.locale),
+        "citations_label": _label("Citations", package.locale),
+        "renderer_label": _label("Renderer", package.locale),
+        "fingerprint_label": _label("Package fingerprint", package.locale),
         "lang": html.escape(_text(package.locale).split("-", 1)[0] or "en"),
         "title": html.escape(title),
         "summary": summary,
@@ -355,13 +390,14 @@ def _render_html(package: ReportRenderPackage) -> bytes:
             for index, section in enumerate(sections, start=1)
         ),
         "sections": "\n".join(
-            _section_html(index, section) for index, section in enumerate(sections, 1)
+            _section_html(index, section, package.locale)
+            for index, section in enumerate(sections, 1)
         ),
-        "evidence": _table_from_mappings(package.evidence_manifest),
-        "hashes": _mapping_table(package.hash_integrity_summary),
+        "evidence": _table_from_mappings(package.evidence_manifest, package.locale),
+        "hashes": _mapping_table(package.hash_integrity_summary, package.locale),
         "custody": _custody_html(package),
-        "limitations": _list_html(package.limitations),
-        "citations": _citation_html(package.citations),
+        "limitations": _list_html(package.limitations, package.locale),
+        "citations": _citation_html(package.citations, package.locale),
         "renderer_id": html.escape(RuntimeReportRenderer.renderer_id),
         "renderer_version": html.escape(RuntimeReportRenderer.renderer_version),
         "package_fingerprint": html.escape(package.package_fingerprint),
@@ -420,12 +456,12 @@ def _render_pdf(package: ReportRenderPackage) -> bytes:
             platypus.Paragraph(html.escape(_text(section.get("content"))), styles["BodyText"])
         )
         story.append(platypus.Spacer(1, 6))
-    story.append(platypus.Paragraph("Evidence Summary", styles["Heading1"]))
+    story.append(platypus.Paragraph(_label("Evidence Summary", package.locale), styles["Heading1"]))
     for evidence in package.evidence_manifest:
         story.append(
             platypus.Paragraph(html.escape(_compact_mapping(evidence)), styles["BodyText"])
         )
-    story.append(platypus.Paragraph("Citations", styles["Heading1"]))
+    story.append(platypus.Paragraph(_label("Citations", package.locale), styles["Heading1"]))
     for citation in package.citations:
         story.append(
             platypus.Paragraph(html.escape(_compact_mapping(citation)), styles["BodyText"])
@@ -435,7 +471,11 @@ def _render_pdf(package: ReportRenderPackage) -> bytes:
         del document
         canvas.saveState()
         canvas.setFont(font_name, 8)
-        canvas.drawRightString(190 * units.mm, 10 * units.mm, f"Page {canvas.getPageNumber()}")
+        canvas.drawRightString(
+            190 * units.mm,
+            10 * units.mm,
+            f"{_label('Page', package.locale)} {canvas.getPageNumber()}",
+        )
         canvas.restoreState()
 
     doc.build(story, onFirstPage=page_footer, onLaterPages=page_footer)
@@ -451,18 +491,22 @@ def _register_pdf_font(pdfmetrics: Any, cidfonts: Any) -> str:
         return "Helvetica"
 
 
-def _section_html(index: int, section: dict[str, Any]) -> str:
+def _section_html(index: int, section: dict[str, Any], locale: str = "en") -> str:
     title = html.escape(_text(section.get("title")))
     content = _paragraph(_text(section.get("content")))
     structured = section.get("structured_data")
-    citations = _citation_html([dict(item) for item in section.get("citations", [])])
+    citations = _citation_html([dict(item) for item in section.get("citations", [])], locale)
     warning = ""
     if section.get("is_partial") or section.get("stale_reasons"):
-        warning = '<p class="warning">Partial or stale report section. Review limitations.</p>'
-    extra = _structured_html(structured) if isinstance(structured, dict) else ""
+        warning = (
+            '<p class="warning">'
+            + _label("Partial or stale report section. Review limitations.", locale)
+            + "</p>"
+        )
+    extra = _structured_html(structured, locale) if isinstance(structured, dict) else ""
     return (
         f'<section id="section-{index}"><h2>{title}</h2>{warning}'
-        f"{content}{extra}<h3>Section Citations</h3>{citations}</section>"
+        f"{content}{extra}<h3>{_label('Section Citations', locale)}</h3>{citations}</section>"
     )
 
 
@@ -471,16 +515,16 @@ def _paragraph(value: str) -> str:
     return "<p>" + escaped.replace("\n", "<br>") + "</p>"
 
 
-def _structured_html(value: dict[str, Any]) -> str:
+def _structured_html(value: dict[str, Any], locale: str = "en") -> str:
     if not value:
         return ""
-    return "<h3>Structured Data</h3>" + _mapping_table(value)
+    return "<h3>" + _label("Structured Data", locale) + "</h3>" + _mapping_table(value, locale)
 
 
-def _table_from_mappings(rows: Iterable[dict[str, Any]]) -> str:
+def _table_from_mappings(rows: Iterable[dict[str, Any]], locale: str = "en") -> str:
     items = list(rows)
     if not items:
-        return "<p>None</p>"
+        return "<p>" + _label("None", locale) + "</p>"
     keys = sorted({key for row in items for key in row})
     header = "".join(f"<th>{html.escape(key)}</th>" for key in keys)
     body_rows = []
@@ -490,9 +534,9 @@ def _table_from_mappings(rows: Iterable[dict[str, Any]]) -> str:
     return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
 
 
-def _mapping_table(value: dict[str, Any]) -> str:
+def _mapping_table(value: dict[str, Any], locale: str = "en") -> str:
     if not value:
-        return "<p>None</p>"
+        return "<p>" + _label("None", locale) + "</p>"
     rows = "".join(
         f"<tr><th>{html.escape(str(key))}</th><td>{html.escape(_text(value[key]))}</td></tr>"
         for key in sorted(value)
@@ -500,15 +544,15 @@ def _mapping_table(value: dict[str, Any]) -> str:
     return f"<table><tbody>{rows}</tbody></table>"
 
 
-def _list_html(values: list[str]) -> str:
+def _list_html(values: list[str], locale: str = "en") -> str:
     if not values:
-        return "<p>None</p>"
+        return "<p>" + _label("None", locale) + "</p>"
     return "<ul>" + "".join(f"<li>{html.escape(value)}</li>" for value in values) + "</ul>"
 
 
-def _citation_html(values: list[dict[str, Any]]) -> str:
+def _citation_html(values: list[dict[str, Any]], locale: str = "en") -> str:
     if not values:
-        return "<p>None</p>"
+        return "<p>" + _label("None", locale) + "</p>"
     return (
         "<ol>"
         + "".join(
@@ -521,7 +565,7 @@ def _citation_html(values: list[dict[str, Any]]) -> str:
 
 def _custody_html(package: ReportRenderPackage) -> str:
     if package.custody_snapshot_id is None:
-        return "<p>No custody snapshot linked.</p>"
+        return "<p>" + _label("No custody snapshot linked.", package.locale) + "</p>"
     return _mapping_table({"custody_snapshot_id": package.custody_snapshot_id})
 
 
