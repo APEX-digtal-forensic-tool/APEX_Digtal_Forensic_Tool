@@ -2800,6 +2800,12 @@ class ViewProjectionService:
         ]
         limit = 8 if view_mode == ViewMode.SIMPLE.value else 30
         result = {key: fields[key] for key in keys if key in fields and fields[key] is not None}
+        if fields.get("artifact_type") == "MEDIA_IMAGE":
+            media = fields.get("fields", {})
+            result.update({
+                key: media[key] for key in ("format", "mime", "width", "height")
+                if media.get(key) is not None
+            })
         if view_mode == ViewMode.SIMPLE.value:
             result["label_resource_key"] = f"resource.{str(info['resource_type']).casefold()}"
             result["citation_count"] = len(info.get("citations", []))
@@ -2811,11 +2817,23 @@ class ViewProjectionService:
         if not isinstance(fields, Mapping):
             return {}
         omitted = {"raw_locator", "citations", "fields", "payload"}
-        return {
+        result = {
             str(key): value
             for key, value in fields.items()
             if key not in omitted and value is not None
         }
+        if (
+            fields.get("artifact_type") == "MEDIA_IMAGE"
+            and isinstance(fields.get("fields"), Mapping)
+        ):
+            media = fields["fields"]
+            result["image_metadata"] = {
+                key: media[key] for key in (
+                    "format", "mime", "width", "height", "color_mode", "file_size", "exif",
+                    "gps_raw", "gps_normalized", "thumbnail_cache",
+                ) if media.get(key) is not None
+            }
+        return result
 
     @staticmethod
     def _technical_fields(info: dict[str, Any], fields: Any) -> dict[str, Any]:

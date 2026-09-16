@@ -1,0 +1,131 @@
+{
+  "case_id": "6228a6d2-0644-5762-a14f-ba42551f0f1f",
+  "report": {
+    "report_id": "c8784bfe-7151-5136-92d1-e9fef93a3859",
+    "case_id": "6228a6d2-0644-5762-a14f-ba42551f0f1f",
+    "title": "Review repro report",
+    "description": null,
+    "report_type": "INVESTIGATION",
+    "locale": "ko-KR",
+    "timezone": "Asia/Seoul",
+    "status": "DRAFT",
+    "active_version_id": null,
+    "latest_version_number": 0,
+    "created_by": "synthetic-fixture-analyst",
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "archived_at": null,
+    "report_fingerprint": "d2aa2712274e7c870afe1182b801355d89159f987d79f4735c79f270daac2ec3",
+    "report_schema_version": "1.0.0"
+  },
+  "detail": {
+    "report": {
+      "report_id": "c8784bfe-7151-5136-92d1-e9fef93a3859",
+      "case_id": "6228a6d2-0644-5762-a14f-ba42551f0f1f",
+      "title": "Review repro report",
+      "description": null,
+      "report_type": "INVESTIGATION",
+      "locale": "ko-KR",
+      "timezone": "Asia/Seoul",
+      "status": "REVIEW_REQUIRED",
+      "active_version_id": "9e7f0680-e0f9-5780-a31b-6ce934d0a358",
+      "latest_version_number": 1,
+      "created_by": "synthetic-fixture-analyst",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "archived_at": null,
+      "report_fingerprint": "d2aa2712274e7c870afe1182b801355d89159f987d79f4735c79f270daac2ec3",
+      "report_schema_version": "1.0.0"
+    },
+    "versions": [
+      {
+        "report_version_id": "9e7f0680-e0f9-5780-a31b-6ce934d0a358",
+        "report_id": "c8784bfe-7151-5136-92d1-e9fef93a3859",
+        "case_id": "6228a6d2-0644-5762-a14f-ba42551f0f1f",
+        "version_number": 1,
+        "previous_version_id": null,
+        "source_kind": "ANALYST_DRAFT",
+        "source_reference_id": null,
+        "created_by": "synthetic-fixture-analyst",
+        "title": "Review repro report",
+        "executive_summary": "Summary",
+        "sections": [
+          {
+            "section_id": "section-8f660c3aa0d027936c40bef1fc19e977",
+            "section_type": "KEY_FINDINGS",
+            "title": "Section",
+            "order": 1,
+            "content_kind": "PLAIN_TEXT",
+            "content": "Synthetic",
+            "structured_data": {},
+            "source_kind": "ANALYST_DRAFT",
+            "source_resource_ids": [],
+            "context_snapshot_ids": [],
+            "citations": [],
+            "is_partial": false,
+            "stale_reasons": [],
+            "coverage": {
+              "status": "UNKNOWN"
+            },
+            "warnings": [],
+            "section_fingerprint": "8f660c3aa0d027936c40bef1fc19e9778bc84dd49a0877db748465947ef2eb31"
+          }
+        ],
+        "context_snapshot_ids": [],
+        "evidence_ids": [
+          "d8d13598-6c5d-5a43-bca0-967c10194899"
+        ],
+        "search_execution_ids": [],
+        "timeline_revisions": [],
+        "ai_assistance_request_ids": [],
+        "ai_result_ids": [],
+        "citation_ids": [],
+        "partial_state": {
+          "is_partial": false,
+          "partial_reasons": []
+        },
+        "stale_state": {
+          "is_stale": false,
+          "stale_reasons": []
+        },
+        "coverage_summary": {
+          "coverage": {},
+          "section_count": 1,
+          "section_coverage": {
+            "section-8f660c3aa0d027936c40bef1fc19e977": {
+              "status": "UNKNOWN"
+            }
+          },
+          "snapshot_count": 0
+        },
+        "limitations": [
+          "Synthetic only"
+        ],
+        "analyzer_versions": {},
+        "source_revisions": [],
+        "content_fingerprint": "2f3f65e69f9fad0642d89955cf0c73a665079d5f2f764638f322b10ab3aee276",
+        "previous_content_fingerprint": null,
+        "review_state": {
+          "status": "DRAFT",
+          "review_revision": 0,
+          "latest_event_hash": null,
+          "section_status": {}
+        },
+        "approval_state": {
+          "decision": null,
+          "approval_revision": 0,
+          "approval_id": null,
+          "approval_hash": null
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "report_schema_version": "1.0.0"
+      }
+    ],
+    "approvals": {
+      "9e7f0680-e0f9-5780-a31b-6ce934d0a358": null
+    },
+    "reviews": {
+      "9e7f0680-e0f9-5780-a31b-6ce934d0a358": []
+    }
+  }
+}

@@ -1,0 +1,11 @@
+export declare function validate_case(data: unknown): boolean;
+export declare function validate_evidence(data: unknown): boolean;
+export declare function validate_file(data: unknown): boolean;
+export declare function validate_artifact(data: unknown): boolean;
+export declare function validate_gui_session_context(data: unknown): boolean;
+export declare function validate_runtime_capability_report(data: unknown): boolean;
+export declare function validate_view_projection(data: unknown): boolean;
+export declare function validate_job(data: unknown): boolean;
+export declare function validate_report_record(data: unknown): boolean;
+export declare function validate_report_version(data: unknown): boolean;
+export declare function validate_machine_extracted_candidate(data: unknown): boolean;

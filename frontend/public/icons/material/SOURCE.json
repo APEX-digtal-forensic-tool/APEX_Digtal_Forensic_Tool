@@ -1,0 +1,29 @@
+{
+  "repository": "https://github.com/material-extensions/vscode-material-icon-theme",
+  "commit": "466a413b310170f9797b68454b2b965eb18590e3",
+  "icons": [
+    "audio.svg",
+    "database.svg",
+    "disc.svg",
+    "document.svg",
+    "email.svg",
+    "exe.svg",
+    "folder-base.svg",
+    "html.svg",
+    "image.svg",
+    "javascript.svg",
+    "json.svg",
+    "log.svg",
+    "markdown.svg",
+    "pdf.svg",
+    "powerpoint.svg",
+    "python.svg",
+    "settings.svg",
+    "table.svg",
+    "typescript.svg",
+    "video.svg",
+    "word.svg",
+    "xml.svg",
+    "zip.svg"
+  ]
+}

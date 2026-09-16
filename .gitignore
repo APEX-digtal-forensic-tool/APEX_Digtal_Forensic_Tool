@@ -17,3 +17,17 @@ dist/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Desktop application build and local evidence workspaces
+.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-electron/
+frontend/release/
+desktop-runtime/
+*.spec
+desktop-runtime-build/
+build/desktop/
+
+# Local challenge evidence, extracted answers, and native verification captures
+docs/desktop/dreamhack-review/

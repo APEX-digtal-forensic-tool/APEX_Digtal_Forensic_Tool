@@ -452,9 +452,28 @@ class EvidenceManager:
                 )
 
     @staticmethod
+    def reject_archive_image(path: Path) -> None:
+        """Give an actionable error before treating an archive as a raw disk image."""
+        if not path.is_file():
+            return
+        with path.open("rb") as handle:
+            signature = handle.read(8)
+        if path.suffix.lower() in {".zip", ".7z", ".rar", ".gz", ".tar"} or signature.startswith(
+            (
+                b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08",
+                b"7z\xbc\xaf\x27\x1c", b"Rar!", b"\x1f\x8b",
+            )
+        ):
+            raise ApexError(
+                "ARCHIVE_REQUIRES_EXTRACTION", "error.archive_requires_extraction",
+                target="source_path",
+            )
+
+    @staticmethod
     def _detect_evidence_format(path: Path) -> EvidenceFormat:
         if path.is_dir():
             return EvidenceFormat.DIRECTORY
+        EvidenceManager.reject_archive_image(path)
         suffix = path.suffix.lower()
         if suffix == ".e01":
             return EvidenceFormat.E01

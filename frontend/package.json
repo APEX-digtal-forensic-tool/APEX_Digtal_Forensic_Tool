@@ -1,0 +1,80 @@
+{
+  "name": "apex-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "APEX Windows and macOS forensic workbench",
+  "author": "APEX Team",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite --host 127.0.0.1",
+    "contracts": "node scripts/contracts.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run contracts && npm run typecheck && vite build && node scripts/electron.mjs",
+    "test": "vitest run && node --disallow-code-generation-from-strings scripts/verify-csp.mjs",
+    "dist:win": "npm run build && node scripts/dist.mjs win32",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/**/*.ts\" \"scripts/*.mjs\"",
+    "dist:mac": "npm run build && node scripts/dist.mjs darwin"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "0.6.2",
+    "@heroicons/react": "2.2.0",
+    "@stylexjs/stylex": "0.19.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "44.3.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.28.0",
+    "jsdom": "^30.0.1",
+    "json-schema-to-typescript": "^15.0.0",
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3",
+    "vite": "8.3.0",
+    "vitest": "^4.0.0"
+  },
+  "build": {
+    "appId": "org.apex.forensic",
+    "productName": "APEX",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../desktop-runtime",
+        "to": "runtime"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "icon": "public/assets/apex-logo.png"
+  },
+  "type": "module"
+}
