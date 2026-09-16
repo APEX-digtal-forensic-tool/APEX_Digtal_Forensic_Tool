@@ -1,12 +1,12 @@
 """Smoke a packaged runtime on the build host without writing to user evidence."""
 
+import http.client
 import json
 import os
 import secrets
 import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 from queue import Queue
 from tempfile import TemporaryDirectory
@@ -33,32 +33,41 @@ def main() -> None:
             Thread(target=lambda: messages.put(process.stdout.readline()), daemon=True).start()
             readiness = json.loads(messages.get(timeout=30))
             assert readiness["type"] == "apex-ready"
-            endpoint = f"http://127.0.0.1:{readiness['port']}/health"
+            port = readiness["port"]
+            if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+                raise ValueError("Packaged runtime returned an invalid port")
+
+            def request_json(method, path, *, payload=None, timeout=60):
+                # Connect only to the child runtime; never use proxies or follow redirects.
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+                headers = {"Authorization": f"Bearer {token}"}
+                body = None
+                if payload is not None:
+                    body = json.dumps(payload).encode("utf-8")
+                    headers["Content-Type"] = "application/json"
+                try:
+                    connection.request(method, path, body=body, headers=headers)
+                    with connection.getresponse() as response:
+                        if response.status != 200:
+                            raise OSError(
+                                f"Packaged runtime returned HTTP {response.status} for {path}"
+                            )
+                        return json.load(response)
+                finally:
+                    connection.close()
+
             for attempt in range(50):
                 try:
-                    with urllib.request.urlopen(
-                        urllib.request.Request(
-                            endpoint, headers={"Authorization": f"Bearer {token}"}
-                        ),
-                        timeout=2,
-                    ) as response:
-                        assert json.load(response)["data"]["ready"]
+                    assert request_json("GET", "/health", timeout=2)["data"]["ready"]
                     break
                 except OSError:
                     if attempt == 49:
                         raise
                     time.sleep(0.1)
             def operation(name, payload):
-                request = urllib.request.Request(
-                    endpoint.removesuffix("/health") + "/v1/operations/" + name,
-                    data=json.dumps(payload).encode(),
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json",
-                    },
+                result = request_json(
+                    "POST", "/v1/operations/" + name, payload=payload,
                 )
-                with urllib.request.urlopen(request, timeout=60) as response:
-                    result = json.load(response)
                 assert result["ok"], result.get("error")
                 return result["data"]
 
