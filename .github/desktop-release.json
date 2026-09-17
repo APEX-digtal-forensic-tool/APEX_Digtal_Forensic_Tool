@@ -1,0 +1,27 @@
+{
+  "tag": "v0.1.1",
+  "title": "APEX 0.1.1 Preview",
+  "target_commit": "099871d3da84908550b66d9d78beb70bfdc19e2d",
+  "build_commit": "6e6d3181c4b2c08fd7d81ca9bce0f8b2583e9411",
+  "head_commit": "099871d3da84908550b66d9d78beb70bfdc19e2d",
+  "desktop_run": 35165188139,
+  "security_run": 35165188158,
+  "notes": "docs/desktop/releases/v0.1.1.md",
+  "artifacts": [
+    {
+      "id": 10474592092,
+      "name": "APEX-macOS-x64",
+      "digest": "sha256:eace6ef5fafc42c655231500d7353fe8e21f177524c858f2a32f9f8a2f33b42e"
+    },
+    {
+      "id": 10474516795,
+      "name": "APEX-macOS-arm64",
+      "digest": "sha256:e130b37a2ea41eb57fe10539ea7b8f279426799a14d5be323e348b3af94faaed"
+    },
+    {
+      "id": 10474507022,
+      "name": "APEX-Windows-x64",
+      "digest": "sha256:25793e93d470708b2ec0891c781aece6065ae2531d40ff0599eefe32e530de02"
+    }
+  ]
+}
