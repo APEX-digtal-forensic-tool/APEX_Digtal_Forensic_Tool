@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { App } from "./App";
 import {
@@ -27,7 +28,7 @@ afterEach(() => {
 });
 async function openFiles() {
   render(<App />);
-  await screen.findByText("분석 엔진 연결됨");
+  await screen.findByText("데모 · 합성 데이터");
   fireEvent.change(screen.getByLabelText("현재 사건"), {
     target: { value: core.cases[0].id },
   });
@@ -36,7 +37,7 @@ async function openFiles() {
       (screen.getByLabelText("현재 증거") as HTMLSelectElement).value,
     ).toBe(core.evidence[0].id),
   );
-  fireEvent.click(screen.getByRole("button", { name: "조사" }));
+  fireEvent.click(screen.getByRole("button", { name: "파일 시스템" }));
 }
 it("keeps unavailable and failed list queries distinct from empty results (FT-003/013)", async () => {
   const bridge = createDemoBridge(),
@@ -47,13 +48,15 @@ it("keeps unavailable and failed list queries distinct from empty results (FT-00
       : original(op, p);
   window.apex = bridge;
   await openFiles();
-  await screen.findByRole("alert");
+  await screen.findAllByRole("alert");
   expect(screen.queryByText("조회 결과가 없습니다")).toBeNull();
 });
 it("gates Raw on the engine's available actions", async () => {
   const bridge = createDemoBridge(),
     original = bridge.invoke.bind(bridge);
+  const rawRead = vi.fn();
   bridge.invoke = async (op, p) => {
+    if (op === "raw.read") rawRead();
     const reply = await original(op, p);
     if (op === "view" && reply.ok)
       return {
@@ -67,29 +70,36 @@ it("gates Raw on the engine's available actions", async () => {
   };
   window.apex = bridge;
   await openFiles();
-  fireEvent.click(await screen.findByText("README.txt"));
-  await waitFor(() =>
-    expect(
-      (screen.getByRole("button", { name: "원본" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true),
+  fireEvent.click(
+    await within(await screen.findByRole("table")).findByText("README.txt"),
   );
+  await screen.findByText(/이 항목의 원본 바이트 읽기가 제공되지 않습니다/);
+  expect(rawRead).not.toHaveBeenCalled();
 });
-it("blocks fractional and oversized raw ranges (FT-007)", async () => {
-  window.apex = createDemoBridge();
+it("blocks invalid offsets and bounds automatic raw reads to 4 KiB (FT-007)", async () => {
+  const bridge = createDemoBridge();
+  const invoke = bridge.invoke.bind(bridge);
+  const reads: any[] = [];
+  bridge.invoke = async (op, payload) => {
+    if (op === "raw.read") reads.push(payload);
+    return invoke(op, payload);
+  };
+  window.apex = bridge;
   await openFiles();
-  fireEvent.click(await screen.findByText("README.txt"));
-  fireEvent.click(screen.getByRole("button", { name: "원본" }));
-  const read = await screen.findByRole("button", { name: "원본 범위 읽기" });
-  for (const [label, value] of [
-    ["길이 (최대 1 MiB)", "1048577"],
-    ["길이 (최대 1 MiB)", "1.5"],
-    ["오프셋", "-1"],
-  ]) {
-    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  fireEvent.click(
+    await within(await screen.findByRole("table")).findByText("README.txt"),
+  );
+  await waitFor(() => expect(reads.length).toBeGreaterThan(0));
+  const read = screen.getByRole("button", { name: "이동" });
+  for (const value of ["1.5", "-1", "9007199254740992", "", "invalid"]) {
+    fireEvent.change(screen.getByLabelText("원본 바이트 오프셋"), {
+      target: { value },
+    });
     expect((read as HTMLButtonElement).disabled).toBe(true);
   }
+  expect(reads.every((input) => input.length === 4096)).toBe(true);
 });
+
 it("preserves the engine's hex/text previews and truncation notice", () => {
   render(
     <RawPreview
@@ -170,7 +180,7 @@ it("bounds rendered rows for 10,000 results and reaches the last rows", () => {
     container.querySelectorAll("tbody tr[data-row-index]").length,
   ).toBeLessThan(50);
   const el = container.querySelector(".table-scroll")!;
-  fireEvent.scroll(el, { target: { scrollTop: 9990 * 36 } });
+  fireEvent.scroll(el, { target: { scrollTop: 9990 * 30 } });
   expect(screen.getByText("item-9999")).toBeTruthy();
   expect(
     container.querySelectorAll("tbody tr[data-row-index]").length,

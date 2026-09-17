@@ -512,7 +512,7 @@ export function Table({
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(600);
   const [focusIndex, setFocusIndex] = useState(0);
-  const rowHeight = 36;
+  const rowHeight = 30;
   const virtual = display.length > 200;
   const start = virtual
     ? Math.max(0, Math.floor((scrollTop - 36) / rowHeight) - 6)
@@ -602,6 +602,7 @@ export function Table({
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   onSelect(r);
+                  if (e.key === "Enter") onOpen?.(r);
                 }
                 const target =
                   e.key === "ArrowDown"

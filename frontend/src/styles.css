@@ -1126,23 +1126,24 @@ legend {
   float: right;
 }
 
-/* Identity: the supplied raster is preserved; only its surrounding canvas is
-   clipped in the layout. Screen blending removes the black matte on charcoal. */
+/* Preserve the supplied 1254px square raster. Frame the complete mark inside
+   (114, 446, 1026, 350), including padding, and scale the crop with its button.
+   Screen blending removes the black matte on charcoal. */
 .brand-logo {
   display: block;
   position: relative;
-  width: 84px;
-  height: 30px;
+  width: 100%;
+  aspect-ratio: 1026 / 350;
   overflow: hidden;
   mix-blend-mode: screen;
 }
 .brand-logo img {
   position: absolute;
-  width: 108px;
-  height: 108px;
+  width: calc(100% * 1254 / 1026);
+  height: auto;
   max-width: none;
-  left: -10.5px;
-  top: -38px;
+  left: calc(-100% * 114 / 1026);
+  top: calc(-100% * 446 / 350);
 }
 .ui-icon {
   flex: none;
