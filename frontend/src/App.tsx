@@ -1,27 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { EvidenceTree } from "./workbench/EvidenceTree";
+import { Properties } from "./workbench/Properties";
+import { FileViewer } from "./workbench/FileViewer";
+import { Splitter } from "./workbench/Splitter";
 import {
   Activity,
   BrandLogo,
   Archive,
   ArrowDownToLine,
-  ChevronDown,
   ChevronRight,
   Clock3,
-  Database,
-  FileSearch,
   Files,
   Folder,
   FolderOpen,
   HardDrive,
-  LayoutDashboard,
-  ListChecks,
   PanelBottomClose,
   PanelBottomOpen,
   Play,
   Plus,
   RefreshCw,
   Search,
-  Settings,
   ShieldCheck,
   AssistantIcon,
   X,
@@ -73,15 +77,6 @@ const routeNames: Partial<Record<Route, string>> = {
   REPORT: "보고서",
   SETTINGS: "설정",
 };
-const nav = [
-  { label: "사건", icon: LayoutDashboard, route: "CASE_OVERVIEW" },
-  { label: "증거", icon: HardDrive, route: "EVIDENCE" },
-  { label: "조사", icon: FileSearch, route: "FILE_SYSTEM" },
-  { label: "분석", icon: Search, route: "SEARCH" },
-  { label: "검토", icon: ListChecks, route: "CANDIDATES" },
-  { label: "보고", icon: Files, route: "REPORT" },
-  { label: "설정", icon: Settings, route: "SETTINGS" },
-] as const;
 const investigate: Route[] = [
   "FILE_SYSTEM",
   "ARTIFACTS",
@@ -154,89 +149,6 @@ const typeLabels: Record<string, string> = {
 const activeTask = (t: Row) =>
   ["QUEUED", "RUNNING", "CANCELLING"].includes(t.status);
 
-function TreeNode({
-  node,
-  caseId,
-  evidenceId,
-  active,
-  onOpen,
-}: {
-  node: Row;
-  caseId: string;
-  evidenceId: string;
-  active: string;
-  onOpen: (n: Row) => void;
-}) {
-  const [expanded, setExpanded] = useState(false),
-    [children, setChildren] = useState<Row[]>([]),
-    [cursor, setCursor] = useState<string | null>(null),
-    [error, setError] = useState<unknown>(null),
-    [busy, setBusy] = useState(false);
-  async function load(next = false) {
-    setBusy(true);
-    try {
-      const p = await gateway.call("files.list", {
-        case_id: caseId,
-        evidence_id: evidenceId,
-        parent_node_id: node.id,
-        directories_only: true,
-        cursor: next ? cursor : null,
-        limit: 100,
-      });
-      setChildren((prev) => (next ? [...prev, ...p.items] : p.items));
-      setCursor(p.page.next_cursor);
-      setError(null);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="tree-node">
-      <div className={`tree-line ${active === node.id ? "active" : ""}`}>
-        <button
-          aria-label={`${node.original_name} 폴더 ${expanded ? "접기" : "펼치기"}`}
-          aria-expanded={expanded}
-          onClick={() => {
-            if (!expanded) void load();
-            setExpanded(!expanded);
-          }}
-        >
-          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </button>
-        <button className="tree-label" onClick={() => onOpen(node)}>
-          <FileIcon row={node} />
-          <span>{node.original_name || "/"}</span>
-        </button>
-      </div>
-      {expanded && (
-        <div className="tree-children">
-          {busy && <span className="muted small">불러오는 중…</span>}
-          {error != null && (
-            <ErrorState error={error} retry={() => load()} />
-          )}{" "}
-          {children.map((c) => (
-            <TreeNode
-              key={c.id}
-              node={c}
-              caseId={caseId}
-              evidenceId={evidenceId}
-              active={active}
-              onOpen={onOpen}
-            />
-          ))}
-          {cursor && (
-            <button className="text-button" onClick={() => load(true)}>
-              다음 폴더
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function App() {
   const [runtime, setRuntime] = useState<Row | null>(null),
     [startupError, setStartupError] = useState<unknown>(null),
@@ -244,7 +156,7 @@ export function App() {
     [caseId, setCaseId] = useState(""),
     [evidence, setEvidence] = useState<Row[]>([]),
     [evidenceId, setEvidenceId] = useState("");
-  const [route, setRoute] = useState<Route>("CASE_OVERVIEW"),
+  const [route, setRoute] = useState<Route>("FILE_SYSTEM"),
     [artifactType, setArtifactType] = useState(""),
     [communication, setCommunication] = useState(false),
     [roots, setRoots] = useState<Row[]>([]),
@@ -258,7 +170,7 @@ export function App() {
     [viewError, setViewError] = useState<unknown>(null),
     [mode, setMode] = useState<"SIMPLE" | "DETAILED" | "RAW">("SIMPLE"),
     [inspector, setInspector] = useState(true),
-    [inspectorHeight, setInspectorHeight] = useState(285),
+    [inspectorHeight, setInspectorHeight] = useState(340),
     [raw, setRaw] = useState<Row | null>(null),
     [rawOffset, setRawOffset] = useState(0),
     [rawLength, setRawLength] = useState(4096);
@@ -269,6 +181,8 @@ export function App() {
     [aiOpen, setAiOpen] = useState(false),
     [notice, setNotice] = useState("");
   const [reportCitations, setReportCitations] = useState<Row[]>([]);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [folderTrail, setFolderTrail] = useState<Row[]>([]);
   const [query, setQuery] = useState(""),
     [searchText, setSearchText] = useState(""),
     [searchMode, setSearchMode] = useState("TERM"),
@@ -327,6 +241,7 @@ export function App() {
     setPage(null);
     setSelected(null);
     setFolder(null);
+    setFolderTrail([]);
     setTasks([]);
     setError(null);
     if (!caseId) return;
@@ -447,6 +362,7 @@ export function App() {
       sync({ current_route: route, active_evidence_id: evidenceId || null });
   }, [context?.session_context_id, evidenceId, sync]);
   function navigate(next: Route, comm = false) {
+    if (next === route && comm === communication) return;
     setRoute(next);
     setCommunication(comm);
     setArtifactType(
@@ -473,6 +389,7 @@ export function App() {
   function chooseEvidence(id: string) {
     setEvidenceId(id);
     setFolder(null);
+    setFolderTrail([]);
     setSelected(null);
     setRows([]);
     sync({
@@ -486,10 +403,39 @@ export function App() {
       selected_candidate_ids: [],
     });
   }
-  function openFolder(n: Row) {
+  function openFolder(n: Row, trail?: Row[]) {
     setFolder(n);
     setSelected(null);
-    sync({ active_filters: { parent_node_id: n.id } });
+    setFolderTrail((old) => {
+      if (trail) return trail;
+      const index = old.findIndex((item) => item.id === n.id);
+      return index >= 0 ? old.slice(0, index + 1) : [...old, n];
+    });
+    sync({
+      active_filters: { parent_node_id: n.id },
+      selected_file_node_ids: [],
+      selected_artifact_ids: [],
+      selected_media_artifact_ids: [],
+      selected_browser_artifact_ids: [],
+      selected_timeline_event_ids: [],
+      selected_search_result_ids: [],
+      selected_candidate_ids: [],
+    });
+  }
+  function openTreeNode(id: string, node: Row, trail: Row[]) {
+    if (id !== evidenceId) chooseEvidence(id);
+    if (route !== "FILE_SYSTEM") navigate("FILE_SYSTEM");
+    if (["ROOT", "DIRECTORY"].includes(node.node_type)) {
+      openFolder(node, trail);
+    } else {
+      const parent = trail.at(-2);
+      if (parent) openFolder(parent, trail.slice(0, -1));
+      select({
+        ...node,
+        _resource_type: "FILE_SYSTEM_NODE",
+        _resource_id: node.id,
+      });
+    }
   }
   useEffect(() => {
     if (route !== "FILE_SYSTEM" || !evidenceId) {
@@ -503,6 +449,9 @@ export function App() {
         if (live) {
           setRoots(r);
           setFolder((prev) => prev ?? r[0] ?? null);
+          setFolderTrail((prev) =>
+            prev.length ? prev : r.length ? [r[0]] : [],
+          );
         }
       })
       .catch((err) => live && setError(err));
@@ -569,7 +518,15 @@ export function App() {
           : (result.items ?? result.results ?? []);
         setPage(Array.isArray(result) ? { items: result } : result);
         setRows(list);
-        setSelected(null);
+        // A file picked in the tree can precede its parent's list response.
+        // Keep that selection while this same directory finishes loading.
+        setSelected((previous) =>
+          op === "files.list" &&
+          previous?.evidence_id === evidenceId &&
+          previous?.parent_node_id === folder?.id
+            ? previous
+            : null,
+        );
         if (op === "search.query")
           sync({
             active_search_execution_id: result.execution.execution_id,
@@ -645,10 +602,21 @@ export function App() {
           : {}),
       });
   }
+  function collectCitations(citations: Row[]) {
+    setReportCitations((previous) => {
+      const items = new Map(
+        previous.map((citation) => [JSON.stringify(citation), citation]),
+      );
+      for (const citation of citations)
+        items.set(JSON.stringify(citation), citation);
+      return [...items.values()];
+    });
+    setNotice("선택한 인용을 새 보고서 버전의 근거로 추가했습니다.");
+  }
   useEffect(() => {
     setProjection(null);
     setViewError(null);
-    if (!selected) return;
+    if (!selected || route === "FILE_SYSTEM") return;
     let live = true;
     const r = resource(selected);
     gateway
@@ -723,7 +691,7 @@ export function App() {
         });
         await bootstrap();
         setCaseId(c.id);
-        setRoute("CASE_OVERVIEW");
+        setRoute("FILE_SYSTEM");
       },
     });
   }
@@ -878,15 +846,11 @@ export function App() {
                   { key: "event_hash", label: "이벤트 해시", width: 240 },
                 ]
               : artifactColumns;
-  const activeNav = investigate.includes(route)
-    ? "FILE_SYSTEM"
-    : ["SEARCH", "TIMELINE"].includes(route)
-      ? "SEARCH"
-      : ["CANDIDATES", "CHAIN_OF_CUSTODY"].includes(route)
-        ? "CANDIDATES"
-        : route;
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell forensic-workbench"
+      style={{ "--evidence-width": `${sidebarWidth}px` } as CSSProperties}
+    >
       <a className="skip-link" href="#main-workspace">
         본문으로 건너뛰기
       </a>
@@ -950,142 +914,158 @@ export function App() {
           </span>
         </div>
       </header>
-      <nav className="rail" aria-label="전역 탐색">
-        {nav.map((n) => (
+      <div className="command-bar" aria-label="증거 작업">
+        <button disabled={!runtime} onClick={newCase}>
+          <Plus size={14} />새 사건
+        </button>
+        <span className="command-divider" />
+        <button disabled={!caseId} onClick={() => addEvidence("file")}>
+          <HardDrive size={15} />
+          이미지 추가
+        </button>
+        <button disabled={!caseId} onClick={() => addEvidence("directory")}>
+          <FolderOpen size={15} />
+          폴더 추가
+        </button>
+        <span className="command-divider" />
+        <button disabled={!evidenceId} onClick={() => navigate("EVIDENCE")}>
+          <ShieldCheck size={15} />
+          증거 관리
+        </button>
+        <button disabled={!caseId} onClick={() => navigate("SEARCH")}>
+          <Search size={15} />
+          검색
+        </button>
+        <button disabled={!caseId} onClick={() => navigate("REPORT")}>
+          <Files size={15} />
+          보고서
+        </button>
+        <span className="spacer" />
+        <button
+          onClick={() => {
+            setSidebarWidth(280);
+            setInspectorHeight(340);
+            setInspector(true);
+          }}
+        >
+          패널 배치 초기화
+        </button>
+        <button
+          aria-label="화면 새로고침"
+          title="화면 새로고침"
+          onClick={() => {
+            refresh();
+            void bootstrap();
+          }}
+        >
+          <RefreshCw size={14} />
+        </button>
+      </div>
+      <aside className="evidence-pane" aria-label="증거 탐색 및 속성">
+        <section className="tree-pane">
+          <header className="pane-title">
+            <h2>증거 트리</h2>
+            <span className="pane-caption">{evidence.length}개 증거</span>
+          </header>
+          <div className="tree-case">
+            <Archive size={14} />
+            <span>{currentCase?.name ?? "사건 미선택"}</span>
+          </div>
+          <EvidenceTree
+            caseId={caseId}
+            evidence={evidence}
+            evidenceId={evidenceId}
+            folderId={folder?.id ?? ""}
+            selectedNode={
+              route === "FILE_SYSTEM" &&
+              selected &&
+              resource(selected).type === "FILE_SYSTEM_NODE"
+                ? selected
+                : null
+            }
+            trail={folderTrail}
+            revision={revision}
+            onOpen={openTreeNode}
+            onEvidence={(id) => {
+              if (route !== "FILE_SYSTEM") navigate("FILE_SYSTEM");
+              if (id === evidenceId && roots[0])
+                openFolder(roots[0], [roots[0]]);
+              else chooseEvidence(id);
+            }}
+          />
+          <div className="tree-readonly">
+            <ShieldCheck size={12} />
+            원본 증거 읽기 전용
+          </div>
+        </section>
+        <section
+          className="properties-pane"
+          aria-label="선택 항목 속성"
+          style={{ height: inspectorHeight }}
+        >
+          <Splitter
+            axis="horizontal"
+            label="속성 패널 높이 조절"
+            value={inspectorHeight}
+            min={180}
+            max={Math.max(180, Math.floor(window.innerHeight * 0.65))}
+            onChange={setInspectorHeight}
+          />
+          <header className="pane-title">
+            <h2>속성</h2>
+            <span className="pane-caption">Properties</span>
+          </header>
+          <Properties
+            row={selected ?? (route === "FILE_SYSTEM" ? folder : null)}
+            evidence={currentEvidence}
+            zone={zone}
+          />
+        </section>
+      </aside>
+      <Splitter
+        axis="vertical"
+        label="증거 패널 너비 조절"
+        value={sidebarWidth}
+        min={210}
+        max={Math.max(210, Math.min(480, window.innerWidth * 0.4))}
+        onChange={setSidebarWidth}
+      />
+      <main className="workspace" id="main-workspace" tabIndex={-1}>
+        <nav className="workspace-tabs" aria-label="분석 화면">
+          {(Object.keys(routeNames) as Route[]).map((r) => (
+            <button
+              key={r}
+              aria-current={route === r && !communication ? "page" : undefined}
+              className={route === r && !communication ? "active" : ""}
+              onClick={() => navigate(r)}
+            >
+              {routeNames[r]}
+            </button>
+          ))}
           <button
-            key={n.route}
-            title={n.label}
-            aria-current={activeNav === n.route ? "page" : undefined}
-            className={activeNav === n.route ? "active" : ""}
-            onClick={() => navigate(n.route)}
+            aria-current={communication ? "page" : undefined}
+            className={communication ? "active" : ""}
+            onClick={() => navigate("ARTIFACTS", true)}
           >
-            <n.icon size={21} />
-            <span>{n.label}</span>
+            커뮤니케이션
           </button>
-        ))}
-        <div className="rail-bottom">
-          <ShieldCheck size={20} />
-          <span>READ ONLY</span>
-        </div>
-      </nav>
-      <aside className="sidebar">
-        <div className="sidebar-heading">
-          <h2>
-            {investigate.includes(route) ? "증거 탐색" : routeNames[route]}
-          </h2>
-          <p>
+        </nav>
+        <header className="workspace-header">
+          <h1>
+            {route === "FILE_SYSTEM"
+              ? "파일 목록"
+              : communication
+                ? "커뮤니케이션"
+                : routeNames[route]}
+          </h1>
+          <span className="workspace-scope">
             {currentEvidence?.display_name ??
               currentCase?.name ??
-              "분석 작업 공간"}
-          </p>
-        </div>
-        {investigate.includes(route) ? (
-          <>
-            <div className="subnav">
-              {investigate.map((r) => (
-                <button
-                  key={r}
-                  className={route === r && !communication ? "active" : ""}
-                  onClick={() => navigate(r)}
-                >
-                  {r === "FILE_SYSTEM" ? (
-                    <FolderOpen size={14} />
-                  ) : (
-                    <Database size={14} />
-                  )}{" "}
-                  {routeNames[r]}
-                </button>
-              ))}
-              <button
-                className={communication ? "active" : ""}
-                onClick={() => navigate("ARTIFACTS", true)}
-              >
-                <Archive size={14} /> 커뮤니케이션
-              </button>
-            </div>
-            {route === "FILE_SYSTEM" && (
-              <div className="file-tree">
-                <div className="tree-heading">
-                  파일 경로{" "}
-                  <button title="파일 경로 새로고침" onClick={refresh}>
-                    <RefreshCw size={12} />
-                  </button>
-                </div>
-                {roots.map((r) => (
-                  <TreeNode
-                    key={r.id + revision}
-                    node={r}
-                    caseId={caseId}
-                    evidenceId={evidenceId}
-                    active={folder?.id ?? ""}
-                    onOpen={openFolder}
-                  />
-                ))}
-                {!roots.length && (
-                  <p className="muted small">
-                    파일 인덱스 생성 후 경로가 표시됩니다.
-                  </p>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="subnav">
-            {(route === "SEARCH" || route === "TIMELINE"
-              ? ["SEARCH", "TIMELINE"]
-              : route === "CANDIDATES" || route === "CHAIN_OF_CUSTODY"
-                ? ["CANDIDATES", "CHAIN_OF_CUSTODY"]
-                : [route]
-            ).map((r) => (
-              <button
-                className={route === r ? "active" : ""}
-                key={r}
-                onClick={() => navigate(r as Route)}
-              >
-                {routeNames[r as Route]}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="sidebar-footer">
-          <ShieldCheck size={14} />
-          <span>
-            원본 증거 읽기 전용
-            <br />
-            <small>로컬 분석 환경</small>
+              "사건을 선택하세요"}
           </span>
-        </div>
-      </aside>
-      <main className="workspace" id="main-workspace" tabIndex={-1}>
-        <header className="workspace-header">
-          <div>
-            <div className="breadcrumb">
-              APEX <ChevronRight size={11} />
-              {currentCase?.name ?? "새 조사 시작"}
-              <ChevronRight size={11} />
-              {routeNames[route]}
-            </div>
-            <h1>{communication ? "커뮤니케이션" : routeNames[route]}</h1>
-          </div>
-          <div className="toolbar">
-            <span className="badge mono">
-              {context ? `컨텍스트 r${context.context_revision}` : "세션 대기"}
-            </span>
-            <button
-              aria-label="화면 새로고침"
-              onClick={() => {
-                refresh();
-                void bootstrap();
-              }}
-            >
-              <RefreshCw size={15} />
-            </button>
-            {route === "CASE_OVERVIEW" && (
-              <button className="primary" disabled={!runtime} onClick={newCase}>
-                <Plus size={14} /> 새 사건
-              </button>
-            )}
-          </div>
+          <span className="pane-caption">
+            {route === "FILE_SYSTEM" ? "File List" : "APEX"}
+          </span>
         </header>
         {notice && (
           <div className="notice">
@@ -1120,6 +1100,7 @@ export function App() {
                 setConflict(null);
                 setSelected(null);
                 setFolder(null);
+                setFolderTrail([]);
                 setRows([]);
                 setPage(null);
                 setRoute(context?.current_route ?? "CASE_OVERVIEW");
@@ -1356,11 +1337,44 @@ export function App() {
                   </span>
                   <button className="primary">검색</button>
                 </form>
+              ) : route === "FILE_SYSTEM" ? (
+                <div className="folder-address">
+                  <button
+                    aria-label="상위 폴더로 이동"
+                    title="상위 폴더로 이동"
+                    disabled={folderTrail.length < 2}
+                    onClick={() =>
+                      openFolder(
+                        folderTrail[folderTrail.length - 2],
+                        folderTrail.slice(0, -1),
+                      )
+                    }
+                  >
+                    <PanelBottomOpen size={14} />
+                  </button>
+                  <nav aria-label="폴더 경로">
+                    {folderTrail.map((item, index) => (
+                      <span key={item.id}>
+                        {index > 0 && <ChevronRight size={11} />}
+                        <button
+                          aria-current={
+                            index === folderTrail.length - 1
+                              ? "location"
+                              : undefined
+                          }
+                          onClick={() =>
+                            openFolder(item, folderTrail.slice(0, index + 1))
+                          }
+                        >
+                          {index === 0 ? "/" : item.original_name}
+                        </button>
+                      </span>
+                    ))}
+                  </nav>
+                </div>
               ) : (
                 <span className="path mono">
-                  {route === "FILE_SYSTEM"
-                    ? (folder?.display_path ?? "/")
-                    : (currentEvidence?.display_name ?? "사건 전체")}
+                  {currentEvidence?.display_name ?? "사건 전체"}
                 </span>
               )}
               {[
@@ -1527,7 +1541,9 @@ export function App() {
                   }
                 >
                   {route === "FILE_SYSTEM"
-                    ? "증거를 선택하고 파일 인덱스를 생성해주세요."
+                    ? folder
+                      ? "이 폴더에서 확인된 항목이 없습니다. 다른 폴더 또는 분석 범위를 확인하세요."
+                      : "증거를 선택하고 파일 인덱스를 생성해주세요."
                     : "선택한 범위의 분석·인덱스 상태를 확인해주세요."}
                 </Empty>
               )}
@@ -1556,7 +1572,18 @@ export function App() {
                 </button>
               </div>
             </div>
-            {inspector && (
+            {inspector && route === "FILE_SYSTEM" && (
+              <FileViewer
+                key={`${caseId}:${evidenceId}:${selected?._resource_type ?? "FILE_SYSTEM_NODE"}:${selected?.id ?? "empty"}`}
+                caseId={caseId}
+                selected={selected}
+                height={inspectorHeight}
+                onHeight={setInspectorHeight}
+                onCollect={collectCitations}
+                onSelect={select}
+              />
+            )}
+            {inspector && route !== "FILE_SYSTEM" && (
               <section
                 className="inspector"
                 aria-label="선택 항목 검사기"
@@ -1812,19 +1839,9 @@ export function App() {
                         })}
                         {projection.citations?.length > 0 && (
                           <button
-                            onClick={() => {
-                              setReportCitations((prev) => {
-                                const map = new Map(
-                                  prev.map((c) => [JSON.stringify(c), c]),
-                                );
-                                for (const c of projection.citations)
-                                  map.set(JSON.stringify(c), c);
-                                return [...map.values()];
-                              });
-                              setNotice(
-                                "선택한 인용을 새 보고서 버전의 근거로 추가했습니다.",
-                              );
-                            }}
+                            onClick={() =>
+                              collectCitations(projection.citations)
+                            }
                           >
                             보고서 근거로 추가
                           </button>
@@ -1994,7 +2011,11 @@ export function App() {
       <footer className="statusbar">
         <span>
           <i className={runtime ? "online" : ""} />{" "}
-          {runtime ? "분석 엔진 연결됨" : "분석 엔진 연결 대기"}
+          {runtime?.mode === "DEMO_READ_ONLY"
+            ? "데모 · 합성 데이터"
+            : runtime
+              ? "분석 엔진 연결됨"
+              : "분석 엔진 연결 대기"}
         </span>
         <span>{currentEvidence?.display_name ?? "증거 미선택"}</span>
         <span className="spacer" />
