@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { App } from "./App";
 import { Badge, ErrorState, Fields, ResultState, size, time } from "./ui";
@@ -108,12 +109,12 @@ describe("desktop screens through the bridge", () => {
   });
   it("starts without an account login", async () => {
     render(<App />);
-    await screen.findByText("분석 엔진 연결됨");
-    expect(screen.getByText("로그인 없이 시작할 수 있습니다")).toBeTruthy();
+    await screen.findByText("데모 · 합성 데이터");
+    expect(screen.getByText("먼저 사건을 선택해주세요")).toBeTruthy();
   });
   it("connects case, evidence, lazy file list and inspector", async () => {
     render(<App />);
-    await screen.findByText("분석 엔진 연결됨");
+    await screen.findByText("데모 · 합성 데이터");
     fireEvent.change(screen.getByLabelText("현재 사건"), {
       target: { value: core.cases[0].id },
     });
@@ -122,23 +123,25 @@ describe("desktop screens through the bridge", () => {
         (screen.getByLabelText("현재 증거") as HTMLSelectElement).value,
       ).toBe(core.evidence[0].id),
     );
-    fireEvent.click(screen.getByRole("button", { name: "조사" }));
-    const file = await screen.findByText("한글-분석노트.txt");
+    fireEvent.click(screen.getByRole("button", { name: "파일 시스템" }));
+    const file = await within(await screen.findByRole("table")).findByText(
+      "한글-분석노트.txt",
+    );
     fireEvent.click(file);
     await waitFor(() =>
       expect(screen.getAllByText("한글-분석노트.txt").length).toBeGreaterThan(
         1,
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "상세히" }));
+    fireEvent.click(screen.getByRole("button", { name: "메타데이터" }));
     await waitFor(() => {
-      const el = document.querySelector(".inspector");
+      const el = document.querySelector(".file-viewer");
       expect(el?.textContent).toContain("인용 근거");
     });
   });
   it("exposes no generic pause button", async () => {
     render(<App />);
-    await screen.findByText("분석 엔진 연결됨");
+    await screen.findByText("데모 · 합성 데이터");
     fireEvent.click(screen.getByText("작업 0"));
     expect(screen.queryByRole("button", { name: /일시정지|Pause/ })).toBeNull();
   });
@@ -165,13 +168,15 @@ describe("desktop screens through the bridge", () => {
     };
     window.apex = bridge;
     render(<App />);
-    await screen.findByText("분석 엔진 연결됨");
+    await screen.findByText("데모 · 합성 데이터");
     fireEvent.change(screen.getByLabelText("현재 사건"), {
       target: { value: core.cases[0].id },
     });
     await screen.findByRole("button", { name: "내 선택 다시 적용" });
-    fireEvent.click(screen.getByRole("button", { name: "조사" }));
-    await screen.findByText("한글-분석노트.txt");
+    fireEvent.click(screen.getByRole("button", { name: "파일 시스템" }));
+    await within(await screen.findByRole("table")).findByText(
+      "한글-분석노트.txt",
+    );
     expect(writes).toBe(1);
     fireEvent.click(screen.getByRole("button", { name: "내 선택 다시 적용" }));
     await waitFor(() => expect(writes).toBe(2));

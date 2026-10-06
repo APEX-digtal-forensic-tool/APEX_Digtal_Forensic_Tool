@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { App } from "./App";
 import { Reports } from "./panels";
@@ -30,7 +31,7 @@ function deferred<T>() {
 }
 async function openFiles() {
   render(<App />);
-  await screen.findByText("분석 엔진 연결됨");
+  await screen.findByText("데모 · 합성 데이터");
   fireEvent.change(screen.getByLabelText("현재 사건"), {
     target: { value: core.cases[0].id },
   });
@@ -39,7 +40,7 @@ async function openFiles() {
       (screen.getByLabelText("현재 증거") as HTMLSelectElement).value,
     ).toBe(core.evidence[0].id),
   );
-  fireEvent.click(screen.getByRole("button", { name: "조사" }));
+  fireEvent.click(screen.getByRole("button", { name: "파일 시스템" }));
 }
 
 it.each([false, true])(
@@ -48,26 +49,29 @@ it.each([false, true])(
     const bridge = createDemoBridge();
     const original = bridge.invoke.bind(bridge);
     const raw = deferred<Reply<Row>>();
-    bridge.invoke = async (op, payload) =>
-      op === "raw.read" ? raw.promise : original(op, payload);
+    let requests = 0;
+    bridge.invoke = async (op, payload) => {
+      if (op === "raw.read" && ++requests === 1) return raw.promise;
+      return original(op, payload);
+    };
     window.apex = bridge;
     await openFiles();
-    fireEvent.click(await screen.findByText("README.txt"));
-    fireEvent.click(screen.getByRole("button", { name: "원본" }));
     fireEvent.click(
-      await screen.findByRole("button", { name: "원본 범위 읽기" }),
+      await within(await screen.findByRole("table")).findByText("README.txt"),
     );
-    fireEvent.click(screen.getByText("한글-분석노트.txt"));
-    fireEvent.click(screen.getByRole("button", { name: "원본" }));
-    await screen.findByRole("button", { name: "원본 범위 읽기" });
+    await waitFor(() => expect(requests).toBe(1));
+    fireEvent.click(
+      within(screen.getByRole("table")).getByText("한글-분석노트.txt"),
+    );
+    await waitFor(() => expect(requests).toBe(2));
     await act(async () =>
       raw.resolve(
         error
           ? { ok: false, error: { code: "RAW_RANGE_NOT_SATISFIABLE" } }
-          : { ok: true, data: { raw_content: "RAW_BYTES_FROM_FILE_A" } },
+          : { ok: true, data: { text_preview: "RAW_BYTES_FROM_FILE_A" } },
       ),
     );
-    expect(document.querySelector(".inspector")?.textContent).toContain(
+    expect(document.querySelector(".file-viewer")?.textContent).toContain(
       "한글-분석노트.txt",
     );
     expect(screen.queryByText("RAW_BYTES_FROM_FILE_A")).toBeNull();
@@ -89,16 +93,20 @@ it("only displays the latest raw request for the current file", async () => {
       : original(op, payload);
   window.apex = bridge;
   await openFiles();
-  fireEvent.click(await screen.findByText("README.txt"));
-  fireEvent.click(screen.getByRole("button", { name: "원본" }));
-  const read = await screen.findByRole("button", { name: "원본 범위 읽기" });
-  fireEvent.click(read);
-  fireEvent.click(read);
+  fireEvent.click(
+    await within(await screen.findByRole("table")).findByText("README.txt"),
+  );
+  await waitFor(() => expect(requests).toBe(1));
+  fireEvent.click(screen.getByRole("button", { name: "메타데이터" }));
+  await screen.findByRole("button", { name: "원본 위치 및 인용 근거" });
+  fireEvent.click(screen.getByRole("button", { name: "Hex" }));
+  await waitFor(() => expect(requests).toBe(2));
+  fireEvent.click(screen.getByRole("button", { name: "Text" }));
   await act(async () =>
-    second.resolve({ ok: true, data: { raw_content: "CURRENT_RAW" } }),
+    second.resolve({ ok: true, data: { text_preview: "CURRENT_RAW" } }),
   );
   await act(async () =>
-    first.resolve({ ok: true, data: { raw_content: "OLD_RAW" } }),
+    first.resolve({ ok: true, data: { text_preview: "OLD_RAW" } }),
   );
   expect(screen.getByText("CURRENT_RAW")).toBeTruthy();
   expect(screen.queryByText("OLD_RAW")).toBeNull();
@@ -160,7 +168,9 @@ it.each([false, true])(
     fireEvent.click(screen.getByRole("button", { name: "분석 시작" }));
     await waitFor(() => expect(fileCalls).toBeGreaterThan(1));
     completed = true;
-    await screen.findByText("한글-분석노트.txt", {}, { timeout: 3500 });
+    await within(
+      await screen.findByRole("table", {}, { timeout: 3500 }),
+    ).findByText("한글-분석노트.txt");
   },
 );
 
