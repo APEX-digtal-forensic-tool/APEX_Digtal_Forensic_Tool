@@ -1,9 +1,10 @@
 """Bounded background work, each with its own Core/SQLite connection."""
 
+import contextlib
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any, NotRequired, TypedDict
@@ -78,7 +79,9 @@ class Tasks:
             try:
                 data = json.loads(raw)
                 if not isinstance(data, list):
-                    raise ValueError(f"tasks.json top-level must be a list, got {type(data).__name__}")
+                    raise ValueError(
+                        f"tasks.json top-level must be a list, got {type(data).__name__}"
+                    )
                 for item in data:
                     if not isinstance(item, dict):
                         raise ValueError(f"tasks.json item is not a dict: {item!r}")
@@ -88,15 +91,13 @@ class Tasks:
                 parsed_ok = True
             except Exception as exc:
                 # Preserve the corrupt file next to the original, then start clean.
-                ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
                 corrupt_path = journal.with_name(f"tasks.json.corrupt-{ts}")
                 try:
                     journal.rename(corrupt_path)
                 except OSError:
-                    try:
+                    with contextlib.suppress(OSError):
                         corrupt_path.write_bytes(journal.read_bytes())
-                    except OSError:
-                        pass
                 self.journal_recovered = True
                 _logger.warning(
                     "tasks.json was corrupt and has been moved to %s; "

@@ -256,4 +256,4 @@ class AuthService:
         return user
 
 
-__all__ = ["AuthError", "AuthService", "hash_password", "verify_password"]  # deactivate_user via AuthService
+__all__ = ["AuthError", "AuthService", "hash_password", "verify_password"]
