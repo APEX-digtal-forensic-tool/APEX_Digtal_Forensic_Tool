@@ -65,14 +65,41 @@ async def issue_confirmation(
             detail="Token missing required claims.",
         )
 
-    # Reject if the session exists in DB but has been revoked (catches post-logout tokens).
+    # Require the session row to exist and be active.
+    # A missing row means the session was never created or was hard-deleted;
+    # either way the token should not be honoured.
     db_session = (
         await db.execute(select(UserSession).where(UserSession.session_id == session_id))
     ).scalar_one_or_none()
-    if db_session is not None and not db_session.is_active:
+    if db_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session not found.",
+        )
+    if not db_session.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session revoked.",
+        )
+    now = datetime.now(UTC)
+    expires_at = db_session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= now:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired.",
+        )
+    if db_session.actor_id != actor_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session actor mismatch.",
+        )
+    tenant_id = str(claims.get("tenant_id", "")).strip()
+    if tenant_id and db_session.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session tenant mismatch.",
         )
 
     allowed_case_ids: list[str] = claims.get("allowed_case_ids") or []
