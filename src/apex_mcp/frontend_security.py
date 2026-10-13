@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import threading
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from mcp.server.auth.provider import AccessToken, principal_components
 
@@ -133,11 +133,29 @@ class FrontendAuthorizationGate:
             required_roles = _EXPORT_ROLES
         elif bool(descriptor.get("mutates_state")):
             required_roles = _HUMAN_MUTATION_ROLES
-        if required_roles and session.roles.isdisjoint(required_roles):
-            raise McpAuthorizationDeniedError(
-                tool_name,
-                required=tuple(f"role:{role}" for role in sorted(required_roles)),
-            )
+
+        if required_roles:
+            # A04: enforce role check per target case using case_roles from the JWT.
+            # When case_roles is present in the token claims (JWT-based auth), we do
+            # per-case enforcement to prevent cross-case privilege escalation.
+            # When absent (in-memory/static tokens), fall back to session.roles union
+            # check — the session was pre-registered with explicit role bindings.
+            case_roles_map: dict[str, str] = (access_token.claims or {}).get("case_roles") or {}
+            if case_roles_map:
+                for case_id in target_case_ids:
+                    case_role = case_roles_map.get(case_id, "").strip().upper()
+                    if case_role not in required_roles:
+                        raise McpAuthorizationDeniedError(
+                            tool_name,
+                            required=tuple(f"role:{r}" for r in sorted(required_roles)),
+                        )
+            else:
+                # No case_roles claim → fall back to session-level union roles.
+                if session.roles.isdisjoint(required_roles):
+                    raise McpAuthorizationDeniedError(
+                        tool_name,
+                        required=tuple(f"role:{r}" for r in sorted(required_roles)),
+                    )
 
 
 _Principal = tuple[str, str | None, str | None]
@@ -262,7 +280,12 @@ class PersistentFrontendSecurityProvider:
         )
 
     def resolve_session(self, access_token: AccessToken) -> FrontendSession:
-        """Build FrontendSession from JWT claims in *access_token*."""
+        """Build FrontendSession from JWT claims in *access_token*.
+
+        Legacy tokens (issued before A04 fix) do not carry ``case_roles`` and
+        are rejected as a secure default.  Re-login to obtain a new token with
+        per-case role bindings.
+        """
         claims = access_token.claims or {}
 
         actor_id = str(claims.get("sub") or access_token.subject or "").strip()
@@ -272,14 +295,24 @@ class PersistentFrontendSecurityProvider:
         if not actor_id or not session_id or not tenant_id:
             raise McpAuthorizationDeniedError("frontend.session")
 
+        # A04: require case_roles in the token; legacy tokens without it are denied.
+        if "case_roles" not in claims:
+            raise McpAuthorizationDeniedError("frontend.session.legacy_token")
+
+        raw_case_roles: Any = claims.get("case_roles")
+        if not isinstance(raw_case_roles, dict):
+            raise McpAuthorizationDeniedError("frontend.session.invalid_case_roles")
+
         raw_case_ids = claims.get("allowed_case_ids") or []
-        raw_roles = claims.get("roles") or []
 
         allowed_case_ids = frozenset(
             str(c).strip() for c in raw_case_ids if isinstance(c, str) and c.strip()
         )
+        # Derive session-level union roles from case_roles values.
         roles = frozenset(
-            str(r).strip().upper() for r in raw_roles if isinstance(r, str) and r.strip()
+            str(r).strip().upper()
+            for r in raw_case_roles.values()
+            if isinstance(r, str) and r.strip()
         )
 
         return FrontendSession(
