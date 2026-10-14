@@ -355,3 +355,85 @@ async def test_refresh_token_contains_case_roles(keypair, db_session) -> None:
     )
     assert "case_roles" in claims
     assert claims["case_roles"]["case-refresh-01"] == "ADMIN"
+
+
+# ---------------------------------------------------------------------------
+# apex.view.raw_read: per-case ADMIN-only role enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_admin_can_raw_read_in_their_case(keypair) -> None:
+    """ADMIN in case-A can raw_read in case-A."""
+    private_key, kid = keypair
+    token = _make_access_token(
+        private_key, kid,
+        case_roles={"case-A": "ADMIN", "case-B": "VIEWER"},
+    )
+    session = _session_from_token(token)
+    gate = FrontendAuthorizationGate()
+
+    # Should not raise: ADMIN in case-A.
+    gate.require(
+        session, token, _descriptor(),
+        tool_name="apex.view.raw_read",
+        target_case_ids=frozenset({"case-A"}),
+    )
+
+
+def test_viewer_cannot_raw_read_per_case(keypair) -> None:
+    """VIEWER in case-B cannot raw_read even when ADMIN in another case."""
+    private_key, kid = keypair
+    # Union scopes include apex:raw because of ADMIN in case-A.
+    token = _make_access_token(
+        private_key, kid,
+        case_roles={"case-A": "ADMIN", "case-B": "VIEWER"},
+    )
+    session = _session_from_token(token)
+    gate = FrontendAuthorizationGate()
+
+    with pytest.raises(McpAuthorizationDeniedError):
+        gate.require(
+            session, token, _descriptor(),
+            tool_name="apex.view.raw_read",
+            target_case_ids=frozenset({"case-B"}),
+        )
+
+
+def test_analyst_cannot_raw_read(keypair) -> None:
+    """ANALYST role does not satisfy raw_read ADMIN requirement."""
+    private_key, kid = keypair
+    analyst_scopes = sorted(scopes_for_roles(frozenset({"ANALYST"})))  # no apex:raw
+    token_str = issue_access_token(
+        private_key=private_key,
+        kid=kid,
+        actor_id="user-analyst",
+        session_id="sess-a",
+        tenant_id="t1",
+        allowed_case_ids=["case-X"],
+        roles=["ANALYST"],
+        scopes=analyst_scopes,
+        case_roles={"case-X": "ANALYST"},
+    )
+    from cryptography.hazmat.primitives import serialization
+    from jose import jwt as jose_jwt
+
+    pub_pem = private_key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
+    claims = jose_jwt.decode(
+        token_str, pub_pem, algorithms=["RS256"],
+        audience=AUDIENCE, issuer=ISSUER,
+    )
+    token = AccessToken(
+        token=token_str, client_id=ISSUER, scopes=analyst_scopes,
+        subject="user-analyst", resource=AUDIENCE, claims=claims,
+    )
+    session = _session_from_token(token)
+    gate = FrontendAuthorizationGate()
+
+    with pytest.raises(McpAuthorizationDeniedError):
+        gate.require(
+            session, token, _descriptor(),
+            tool_name="apex.view.raw_read",
+            target_case_ids=frozenset({"case-X"}),
+        )

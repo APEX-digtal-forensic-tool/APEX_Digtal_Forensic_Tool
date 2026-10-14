@@ -40,6 +40,7 @@ _EXPORT_TOOLS = frozenset(
 _HUMAN_MUTATION_ROLES = frozenset({"ANALYST", "APPROVER", "ADMIN"})
 _APPROVAL_ROLES = frozenset({"APPROVER", "ADMIN"})
 _EXPORT_ROLES = frozenset({"APPROVER", "EXPORTER", "ADMIN"})
+_RAW_READ_ROLES = frozenset({"ADMIN"})
 _ALL_ROLES = frozenset({"VIEWER", "ANALYST", "APPROVER", "EXPORTER", "ADMIN"})
 
 
@@ -131,6 +132,8 @@ class FrontendAuthorizationGate:
             required_roles = _APPROVAL_ROLES
         elif tool_name in _EXPORT_TOOLS:
             required_roles = _EXPORT_ROLES
+        elif tool_name == "apex.view.raw_read":
+            required_roles = _RAW_READ_ROLES
         elif bool(descriptor.get("mutates_state")):
             required_roles = _HUMAN_MUTATION_ROLES
 
