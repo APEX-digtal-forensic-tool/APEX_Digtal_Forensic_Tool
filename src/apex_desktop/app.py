@@ -66,7 +66,14 @@ def create_app(data_dir: Path, token: str, *, host: str = "127.0.0.1") -> FastAP
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "data": {"ready": True, "transport_version": 1}}
+        return {
+            "ok": True,
+            "data": {
+                "ready": True,
+                "transport_version": 1,
+                "journal_recovered": tasks.journal_recovered,
+            },
+        }
 
     @app.post("/v1/operations/{operation}")
     async def operation_input(operation: str, request: Request) -> Response:

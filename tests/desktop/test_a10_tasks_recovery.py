@@ -168,3 +168,68 @@ def test_running_tasks_become_interrupted_on_reload(tmp_path: Path) -> None:
     assert tasks.records["q1"]["status"] == "INTERRUPTED"
     assert tasks.records["s1"]["status"] == "SUCCEEDED"
     assert tasks.journal_recovered is False
+
+
+# ---------------------------------------------------------------------------
+# case_id is a required field in journal items
+# ---------------------------------------------------------------------------
+
+
+def test_corrupt_item_missing_case_id_survives(tmp_path: Path) -> None:
+    journal = tmp_path / "tasks.json"
+    journal.write_text(
+        json.dumps([{"task_id": "t1", "status": "SUCCEEDED"}]),
+        encoding="utf-8",
+    )
+
+    tasks = Tasks(tmp_path / "apex.db", journal)
+    assert tasks.journal_recovered is True
+    assert tasks.records == {}
+
+
+def test_corrupt_item_null_case_id_survives(tmp_path: Path) -> None:
+    journal = tmp_path / "tasks.json"
+    journal.write_text(
+        json.dumps([{"task_id": "t1", "status": "SUCCEEDED", "case_id": None}]),
+        encoding="utf-8",
+    )
+
+    tasks = Tasks(tmp_path / "apex.db", journal)
+    assert tasks.journal_recovered is True
+
+
+def test_corrupt_item_empty_case_id_survives(tmp_path: Path) -> None:
+    journal = tmp_path / "tasks.json"
+    journal.write_text(
+        json.dumps([{"task_id": "t1", "status": "SUCCEEDED", "case_id": "   "}]),
+        encoding="utf-8",
+    )
+
+    tasks = Tasks(tmp_path / "apex.db", journal)
+    assert tasks.journal_recovered is True
+
+
+# ---------------------------------------------------------------------------
+# journal_recovered flag exposed in /health endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_health_exposes_journal_recovered_false(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+
+    with _client(data) as client:
+        resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["data"]["journal_recovered"] is False
+
+
+def test_health_exposes_journal_recovered_true_after_corruption(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "tasks.json").write_text("{bad json", encoding="utf-8")
+
+    with _client(data) as client:
+        resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["data"]["journal_recovered"] is True

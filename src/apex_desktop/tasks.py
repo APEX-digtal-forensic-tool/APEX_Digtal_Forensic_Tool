@@ -85,8 +85,10 @@ class Tasks:
                 for item in data:
                     if not isinstance(item, dict):
                         raise ValueError(f"tasks.json item is not a dict: {item!r}")
-                    if "task_id" not in item or "status" not in item:
+                    if "task_id" not in item or "status" not in item or "case_id" not in item:
                         raise ValueError(f"tasks.json item missing required keys: {item!r}")
+                    if not isinstance(item["case_id"], str) or not item["case_id"].strip():
+                        raise ValueError(f"tasks.json item has invalid case_id: {item!r}")
                 records_raw = data
                 parsed_ok = True
             except Exception as exc:
