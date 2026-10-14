@@ -164,7 +164,9 @@ def test_case_files_context_raw_search_and_timeline(client, tmp_path):
         ).status_code
         == 409
     )
-    assert call(client, "custody.verify", case_id=cid, evidence_id=eid)["verified"]
+    verify_result = call(client, "custody.verify", case_id=cid, evidence_id=eid)
+    assert verify_result["verified"]
+    assert verify_result["violations"] == []
 
 
 def test_report_review_export_and_governance(client, tmp_path):

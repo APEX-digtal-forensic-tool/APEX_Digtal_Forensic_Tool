@@ -196,3 +196,109 @@ def test_find_semantic_violations_detects_cross_evidence(two_case_services):
     assert any(v["violation"] == "correction_target_wrong_evidence" for v in violations)
     # verify_chain still returns True (hash math is intact, semantics are wrong)
     assert bundle.custody.verify_chain(ev_a_id) is True
+
+
+# ---------------------------------------------------------------------------
+# custody.verify operation returns violations alongside hash result
+# ---------------------------------------------------------------------------
+
+
+def test_custody_verify_op_returns_violations_for_clean_chain(two_case_services):
+    """custody.verify response includes violations=[] for a clean chain."""
+    from apex_desktop.operations import invoke
+
+    bundle, case_a_id, ev_a_id, _case_b_id, _ev_b_id = two_case_services
+
+    bundle.custody.add_event(
+        evidence_id=ev_a_id,
+        event_type=CustodyEventType.ACQUISITION,
+        actor_name="analyst",
+        action="Intake for verify op test",
+    )
+
+    result = invoke(
+        "custody.verify",
+        {"case_id": case_a_id, "evidence_id": ev_a_id},
+        bundle,
+        tasks=None,  # type: ignore[arg-type]
+        actor="test-actor",
+        session_id="test-session",
+        exports=Path("/tmp"),
+    )
+    assert result["verified"] is True
+    assert result["violations"] == []
+
+
+def test_custody_verify_op_returns_violations_for_injected_cross_evidence(two_case_services):
+    """custody.verify response includes the cross-evidence violation when present."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    from apex_desktop.operations import invoke
+    from apex_forensic._time import to_json_timestamp  # noqa: PLC0415
+    from apex_forensic.constants import CUSTODY_LEDGER_VERSION, ENGINE_VERSION, SCHEMA_VERSION
+    from apex_forensic.domain.enums import CustodyEventType as CustodyET
+    from apex_forensic.domain.models import CustodyEvent
+    from apex_forensic.domain.services.canonical import canonical_sha256
+
+    bundle, case_a_id, ev_a_id, _case_b_id, ev_b_id = two_case_services
+
+    event_b = bundle.custody.add_event(
+        evidence_id=ev_b_id,
+        event_type=CustodyEventType.ACQUISITION,
+        actor_name="analyst",
+        action="Intake B for verify op",
+    )
+
+    # Inject a cross-evidence correction directly.
+    existing = bundle.custody.list_events(ev_a_id)
+    prev_hash = existing[-1].event_hash if existing else None
+    revision = (existing[-1].immutable_revision + 1) if existing else 1
+    now = datetime.now(timezone.utc)
+    event_data = {
+        "schema_version": SCHEMA_VERSION,
+        "event_id": str(_uuid.uuid4()),
+        "case_id": case_a_id,
+        "evidence_id": ev_a_id,
+        "event_type": CustodyET.CORRECTION.value,
+        "actor_id": None,
+        "actor_name": "analyst",
+        "actor_role": None,
+        "organization": None,
+        "source_location": None,
+        "destination_location": None,
+        "action": "injected cross-evidence correction",
+        "reason": "injected",
+        "occurred_at_utc": to_json_timestamp(now),
+        "displayed_at": now.isoformat(timespec="microseconds"),
+        "timezone": "UTC",
+        "tool_name": "APEX Forensic Core",
+        "tool_version": ENGINE_VERSION,
+        "previous_hash": None,
+        "current_hash": None,
+        "notes": None,
+        "created_at": to_json_timestamp(now),
+        "immutable_revision": revision,
+        "previous_event_hash": prev_hash,
+        "event_hash": "",
+        "ledger_algorithm": "SHA256",
+        "ledger_version": CUSTODY_LEDGER_VERSION,
+        "approval": None,
+        "correction_of_event_id": event_b.event_id,
+    }
+    event_data["event_hash"] = canonical_sha256(event_data, exclude_keys={"event_hash"})
+    bundle.custody._custody_repository.save_custody_event(CustodyEvent(event_data))
+
+    result = invoke(
+        "custody.verify",
+        {"case_id": case_a_id, "evidence_id": ev_a_id},
+        bundle,
+        tasks=None,  # type: ignore[arg-type]
+        actor="test-actor",
+        session_id="test-session",
+        exports=Path("/tmp"),
+    )
+    assert result["verified"] is True  # hash integrity intact
+    assert any(
+        v["violation"] == "correction_target_wrong_evidence" for v in result["violations"]
+    )

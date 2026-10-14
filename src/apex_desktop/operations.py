@@ -250,7 +250,11 @@ def invoke(
     if operation == "custody.list":
         return s.custody.list_events(p["evidence_id"])
     if operation == "custody.verify":
-        return {"verified": s.custody.verify_chain(p["evidence_id"])}
+        eid = p["evidence_id"]
+        return {
+            "verified": s.custody.verify_chain(eid),
+            "violations": s.custody.find_semantic_violations(eid),
+        }
     if operation == "custody.add":
         if p["correction_of_event_id"]:
             return s.custody.add_correction(
