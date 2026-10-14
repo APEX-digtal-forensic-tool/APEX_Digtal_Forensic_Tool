@@ -8,10 +8,9 @@ from unittest.mock import patch
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from jose import jwt as jose_jwt
 
 from apex_backend.app import create_app
-from apex_backend.auth.jwt_utils import ALGORITHM, AUDIENCE, ISSUER, issue_access_token
+from apex_backend.auth.jwt_utils import issue_access_token
 from apex_backend.auth.jwt_verifier import JwtTokenVerifier, _jwk_to_pem
 from apex_backend.auth.keys import load_private_key, public_key_to_jwk
 from apex_backend.auth.scopes import scopes_for_roles
@@ -28,7 +27,7 @@ def keypair():
 
 
 def _make_verifier(keypair):
-    private_key, kid, jwks_body = keypair
+    _private_key, _kid, jwks_body = keypair
     verifier = JwtTokenVerifier("http://test/.well-known/jwks.json", cache_ttl_seconds=300)
     verifier._keys = {jwk["kid"]: _jwk_to_pem(jwk) for jwk in jwks_body["keys"]}
     verifier._fetched_at = time.monotonic()
@@ -56,7 +55,7 @@ def _forge_token_with_header(keypair, header_override: dict) -> str:
     import base64
     import json
 
-    private_key, kid, _ = keypair
+    _private_key, _kid, _ = keypair
     good = _good_token(keypair)
     # Use the real payload/signature from a valid token, swap only the header.
     parts = good.split(".")
@@ -145,7 +144,7 @@ async def test_valid_token_still_passes(keypair) -> None:
 
 @pytest_asyncio.fixture
 async def app_client(keypair):
-    private_key, kid, jwks_body = keypair
+    _private_key, _kid, jwks_body = keypair
     app = create_app(SQLITE_ASYNC)
     from apex_backend.auth.confirmation_router import _get_jwt_verifier
 
@@ -188,7 +187,7 @@ async def test_corrupted_token_returns_401_not_500(app_client) -> None:
 @pytest.mark.asyncio
 async def test_unknown_kid_cooldown(keypair) -> None:
     """Two consecutive calls with an unknown kid only trigger one JWKS fetch."""
-    private_key, kid, jwks_body = keypair
+    _private_key, _kid, jwks_body = keypair
     verifier = JwtTokenVerifier("http://test/.well-known/jwks.json", cache_ttl_seconds=300)
     verifier._keys = {jwk["kid"]: _jwk_to_pem(jwk) for jwk in jwks_body["keys"]}
     verifier._fetched_at = time.monotonic()

@@ -10,14 +10,13 @@ import pytest_asyncio
 from mcp.server.auth.provider import AccessToken
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from apex_backend.auth import jwt_utils
 from apex_backend.auth.jwt_utils import AUDIENCE, ISSUER, issue_access_token
 from apex_backend.auth.keys import load_private_key
 from apex_backend.auth.scopes import scopes_for_roles
 from apex_backend.auth.service import AuthService, hash_password
 from apex_backend.database import Base
 from apex_backend.models import CaseTenancy, User
-from apex_mcp.errors import McpAuthorizationDeniedError, McpTenantScopeViolationError
+from apex_mcp.errors import McpAuthorizationDeniedError
 from apex_mcp.frontend_security import (
     FrontendAuthorizationGate,
     FrontendSession,
@@ -66,9 +65,10 @@ def _make_access_token(
         case_roles=case_roles,
     )
     # Decode to get claims; build AccessToken manually to avoid network calls.
-    from apex_backend.auth.jwt_utils import ALGORITHM
     from cryptography.hazmat.primitives import serialization
     from jose import jwt as jose_jwt
+
+    from apex_backend.auth.jwt_utils import ALGORITHM
 
     pub_pem = private_key.public_key().public_bytes(
         serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo

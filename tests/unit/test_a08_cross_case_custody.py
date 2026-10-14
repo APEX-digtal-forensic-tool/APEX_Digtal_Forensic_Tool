@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -45,7 +46,7 @@ def two_case_services(tmp_path: Path):
 
 
 def test_correction_of_same_evidence_accepted(two_case_services):
-    bundle, case_a_id, ev_a_id, _case_b_id, _ev_b_id = two_case_services
+    bundle, _case_a_id, ev_a_id, _case_b_id, _ev_b_id = two_case_services
 
     first = bundle.custody.add_event(
         evidence_id=ev_a_id,
@@ -143,24 +144,25 @@ def test_find_semantic_violations_detects_cross_evidence(two_case_services):
     )
 
     # Bypass the guard by injecting directly via the repository.
-    from apex_forensic.domain.models import CustodyEvent
+    import uuid
+    from datetime import datetime
+
     from apex_forensic._time import to_json_timestamp
     from apex_forensic.constants import CUSTODY_LEDGER_VERSION, ENGINE_VERSION, SCHEMA_VERSION
-    from apex_forensic.domain.enums import CustodyEventType as CET
+    from apex_forensic.domain.enums import CustodyEventType as CustodyET
+    from apex_forensic.domain.models import CustodyEvent
     from apex_forensic.domain.services.canonical import canonical_sha256
-    import uuid
-    from datetime import datetime, timezone, timedelta
 
     existing = bundle.custody.list_events(ev_a_id)
     prev_hash = existing[-1].event_hash if existing else None
     revision = (existing[-1].immutable_revision + 1) if existing else 1
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event_data = {
         "schema_version": SCHEMA_VERSION,
         "event_id": str(uuid.uuid4()),
         "case_id": _case_a_id,
         "evidence_id": ev_a_id,
-        "event_type": CET.CORRECTION.value,
+        "event_type": CustodyET.CORRECTION.value,
         "actor_id": None,
         "actor_name": "analyst",
         "actor_role": None,

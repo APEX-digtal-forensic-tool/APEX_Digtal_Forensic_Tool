@@ -74,8 +74,9 @@ async def app_with_engine(keypair):
 
     # Override the confirmation router's DB dependency to use the shared engine
     # so seeded rows are visible to the endpoint.
-    from apex_backend.auth.confirmation_router import _get_db as _conf_get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from apex_backend.auth.confirmation_router import _get_db as _conf_get_db
 
     async def _shared_db() -> AsyncGenerator[AsyncSession, None]:
         async with factory() as sess:
@@ -153,7 +154,7 @@ async def test_normal_session_yields_201(app_with_engine):
 @pytest.mark.asyncio
 async def test_missing_session_row_yields_401(app_with_engine):
     """A11 core: no DB row for session_id → must be 401, not 201."""
-    private_key, kid, client, factory = app_with_engine
+    private_key, kid, client, _factory = app_with_engine
     # No user/session seeded for this session_id.
     token = _make_token(private_key, kid, session_id="ghost-session-" + str(uuid.uuid4()))
 

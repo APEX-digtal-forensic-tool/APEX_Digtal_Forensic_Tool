@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from apex_backend.auth.keys import load_private_key
 from apex_backend.auth.service import AuthError, AuthService, hash_password
 from apex_backend.database import Base
-from apex_backend.models import CaseTenancy, User, UserSession
+from apex_backend.models import CaseTenancy, User
 
 SQLITE_ASYNC = "sqlite+aiosqlite:///:memory:"
 
@@ -90,7 +90,7 @@ async def test_refresh_blocked_for_inactive_user(session, keypair):
     user.is_active = False
     await session.commit()
 
-    with pytest.raises(AuthError, match="inactive|deleted"):
+    with pytest.raises(AuthError, match=r"inactive|deleted"):
         await service.refresh(session, refresh_token=refresh)
 
 
@@ -134,5 +134,5 @@ async def test_refresh_reuse_still_revokes_session(session, keypair):
     _a2, _r2 = await service.refresh(session, refresh_token=refresh)
 
     # Reusing the old refresh token must revoke the session.
-    with pytest.raises(AuthError, match="reuse|revoked"):
+    with pytest.raises(AuthError, match=r"reuse|revoked"):
         await service.refresh(session, refresh_token=refresh)

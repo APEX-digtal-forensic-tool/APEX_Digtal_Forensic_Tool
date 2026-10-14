@@ -10,9 +10,9 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
-
-from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm, create_async_engine
 
 from apex_backend.app import create_app
 from apex_backend.auth.confirmation_router import _get_db as _conf_get_db
