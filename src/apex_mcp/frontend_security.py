@@ -40,7 +40,7 @@ _EXPORT_TOOLS = frozenset(
 _HUMAN_MUTATION_ROLES = frozenset({"ANALYST", "APPROVER", "ADMIN"})
 _APPROVAL_ROLES = frozenset({"APPROVER", "ADMIN"})
 _EXPORT_ROLES = frozenset({"APPROVER", "EXPORTER", "ADMIN"})
-_RAW_READ_ROLES = frozenset({"ADMIN"})
+_RAW_READ_ROLES = frozenset({"ANALYST", "APPROVER", "ADMIN"})
 _ALL_ROLES = frozenset({"VIEWER", "ANALYST", "APPROVER", "EXPORTER", "ADMIN"})
 
 

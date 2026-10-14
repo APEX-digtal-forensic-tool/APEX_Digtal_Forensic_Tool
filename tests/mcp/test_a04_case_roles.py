@@ -358,7 +358,7 @@ async def test_refresh_token_contains_case_roles(keypair, db_session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# apex.view.raw_read: per-case ADMIN-only role enforcement
+# apex.view.raw_read: per-case role enforcement (ANALYST/APPROVER/ADMIN; excludes VIEWER/EXPORTER)
 # ---------------------------------------------------------------------------
 
 
@@ -400,7 +400,7 @@ def test_viewer_cannot_raw_read_per_case(keypair) -> None:
 
 
 def test_analyst_cannot_raw_read(keypair) -> None:
-    """ANALYST role does not satisfy raw_read ADMIN requirement."""
+    """ANALYST without apex:raw scope is blocked by scope check before role check."""
     private_key, kid = keypair
     analyst_scopes = sorted(scopes_for_roles(frozenset({"ANALYST"})))  # no apex:raw
     token_str = issue_access_token(
