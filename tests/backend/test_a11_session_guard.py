@@ -47,9 +47,10 @@ def _make_token(private_key, kid, session_id: str = _SESSION_ID) -> str:
 
 
 def _confirmation_payload():
+    # Use a mutation (non-approval) tool so ANALYST role passes the grant role check.
     return {
         "case_id": "case-001",
-        "tool_name": "report.approve",
+        "tool_name": "evidence.update",
         "request_fingerprint": "fp",
         "target_ids": [],
     }
@@ -196,3 +197,61 @@ async def test_expired_session_yields_401(app_with_engine):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_insufficient_role_for_approval_tool_yields_403(app_with_engine):
+    """ANALYST role cannot get a confirmation grant for an approval tool."""
+    private_key, kid, client, factory = app_with_engine
+    await _seed_user_and_session(factory)
+    # ANALYST token — role is insufficient for report.approve (requires APPROVER/ADMIN).
+    token = _make_token(private_key, kid)
+
+    resp = await client.post(
+        "/confirmations",
+        json={
+            "case_id": "case-001",
+            "tool_name": "report.approve",
+            "request_fingerprint": "fp",
+            "target_ids": [],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_role_can_get_approval_grant(app_with_engine):
+    """ADMIN role can get a confirmation grant for an approval tool."""
+    private_key, kid, client, factory = app_with_engine
+    sid = "admin-sess-" + str(uuid.uuid4())
+    aid = "actor-admin-" + str(uuid.uuid4())
+    await _seed_user_and_session(factory, actor_id=aid, session_id=sid)
+
+    # Issue token with ADMIN role in case-001.
+    from apex_backend.auth.scopes import scopes_for_roles as _sfr
+    from apex_backend.auth.jwt_utils import issue_access_token as _iat
+    admin_roles = ["ADMIN"]
+    admin_token = _iat(
+        private_key=private_key,
+        kid=kid,
+        actor_id=aid,
+        session_id=sid,
+        tenant_id=_TENANT,
+        allowed_case_ids=["case-001"],
+        roles=admin_roles,
+        scopes=sorted(_sfr(frozenset(admin_roles))),
+        case_roles={"case-001": "ADMIN"},
+    )
+
+    resp = await client.post(
+        "/confirmations",
+        json={
+            "case_id": "case-001",
+            "tool_name": "report.approve",
+            "request_fingerprint": "fp-admin",
+            "target_ids": [],
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 201, resp.text

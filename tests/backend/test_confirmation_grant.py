@@ -52,15 +52,18 @@ def _make_access_token(
     roles: list[str] | None = None,
 ) -> str:
     roles = roles or ["ANALYST"]
+    cases = allowed_case_ids or ["case-001"]
+    case_roles = {c: roles[0] for c in cases}
     return issue_access_token(
         private_key=private_key,
         kid=kid,
         actor_id=actor_id,
         session_id=session_id,
         tenant_id=tenant_id,
-        allowed_case_ids=allowed_case_ids or ["case-001"],
+        allowed_case_ids=cases,
         roles=roles,
         scopes=sorted(scopes_for_roles(frozenset(roles))),
+        case_roles=case_roles,
     )
 
 
@@ -164,7 +167,7 @@ async def test_issue_confirmation_success(app_client):
         "/confirmations",
         json={
             "case_id": "case-001",
-            "tool_name": "report.approve",
+            "tool_name": "evidence.update",  # ANALYST role satisfies mutation requirement
             "request_fingerprint": "fp-abc",
             "target_ids": ["report-1"],
         },
