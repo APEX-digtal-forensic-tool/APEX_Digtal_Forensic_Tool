@@ -232,10 +232,10 @@ def test_custody_verify_op_returns_violations_for_clean_chain(two_case_services)
 def test_custody_verify_op_returns_violations_for_injected_cross_evidence(two_case_services):
     """custody.verify response includes the cross-evidence violation when present."""
     import uuid as _uuid
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from apex_desktop.operations import invoke
-    from apex_forensic._time import to_json_timestamp  # noqa: PLC0415
+    from apex_forensic._time import to_json_timestamp
     from apex_forensic.constants import CUSTODY_LEDGER_VERSION, ENGINE_VERSION, SCHEMA_VERSION
     from apex_forensic.domain.enums import CustodyEventType as CustodyET
     from apex_forensic.domain.models import CustodyEvent
@@ -254,7 +254,7 @@ def test_custody_verify_op_returns_violations_for_injected_cross_evidence(two_ca
     existing = bundle.custody.list_events(ev_a_id)
     prev_hash = existing[-1].event_hash if existing else None
     revision = (existing[-1].immutable_revision + 1) if existing else 1
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event_data = {
         "schema_version": SCHEMA_VERSION,
         "event_id": str(_uuid.uuid4()),

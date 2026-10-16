@@ -229,8 +229,8 @@ async def test_admin_role_can_get_approval_grant(app_with_engine):
     await _seed_user_and_session(factory, actor_id=aid, session_id=sid)
 
     # Issue token with ADMIN role in case-001.
-    from apex_backend.auth.scopes import scopes_for_roles as _sfr
     from apex_backend.auth.jwt_utils import issue_access_token as _iat
+    from apex_backend.auth.scopes import scopes_for_roles as _sfr
     admin_roles = ["ADMIN"]
     admin_token = _iat(
         private_key=private_key,

@@ -53,7 +53,7 @@ def _make_access_token(
 ) -> str:
     roles = roles or ["ANALYST"]
     cases = allowed_case_ids or ["case-001"]
-    case_roles = {c: roles[0] for c in cases}
+    case_roles = dict.fromkeys(cases, roles[0])
     return issue_access_token(
         private_key=private_key,
         kid=kid,
