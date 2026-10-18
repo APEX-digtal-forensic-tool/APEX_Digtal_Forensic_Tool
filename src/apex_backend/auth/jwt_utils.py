@@ -48,8 +48,15 @@ def issue_access_token(
     allowed_case_ids: list[str],
     roles: list[str],
     scopes: list[str],
+    case_roles: dict[str, str] | None = None,
 ) -> str:
-    """Issue a signed RS256 access JWT."""
+    """Issue a signed RS256 access JWT.
+
+    *case_roles* maps each case_id to the actor's role in that case.
+    When provided, recipients can enforce per-case role boundaries (A04).
+    Tokens without case_roles are legacy tokens; FrontendAuthorizationGate
+    rejects them for any role-gated tool as a secure default.
+    """
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "iss": ISSUER,
@@ -65,6 +72,8 @@ def issue_access_token(
         "scopes": scopes,
         "token_type": "access",
     }
+    if case_roles is not None:
+        payload["case_roles"] = case_roles
     encoded = jwt.encode(
         payload, _private_key_pem(private_key), algorithm=ALGORITHM, headers={"kid": kid}
     )

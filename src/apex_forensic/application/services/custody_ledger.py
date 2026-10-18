@@ -74,10 +74,26 @@ class CustodyLedger:
                     "CORRECTION events require correction_of_event_id.",
                     target="correction_of_event_id",
                 )
-            if self._custody_repository.get_custody_event(correction_of_event_id) is None:
+            target_event = self._custody_repository.get_custody_event(correction_of_event_id)
+            if target_event is None:
                 raise NotFoundError(
                     "OBJECT_NOT_FOUND",
                     f"Correction target not found: {correction_of_event_id}",
+                    target="correction_of_event_id",
+                )
+            # A08: correction target must belong to the same evidence (and therefore
+            # the same case).  Accepting a cross-evidence or cross-case event_id
+            # produces a semantically invalid reference even though the hash chain
+            # remains cryptographically intact.
+            target_data = target_event.to_schema_dict()
+            if target_data.get("evidence_id") != evidence_id:
+                raise ValidationError(
+                    "Correction target belongs to a different evidence item.",
+                    target="correction_of_event_id",
+                )
+            if target_data.get("case_id") != evidence.case_id:
+                raise ValidationError(
+                    "Correction target belongs to a different case.",
                     target="correction_of_event_id",
                 )
         elif correction_of_event_id is not None:
@@ -149,6 +165,48 @@ class CustodyLedger:
             previous_hash = data["event_hash"]
             expected_revision += 1
         return True
+
+    def find_semantic_violations(self, evidence_id: str) -> list[dict[str, str]]:
+        """Return a list of semantic violations for *evidence_id*'s custody chain.
+
+        Violations are cross-evidence or cross-case correction references that
+        were accepted before the A08 fix.  verify_chain() True/False is unchanged
+        by this method — it only detects meaning-level problems.
+
+        Each entry has:
+          event_id, violation, offending_value
+        """
+        violations: list[dict[str, str]] = []
+        evidence = self._evidence_repository.get_evidence(evidence_id)
+        if evidence is None:
+            return violations
+        for event in self._custody_repository.list_custody_events(evidence_id):
+            data = event.to_schema_dict()
+            ref_id = data.get("correction_of_event_id")
+            if ref_id is None:
+                continue
+            target = self._custody_repository.get_custody_event(ref_id)
+            if target is None:
+                violations.append({
+                    "event_id": data["event_id"],
+                    "violation": "correction_target_missing",
+                    "offending_value": ref_id,
+                })
+                continue
+            target_data = target.to_schema_dict()
+            if target_data.get("evidence_id") != evidence_id:
+                violations.append({
+                    "event_id": data["event_id"],
+                    "violation": "correction_target_wrong_evidence",
+                    "offending_value": str(target_data.get("evidence_id")),
+                })
+            if target_data.get("case_id") != evidence.case_id:
+                violations.append({
+                    "event_id": data["event_id"],
+                    "violation": "correction_target_wrong_case",
+                    "offending_value": str(target_data.get("case_id")),
+                })
+        return violations
 
     def add_correction(
         self,

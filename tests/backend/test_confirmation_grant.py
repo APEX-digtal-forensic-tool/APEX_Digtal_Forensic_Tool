@@ -10,9 +10,12 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from apex_backend.app import create_app
+from apex_backend.auth.confirmation_router import _get_db as _conf_get_db
 from apex_backend.auth.confirmation_router import _get_jwt_verifier
 from apex_backend.auth.db_confirmation import DbFrontendSecurityProvider
 from apex_backend.auth.jwt_utils import issue_access_token
@@ -20,7 +23,7 @@ from apex_backend.auth.jwt_verifier import _jwk_to_pem
 from apex_backend.auth.keys import load_private_key, public_key_to_jwk
 from apex_backend.auth.scopes import scopes_for_roles
 from apex_backend.database import Base
-from apex_backend.models import ConfirmationGrantRow
+from apex_backend.models import ConfirmationGrantRow, User, UserSession
 from apex_mcp.confirmation import ConfirmationRequest
 from apex_mcp.frontend_security import FrontendSession
 
@@ -49,23 +52,37 @@ def _make_access_token(
     roles: list[str] | None = None,
 ) -> str:
     roles = roles or ["ANALYST"]
+    cases = allowed_case_ids or ["case-001"]
+    case_roles = dict.fromkeys(cases, roles[0])
     return issue_access_token(
         private_key=private_key,
         kid=kid,
         actor_id=actor_id,
         session_id=session_id,
         tenant_id=tenant_id,
-        allowed_case_ids=allowed_case_ids or ["case-001"],
+        allowed_case_ids=cases,
         roles=roles,
         scopes=sorted(scopes_for_roles(frozenset(roles))),
+        case_roles=case_roles,
     )
 
 
 @pytest_asyncio.fixture
 async def app_client(keypair):
     import time
+    from collections.abc import AsyncGenerator
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     private_key, kid = keypair
+
+    # Use a shared engine so the test can seed rows that the app's _conf_get_db
+    # dependency will see.  A11 fix requires a valid UserSession row to exist.
+    shared_engine = create_async_engine(SQLITE_ASYNC, echo=False)
+    async with shared_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    shared_factory = async_sm(shared_engine, expire_on_commit=False)
+
     app = create_app(SQLITE_ASYNC)
     # Override verifier with test keypair so tokens issued by this fixture verify.
     verifier = app.dependency_overrides[_get_jwt_verifier]()
@@ -73,10 +90,41 @@ async def app_client(keypair):
     verifier._keys = {kid: _jwk_to_pem(jwk)}
     verifier._fetched_at = time.monotonic()
 
+    # Point _conf_get_db at the shared engine so seeded rows are visible.
+    async def _shared_db() -> AsyncGenerator[AsyncSession, None]:
+        async with shared_factory() as sess:
+            yield sess
+
+    app.dependency_overrides[_conf_get_db] = _shared_db
+
+    # Seed the default user and session used by _make_access_token defaults.
+    async with shared_factory() as db:
+        db.add(User(
+            id="user-abc",
+            username="test-user",
+            email="user-abc@test.local",
+            hashed_password="hashed",
+            tenant_id="tenant-1",
+            created_at=datetime.now(UTC),
+            is_active=True,
+        ))
+        db.add(UserSession(
+            session_id="sess-xyz",
+            actor_id="user-abc",
+            tenant_id="tenant-1",
+            created_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        ))
+        await db.commit()
+
     async with app.router.lifespan_context(app), AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         yield private_key, kid, client
+
+    async with shared_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await shared_engine.dispose()
 
 
 @pytest.fixture
@@ -119,7 +167,7 @@ async def test_issue_confirmation_success(app_client):
         "/confirmations",
         json={
             "case_id": "case-001",
-            "tool_name": "report.approve",
+            "tool_name": "evidence.update",  # ANALYST role satisfies mutation requirement
             "request_fingerprint": "fp-abc",
             "target_ids": ["report-1"],
         },

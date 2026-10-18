@@ -1,7 +1,10 @@
 """Bounded background work, each with its own Core/SQLite connection."""
 
+import contextlib
+import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any, NotRequired, TypedDict
@@ -11,6 +14,8 @@ from apex_forensic.config import ServiceBundle, build_services
 from apex_forensic.domain.errors import ApexError
 from apex_forensic.domain.models.job import Job
 from apex_forensic.jobs.cancellation import CancellationToken
+
+_logger = logging.getLogger(__name__)
 
 
 def encode(value: Any) -> Any:
@@ -63,22 +68,63 @@ class Tasks:
         self.lock = Lock()
         self.records: dict[str, TaskRecord] = {}
         self.tokens: dict[str, CancellationToken] = {}
+        self.journal_recovered: bool = False  # True if journal was corrupt and reset
         # Receipts contain status/IDs only; forensic results remain in Core storage.
         if journal.exists():
             import json
 
-            for record in json.loads(journal.read_text(encoding="utf-8")):
-                if record["status"] in {"RUNNING", "QUEUED", "CANCELLING"}:
-                    record["status"] = "INTERRUPTED"
-                self.records[record["task_id"]] = record
+            raw = journal.read_text(encoding="utf-8")
+            parsed_ok = False
+            records_raw: list[Any] = []
+            try:
+                data = json.loads(raw)
+                if not isinstance(data, list):
+                    raise ValueError(
+                        f"tasks.json top-level must be a list, got {type(data).__name__}"
+                    )
+                for item in data:
+                    if not isinstance(item, dict):
+                        raise ValueError(f"tasks.json item is not a dict: {item!r}")
+                    if "task_id" not in item or "status" not in item or "case_id" not in item:
+                        raise ValueError(f"tasks.json item missing required keys: {item!r}")
+                    if not isinstance(item["case_id"], str) or not item["case_id"].strip():
+                        raise ValueError(f"tasks.json item has invalid case_id: {item!r}")
+                records_raw = data
+                parsed_ok = True
+            except Exception as exc:
+                # Preserve the corrupt file next to the original, then start clean.
+                ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+                corrupt_path = journal.with_name(f"tasks.json.corrupt-{ts}")
+                try:
+                    journal.rename(corrupt_path)
+                except OSError:
+                    with contextlib.suppress(OSError):
+                        corrupt_path.write_bytes(journal.read_bytes())
+                self.journal_recovered = True
+                _logger.warning(
+                    "tasks.json was corrupt and has been moved to %s; "
+                    "starting with empty task history. Reason: %s",
+                    corrupt_path,
+                    exc,
+                )
+
+            if parsed_ok:
+                for record in records_raw:
+                    if record["status"] in {"RUNNING", "QUEUED", "CANCELLING"}:
+                        record["status"] = "INTERRUPTED"
+                    self.records[record["task_id"]] = record
 
     def _save(self) -> None:
         import json
 
         receipts = [{k: v for k, v in r.items() if k != "result"} for r in self.records.values()]
         tmp = self.journal.with_suffix(".tmp")
-        tmp.write_text(json.dumps(receipts, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self.journal)
+        try:
+            tmp.write_text(json.dumps(receipts, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(self.journal)
+        except OSError as exc:
+            _logger.error("Failed to persist task journal to %s: %s", self.journal, exc)
+            raise
 
     def list(self, case_id: str) -> list[TaskRecord]:
         with self.lock:
