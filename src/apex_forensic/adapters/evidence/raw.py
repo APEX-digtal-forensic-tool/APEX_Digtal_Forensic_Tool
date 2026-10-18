@@ -16,7 +16,11 @@ from apex_forensic.domain.enums import (
     EvidenceReaderCapability,
     EvidenceReaderCapabilityStatus,
 )
-from apex_forensic.domain.errors import UnsupportedCapabilityError, ValidationError
+from apex_forensic.domain.errors import (
+    StateConflictError,
+    UnsupportedCapabilityError,
+    ValidationError,
+)
 from apex_forensic.domain.models import EvidenceVolume
 from apex_forensic.ports.evidence_reader import (
     MAX_EVIDENCE_READ_SIZE,
@@ -61,7 +65,6 @@ class RawImageReader:
         self._fd: int | None = None
         self._stream: BinaryIO | None = None
         self._size: int | None = None
-        self._fingerprint: dict[str, object] | None = None
         self._lock = threading.RLock()
         self._closed = True
 
@@ -100,6 +103,8 @@ class RawImageReader:
     def open_readonly(self) -> Self:
         """Open the image using an OS read-only handle."""
 
+        if not self._closed:
+            return self
         normalized = self._normalize_path(self.path)
         try:
             fd = os.open(normalized, os.O_RDONLY)
@@ -116,7 +121,8 @@ class RawImageReader:
             self._fd = fd
             self._stream = os.fdopen(fd, "rb", buffering=0)
             self._size = int(stat_result.st_size)
-            self._fingerprint = self._compute_source_fingerprint()
+            # Opening a range reader must not scan a multi-terabyte image.
+            # Registration/verification explicitly requests source_fingerprint.
             self._closed = False
         except Exception:
             os.close(fd)
@@ -138,8 +144,21 @@ class RawImageReader:
     @property
     def source_fingerprint(self) -> dict[str, object]:
         self._ensure_open()
-        assert self._fingerprint is not None
-        return dict(self._fingerprint)
+        with self._lock:
+            before = self._source_stat()
+            fingerprint = self._compute_source_fingerprint()
+            if self._source_stat() != before:
+                raise StateConflictError(
+                    "Evidence changed while computing its fingerprint.", target="path"
+                )
+            return fingerprint
+
+    def _source_stat(self) -> tuple[int, ...]:
+        fd = self._fd
+        if fd is None:
+            raise ValidationError("Evidence reader is closed.", target="reader")
+        stat = os.fstat(fd)
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
     def capabilities(self) -> tuple[EvidenceReaderCapabilityStatement, ...]:
         return self._capability_tuple()

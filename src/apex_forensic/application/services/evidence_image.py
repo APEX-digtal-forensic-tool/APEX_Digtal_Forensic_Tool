@@ -24,7 +24,11 @@ from apex_forensic.domain.errors import (
     ValidationError,
 )
 from apex_forensic.domain.models import Evidence, EvidenceVolume, FileSystemNode
-from apex_forensic.ports.evidence_reader import EvidenceProbeResult, EvidenceReader
+from apex_forensic.ports.evidence_reader import (
+    MAX_EVIDENCE_READ_SIZE,
+    EvidenceProbeResult,
+    EvidenceReader,
+)
 from apex_forensic.ports.evidence_repository import EvidenceRepository
 
 
@@ -38,6 +42,8 @@ class EvidenceImageRepository(EvidenceRepository, Protocol):
     def list_evidence_volumes(self, evidence_id: str) -> list[EvidenceVolume]: ...
 
     def get_fs_node(self, node_id: str) -> FileSystemNode | None: ...
+
+    def list_all_evidence(self) -> list[Evidence]: ...
 
 
 class EvidenceImageService:
@@ -216,7 +222,9 @@ class EvidenceImageService:
             filename or f"{node.original_name}.recovered",
             overwrite=overwrite,
         )
-        written = 0
+        runs = self._recovery_runs(extents, node.file_size)
+        recovered_bytes = 0
+        cursor = 0
         missing_ranges: list[dict[str, int]] = []
         hasher = hashlib.sha256()
         reader_info: dict[str, str] | None = None
@@ -225,34 +233,38 @@ class EvidenceImageService:
             temp_path = self._temporary_output_path(output_path)
             with self._reader_for_evidence(evidence) as reader, temp_path.open("wb") as output:
                 reader_info = {"id": reader.reader_id, "version": reader.reader_version}
-                for extent in sorted(extents, key=lambda item: int(item.get("file_offset", 0))):
-                    file_offset = int(extent.get("file_offset", written))
-                    if file_offset > written:
-                        missing_ranges.append(
-                            {
-                                "file_offset": written,
-                                "byte_length": file_offset - written,
-                            }
-                        )
-                        written = file_offset
-                    remaining = node.file_size - written
-                    if remaining <= 0:
-                        break
-                    byte_offset = int(extent["byte_offset"])
-                    byte_length = min(int(extent["byte_length"]), remaining)
-                    data = reader.read_at(byte_offset, byte_length)
-                    if len(data) < byte_length:
-                        missing_ranges.append(
-                            {
-                                "file_offset": written + len(data),
-                                "byte_length": byte_length - len(data),
-                            }
-                        )
-                    if data:
+
+                def fill_missing(start: int, length: int) -> None:
+                    if length <= 0:
+                        return
+                    missing_ranges.append({"file_offset": start, "byte_length": length})
+                    # Preserve logical offsets and hash the actual output, including
+                    # explicitly documented synthetic zero-filled missing ranges.
+                    remaining = length
+                    while remaining:
+                        zeros = bytes(min(remaining, MAX_EVIDENCE_READ_SIZE))
+                        output.write(zeros)
+                        hasher.update(zeros)
+                        remaining -= len(zeros)
+
+                for file_offset, byte_offset, byte_length in runs:
+                    fill_missing(cursor, file_offset - cursor)
+                    cursor = file_offset
+                    consumed = 0
+                    while consumed < byte_length:
+                        requested = min(byte_length - consumed, MAX_EVIDENCE_READ_SIZE)
+                        data = reader.read_at(byte_offset + consumed, requested)
                         output.write(data)
                         hasher.update(data)
-                        written += len(data)
-            if written == 0:
+                        recovered_bytes += len(data)
+                        consumed += len(data)
+                        cursor += len(data)
+                        if len(data) < requested:
+                            fill_missing(cursor, byte_length - consumed)
+                            cursor += byte_length - consumed
+                            break
+                fill_missing(cursor, node.file_size - cursor)
+            if recovered_bytes == 0:
                 raise ValidationError(
                     "Deleted file recovery produced no bytes.",
                     target="node_id",
@@ -267,10 +279,6 @@ class EvidenceImageService:
         finally:
             if temp_path is not None:
                 temp_path.unlink(missing_ok=True)
-        if written < node.file_size:
-            missing_ranges.append(
-                {"file_offset": written, "byte_length": node.file_size - written}
-            )
         sha256 = hasher.hexdigest()
         self._audit_export(
             evidence_id=node.evidence_id,
@@ -278,15 +286,17 @@ class EvidenceImageService:
             sha256=sha256,
             action="Deleted file recovered",
             notes=(
-                f"node_id={node.node_id}; recovered_bytes={written}; "
-                f"missing_ranges={len(missing_ranges)}"
+                f"node_id={node.node_id}; recovered_bytes={recovered_bytes}; "
+                f"missing_ranges={len(missing_ranges)}; missing_range_policy=ZERO_FILL"
             ),
         )
         return {
             "node_id": node.node_id,
             "evidence_id": node.evidence_id,
             "output_path": str(output_path),
-            "recovered_bytes": written,
+            "recovered_bytes": recovered_bytes,
+            "output_size": node.file_size,
+            "missing_range_policy": "ZERO_FILL",
             "logical_size": node.file_size,
             "missing_ranges": missing_ranges,
             "sha256": sha256,
@@ -299,6 +309,28 @@ class EvidenceImageService:
                 "raw_locator": node.raw_locator,
             },
         }
+
+    @staticmethod
+    def _recovery_runs(extents: list[Any], logical_size: int) -> list[tuple[int, int, int]]:
+        runs: list[tuple[int, int, int]] = []
+        try:
+            for extent in extents:
+                values = (extent["file_offset"], extent["byte_offset"], extent["byte_length"])
+                if any(not isinstance(value, int) or isinstance(value, bool) for value in values):
+                    raise ValueError("Data-run offsets and lengths must be integers.")
+                file_offset, byte_offset, length = values
+                if file_offset < 0 or file_offset >= logical_size or byte_offset < 0 or length <= 0:
+                    raise ValueError("Data run is outside the logical file or image range.")
+                runs.append((file_offset, byte_offset, min(length, logical_size - file_offset)))
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValidationError("Invalid recovery data run.", target="node_id") from error
+        runs.sort()
+        end = 0
+        for offset, _, length in runs:
+            if offset < end:
+                raise ValidationError("Recovery data runs overlap.", target="node_id")
+            end = offset + length
+        return runs
 
     def export_file_slack(
         self,
@@ -410,12 +442,14 @@ class EvidenceImageService:
             return EvidenceFormat.VHD
         return EvidenceFormat.RAW
 
-    @staticmethod
-    def _safe_output_path(output_root: Path, filename: str, *, overwrite: bool) -> Path:
+    def _safe_output_path(self, output_root: Path, filename: str, *, overwrite: bool) -> Path:
         root = output_root.expanduser()
+        safe_name = _safe_filename(filename)
+        # Check before mkdir/temp-file creation: even creating a directory inside
+        # registered directory evidence changes the evidence.
+        self._assert_derived_path(root.resolve(strict=False) / safe_name)
         root.mkdir(parents=True, exist_ok=True)
         root_resolved = root.resolve(strict=True)
-        safe_name = _safe_filename(filename)
         output_path = (root_resolved / safe_name).resolve(strict=False)
         try:
             output_path.relative_to(root_resolved)
@@ -431,14 +465,40 @@ class EvidenceImageService:
             )
         return output_path
 
-    @staticmethod
-    def _write_output(output_path: Path, data: bytes, *, overwrite: bool) -> None:
+    def _assert_derived_path(self, output_path: Path) -> None:
+        destination = output_path.resolve(strict=False)
+        for evidence in self._repository.list_all_evidence():
+            source = evidence.source_path.expanduser().resolve(strict=False)
+            protected = [source]
+            if evidence.evidence_type is EvidenceFormat.DIRECTORY:
+                if destination.is_relative_to(source):
+                    raise ValidationError(
+                        "Derived output cannot be written inside registered directory evidence.",
+                        target="output_root",
+                    )
+            elif evidence.evidence_type is EvidenceFormat.E01 and source.parent.is_dir():
+                # Protect every segment, including incomplete chains, without
+                # needing the optional EWF backend or opening evidence for write.
+                pattern = re.compile(rf"^{re.escape(source.stem)}\.e[0-9a-z]{{2}}$", re.I)
+                protected.extend(
+                    path for path in source.parent.iterdir() if pattern.fullmatch(path.name)
+                )
+            for path in protected:
+                if destination == path.resolve(strict=False) or (
+                    destination.exists() and path.exists() and destination.samefile(path)
+                ):
+                    raise ValidationError(
+                        "Derived output cannot replace a registered evidence source or segment.",
+                        target="output_root",
+                    )
+
+    def _write_output(self, output_path: Path, data: bytes, *, overwrite: bool) -> None:
         temp_path: Path | None = None
         try:
             temp_path = EvidenceImageService._temporary_output_path(output_path)
             with temp_path.open("wb") as stream:
                 stream.write(data)
-            EvidenceImageService._publish_output(temp_path, output_path, overwrite=overwrite)
+            self._publish_output(temp_path, output_path, overwrite=overwrite)
             temp_path = None
         except FileExistsError as error:
             raise StateConflictError(
@@ -459,8 +519,8 @@ class EvidenceImageService:
         ) as stream:
             return Path(stream.name)
 
-    @staticmethod
-    def _publish_output(temp_path: Path, output_path: Path, *, overwrite: bool) -> None:
+    def _publish_output(self, temp_path: Path, output_path: Path, *, overwrite: bool) -> None:
+        self._assert_derived_path(output_path)
         if overwrite:
             temp_path.replace(output_path)
             return

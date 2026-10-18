@@ -74,10 +74,20 @@ class CustodyLedger:
                     "CORRECTION events require correction_of_event_id.",
                     target="correction_of_event_id",
                 )
-            if self._custody_repository.get_custody_event(correction_of_event_id) is None:
+            target = self._custody_repository.get_custody_event(correction_of_event_id)
+            if target is None:
                 raise NotFoundError(
                     "OBJECT_NOT_FOUND",
                     f"Correction target not found: {correction_of_event_id}",
+                    target="correction_of_event_id",
+                )
+            target_data = target.to_schema_dict()
+            if (
+                target_data["evidence_id"] != evidence_id
+                or target_data["case_id"] != evidence.case_id
+            ):
+                raise ValidationError(
+                    "Correction target must belong to the same evidence and case.",
                     target="correction_of_event_id",
                 )
         elif correction_of_event_id is not None:
@@ -134,12 +144,24 @@ class CustodyLedger:
         return self._custody_repository.list_custody_events(evidence_id)
 
     def verify_chain(self, evidence_id: str) -> bool:
-        """Verify previous-hash links and canonical event hashes."""
+        """Verify hashes, ownership and correction references without rewriting history."""
 
+        evidence = self._evidence_repository.get_evidence(evidence_id)
+        if evidence is None:
+            return False
         previous_hash: str | None = None
         expected_revision = 1
+        seen_ids: set[str] = set()
         for event in self._custody_repository.list_custody_events(evidence_id):
             data = event.to_schema_dict()
+            if data["evidence_id"] != evidence_id or data["case_id"] != evidence.case_id:
+                return False
+            correction_id = data.get("correction_of_event_id")
+            if data["event_type"] == CustodyEventType.CORRECTION.value:
+                if correction_id not in seen_ids:
+                    return False
+            elif correction_id is not None:
+                return False
             if data["immutable_revision"] != expected_revision:
                 return False
             if data["previous_event_hash"] != previous_hash:
@@ -147,6 +169,7 @@ class CustodyLedger:
             if canonical_sha256(data, exclude_keys={"event_hash"}) != data["event_hash"]:
                 return False
             previous_hash = data["event_hash"]
+            seen_ids.add(data["event_id"])
             expected_revision += 1
         return True
 

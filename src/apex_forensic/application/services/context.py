@@ -20,6 +20,7 @@ from apex_forensic.domain.enums import (
     AnalysisContextPurpose,
     AnalysisScopeType,
     ArtifactType,
+    EvidenceFormat,
     GuiRoute,
     RawLocatorType,
     ResourceType,
@@ -2877,10 +2878,19 @@ class ViewProjectionService:
             badges.append("CITED")
         return badges
 
-    @staticmethod
-    def _available_actions(resource_type: str, info: dict[str, Any]) -> list[str]:
+    def _available_actions(self, resource_type: str, info: dict[str, Any]) -> list[str]:
         actions = ["view.simple", "view.detailed", "view.raw"]
-        if info.get("raw_locator") is not None:
+        evidence = self._repository.get_evidence(info.get("evidence_id"))
+        locator = info.get("raw_locator")
+        node = None
+        if isinstance(locator, dict):
+            source_id = locator.get("source_id") or locator.get("source_file_node_id")
+            if resource_type == ResourceType.FILE_SYSTEM_NODE.value:
+                source_id = info.get("resource_id")
+            if source_id is not None:
+                node = self._repository.get_fs_node(str(source_id))
+        # Image filesystem locators are metadata, not host filesystem paths.
+        if locator is not None and SafeRawRangeReader.supports_source(evidence, node):
             actions.append("view.raw-read")
         if resource_type == ResourceType.MACHINE_CANDIDATE.value:
             actions.append("candidate.review")
@@ -2909,6 +2919,19 @@ class SafeRawRangeReader:
             "supports_disk_image_raw_offsets": False,
             "supports_logical_fields": True,
         }
+
+    @staticmethod
+    def supports_source(evidence: Any, node: Any) -> bool:
+        if evidence is None:
+            return False
+        if evidence.evidence_type is EvidenceFormat.DIRECTORY:
+            return True
+        return bool(
+            evidence.evidence_type is EvidenceFormat.RAW
+            and node is not None
+            and node.provider_metadata.get("source_path_kind") == "logical_file"
+            and node.original_relative_path in {"", "."}
+        )
 
     def validate_locator(self, *, case_id: str, raw_locator: dict[str, Any]) -> dict[str, Any]:
         evidence_id = raw_locator.get("evidence_id")
@@ -2942,6 +2965,12 @@ class SafeRawRangeReader:
                 "RAW_SOURCE_OUTSIDE_EVIDENCE",
                 "Raw locator source does not belong to the evidence.",
                 target="source_id",
+            )
+        if not self.supports_source(evidence, node):
+            raise RawReadError(
+                "RAW_LOCATOR_UNSUPPORTED",
+                "Image content is not supported by the logical raw reader; use image range reads.",
+                target="raw_locator",
             )
         indexed_relative_path = self._clean_relative_path(node.original_relative_path)
         requested_relative_path = raw_locator.get("relative_path")
@@ -3259,7 +3288,7 @@ class SafeRawRangeReader:
         cleaned = pure.as_posix()
         if cleaned in {"", "."}:
             return "."
-        return cleaned.lstrip("./")
+        return cleaned
 
     @staticmethod
     def _locator_type(raw_locator: dict[str, Any]) -> str:

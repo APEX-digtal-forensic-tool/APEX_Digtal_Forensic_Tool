@@ -95,7 +95,7 @@ class PyTskFileSystemProvider:
             file_size=evidence.size_bytes,
             extension=None,
             mime_candidate=None,
-            mime_confidence="NONE",
+            mime_confidence="UNKNOWN",
             fs_metadata={
                 "volume_count": len(volumes),
                 "image_format": evidence.evidence_type.value,
@@ -208,9 +208,7 @@ class PyTskFileSystemProvider:
         if parent_path == ".":
             parent_path = "/"
         parent = self._synthetic_parent(evidence, volume, parent_path, index_revision)
-        for entry in self.iter_directory_entries(
-            evidence, parent, index_revision=index_revision
-        ):
+        for entry in self.iter_directory_entries(evidence, parent, index_revision=index_revision):
             if isinstance(entry, ProviderScanIssue):
                 continue
             if entry.original_relative_path == clean:
@@ -297,7 +295,7 @@ class PyTskFileSystemProvider:
                     file_size=volume.byte_length,
                     extension=None,
                     mime_candidate=None,
-                    mime_confidence="NONE",
+                    mime_confidence="UNKNOWN",
                     fs_metadata={
                         "filesystem_type": fs_type,
                         "block_size": int(fs_info.info.block_size),
@@ -373,18 +371,25 @@ class PyTskFileSystemProvider:
         now = utc_now()
         extension = self._extension(name) if node_type is FileSystemNodeType.FILE else None
         mime = mimetypes.guess_type(name)[0] if node_type is FileSystemNodeType.FILE else None
+        time_fields = {
+            "created": "crtime",
+            "modified": "mtime",
+            "accessed": "atime",
+            "changed": "ctime",
+        }
+        raw_timestamps = {field: getattr(meta, field, 0) for field in time_fields.values()}
         timestamps = {
-            "created": self._timestamp(getattr(meta, "crtime", 0)),
-            "modified": self._timestamp(getattr(meta, "mtime", 0)),
-            "accessed": self._timestamp(getattr(meta, "atime", 0)),
-            "changed": self._timestamp(getattr(meta, "ctime", 0)),
+            name: self._timestamp(raw_timestamps[field]) for name, field in time_fields.items()
         }
-        raw_timestamps = {
-            "crtime": int(getattr(meta, "crtime", 0)),
-            "mtime": int(getattr(meta, "mtime", 0)),
-            "atime": int(getattr(meta, "atime", 0)),
-            "ctime": int(getattr(meta, "ctime", 0)),
-        }
+        timestamp_warnings = [
+            {
+                "code": "INVALID_FILESYSTEM_TIMESTAMP",
+                "field": field,
+                "raw_value": raw_timestamps[field],
+            }
+            for name, field in time_fields.items()
+            if timestamps[name] is None and raw_timestamps[field] not in (None, 0, "0")
+        ]
         inode = str(getattr(meta, "addr", ""))
         return FileSystemNode(
             node_id=self._node_id(evidence, relative_path, inode),
@@ -401,7 +406,7 @@ class PyTskFileSystemProvider:
             file_size=file_size,
             extension=extension,
             mime_candidate=mime,
-            mime_confidence="EXTENSION" if mime is not None else "NONE",
+            mime_confidence="LOW" if mime is not None else "UNKNOWN",
             fs_metadata={
                 "inode": inode,
                 "mode": int(getattr(meta, "mode", 0)),
@@ -454,10 +459,11 @@ class PyTskFileSystemProvider:
                 "extents": extents,
                 "allocated_size": sum(int(item["byte_length"]) for item in extents),
                 "slack": slack,
+                "timestamp_warnings": timestamp_warnings,
                 "entry_sort_key": self._entry_sort_key(name, inode),
                 "reads_file_body": False,
             },
-            is_partial=False,
+            is_partial=bool(timestamp_warnings),
             index_revision=index_revision,
             created_at=now,
             updated_at=now,
@@ -496,8 +502,10 @@ class PyTskFileSystemProvider:
         tsk_path: str,
         index_revision: int,
     ) -> FileSystemNode:
-        relative = f"volume-{volume.volume_index}" if tsk_path == "/" else (
-            f"volume-{volume.volume_index}/" + tsk_path.strip("/")
+        relative = (
+            f"volume-{volume.volume_index}"
+            if tsk_path == "/"
+            else (f"volume-{volume.volume_index}/" + tsk_path.strip("/"))
         )
         now = utc_now()
         return FileSystemNode(
@@ -515,7 +523,7 @@ class PyTskFileSystemProvider:
             file_size=None,
             extension=None,
             mime_candidate=None,
-            mime_confidence="NONE",
+            mime_confidence="UNKNOWN",
             fs_metadata={},
             platform="DISK_IMAGE",
             timestamp_meanings={},
@@ -645,11 +653,11 @@ class PyTskFileSystemProvider:
     def _timestamp(value: Any) -> datetime | None:
         try:
             seconds = int(value)
-        except (TypeError, ValueError):
+            if seconds <= 0:
+                return None
+            return datetime.fromtimestamp(seconds, UTC)
+        except (TypeError, ValueError, OverflowError, OSError):
             return None
-        if seconds <= 0:
-            return None
-        return datetime.fromtimestamp(seconds, UTC)
 
     @staticmethod
     def _decode_name(value: bytes) -> str:
