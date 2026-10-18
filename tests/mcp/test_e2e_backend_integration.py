@@ -84,6 +84,7 @@ def _build_jwt_stack(seeded: dict[str, Any]) -> dict[str, Any]:
     private_key, kid = load_private_key()
     roles = ["ANALYST"]
     scopes = sorted(scopes_for_roles(frozenset(roles)))
+    case_roles = {seeded["case_id"]: "ANALYST"}
     access_token_str = issue_access_token(
         private_key=private_key,
         kid=kid,
@@ -93,6 +94,7 @@ def _build_jwt_stack(seeded: dict[str, Any]) -> dict[str, Any]:
         allowed_case_ids=[seeded["case_id"]],
         roles=roles,
         scopes=scopes,
+        case_roles=case_roles,
     )
 
     jwk = public_key_to_jwk(private_key.public_key(), kid)

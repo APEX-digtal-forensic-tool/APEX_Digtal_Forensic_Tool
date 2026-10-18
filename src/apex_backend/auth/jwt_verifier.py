@@ -20,6 +20,12 @@ from apex_backend.auth.jwt_utils import ALGORITHM, AUDIENCE, ISSUER
 _logger = logging.getLogger(__name__)
 
 
+_KID_MAX_LEN = 128
+# Minimum seconds between JWKS re-fetches triggered by an unknown kid.
+# Prevents an attacker from hammering the JWKS endpoint with crafted tokens.
+_UNKNOWN_KID_COOLDOWN = 10.0
+
+
 class JwtTokenVerifier:
     """Verify RS256 JWTs against a JWKS endpoint.
 
@@ -41,16 +47,29 @@ class JwtTokenVerifier:
         self._cache_ttl = cache_ttl_seconds
         self._keys: dict[str, str] = {}  # kid → PEM public key
         self._fetched_at: float = 0.0
+        self._unknown_kid_fetched_at: float = 0.0
         self._lock = asyncio.Lock()
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        """Return AccessToken if valid RS256 JWT, else None."""
+        """Return AccessToken if valid RS256 JWT, else None.
+
+        Any malformed header (non-dict, wrong alg, non-string kid, oversized kid)
+        is treated as a verification failure and returns None without raising.
+        """
         try:
             header = jose_jwt.get_unverified_header(token)
         except JWTError:
             return None
 
-        kid: str | None = header.get("kid")
+        # Validate header shape before touching any field.
+        if not isinstance(header, dict):
+            return None
+        if header.get("alg") != ALGORITHM:
+            return None
+        kid = header.get("kid")
+        if kid is not None and (not isinstance(kid, str) or len(kid) > _KID_MAX_LEN):
+            return None
+
         public_key_pem = await self._resolve_key(kid)
         if public_key_pem is None:
             return None
@@ -83,12 +102,21 @@ class JwtTokenVerifier:
         )
 
     async def _resolve_key(self, kid: str | None) -> str | None:
-        """Return PEM for *kid*, fetching JWKS if stale or key absent."""
+        """Return PEM for *kid*, fetching JWKS if stale or key absent.
+
+        For unknown-kid triggered re-fetches a cooldown of _UNKNOWN_KID_COOLDOWN
+        seconds is enforced so that crafted tokens cannot hammer the JWKS endpoint.
+        Normal key-rotation re-fetches (stale cache) are unaffected by the cooldown.
+        """
         async with self._lock:
             now = time.monotonic()
             stale = (now - self._fetched_at) > self._cache_ttl
-            if stale or (kid is not None and kid not in self._keys):
+            unknown_kid = kid is not None and kid not in self._keys
+            cooldown_elapsed = (now - self._unknown_kid_fetched_at) > _UNKNOWN_KID_COOLDOWN
+            if stale or (unknown_kid and cooldown_elapsed):
                 await self._fetch_jwks()
+                if unknown_kid:
+                    self._unknown_kid_fetched_at = now
             if kid is not None:
                 return self._keys.get(kid)
             if self._keys:

@@ -354,7 +354,10 @@ def test_custody_rejects_foreign_evidence_corrections(services, image_case, diff
     )
     bad["event_hash"] = canonical_sha256(bad, exclude_keys={"event_hash"})
     services.repository.save_custody_event(CustodyEvent(bad))
-    assert not services.custody.verify_chain(evidence.evidence_id)
+    # Preserve main's contract: hash integrity and semantic violations are separate.
+    assert services.custody.verify_chain(evidence.evidence_id)
+    violations = services.custody.find_semantic_violations(evidence.evidence_id)
+    assert any(item["violation"] == "correction_target_wrong_evidence" for item in violations)
 
 
 @pytest.mark.parametrize("value", [253402300800, 9223372036854775807, "bad", None, float("inf")])

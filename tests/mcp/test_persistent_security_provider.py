@@ -24,15 +24,25 @@ def _make_token(
     allowed_case_ids: list[str] | None = None,
     roles: list[str] | None = None,
     scopes: list[str] | None = None,
+    case_roles: dict[str, str] | None = None,
 ) -> AccessToken:
+    _cases = allowed_case_ids if allowed_case_ids is not None else ["case-001"]
+    _roles = roles if roles is not None else ["ANALYST"]
+    # Build per-case role mapping: cycle through roles across cases so that tests
+    # with multiple cases and roles exercise distinct per-case values naturally.
+    # Tests that need a specific per-case assignment should pass case_roles explicitly.
+    _case_roles: dict[str, str] = case_roles if case_roles is not None else {
+        c: _roles[i % len(_roles)] for i, c in enumerate(_cases)
+    }
     claims = {
         "sub": actor_id,
         "iss": ISSUER,
         "aud": AUDIENCE,
         "session_id": session_id,
         "tenant_id": tenant_id,
-        "allowed_case_ids": allowed_case_ids if allowed_case_ids is not None else ["case-001"],
-        "roles": roles if roles is not None else ["ANALYST"],
+        "allowed_case_ids": _cases,
+        "roles": _roles,
+        "case_roles": _case_roles,
         "token_type": "access",
     }
     return AccessToken(
@@ -81,6 +91,7 @@ def test_resolve_session_uses_subject_fallback() -> None:
         "tenant_id": "tenant-1",
         "allowed_case_ids": ["case-A"],
         "roles": ["VIEWER"],
+        "case_roles": {"case-A": "VIEWER"},
         "token_type": "access",
     }
     token = AccessToken(

@@ -93,6 +93,7 @@ def test_cli_jwt_valid_token_accepted_tampered_rejected(
         allowed_case_ids=["case-cli-001"],
         roles=["ANALYST"],
         scopes=sorted(scopes_for_roles(frozenset(["ANALYST"]))),
+        case_roles={"case-cli-001": "ANALYST"},
     )
 
     # 4. Mock JWKS HTTP server

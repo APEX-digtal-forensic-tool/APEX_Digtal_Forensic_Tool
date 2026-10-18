@@ -69,6 +69,7 @@ class AuthService:
         ).scalars().all()
 
         allowed_case_ids = [t.case_id for t in tenancies]
+        case_roles = {t.case_id: t.role for t in tenancies}
         roles = list({t.role for t in tenancies})
         scopes = sorted(scopes_for_roles(frozenset(roles)))
 
@@ -93,6 +94,7 @@ class AuthService:
             allowed_case_ids=allowed_case_ids,
             roles=roles,
             scopes=scopes,
+            case_roles=case_roles,
         )
         refresh = jwt_utils.issue_refresh_token(
             private_key=self._private_key,
@@ -163,6 +165,22 @@ class AuthService:
         if expires_at <= now:
             raise AuthError("Session expired.")
 
+        # Verify session ownership — actor_id in session must match token sub.
+        if session.actor_id != actor_id:
+            raise AuthError("Session actor mismatch.")
+
+        # Verify user still exists and is active (A05: deactivated accounts must not
+        # receive new tokens even if their session has not yet been revoked).
+        user = (
+            await db.execute(select(User).where(User.id == actor_id))
+        ).scalar_one_or_none()
+        if user is None or not user.is_active:
+            raise AuthError("Account inactive or deleted.")
+
+        # Verify tenant consistency.
+        if user.tenant_id != session.tenant_id:
+            raise AuthError("Tenant mismatch between user and session.")
+
         tenancies = (
             await db.execute(
                 select(CaseTenancy).where(CaseTenancy.actor_id == actor_id)
@@ -170,6 +188,7 @@ class AuthService:
         ).scalars().all()
 
         allowed_case_ids = [t.case_id for t in tenancies]
+        case_roles = {t.case_id: t.role for t in tenancies}
         roles = list({t.role for t in tenancies})
         scopes = sorted(scopes_for_roles(frozenset(roles)))
 
@@ -182,6 +201,7 @@ class AuthService:
             allowed_case_ids=allowed_case_ids,
             roles=roles,
             scopes=scopes,
+            case_roles=case_roles,
         )
         new_refresh = jwt_utils.issue_refresh_token(
             private_key=self._private_key,
@@ -191,6 +211,27 @@ class AuthService:
             jti=new_jti,
         )
         return access, new_refresh
+
+    async def deactivate_user(self, db: AsyncSession, *, actor_id: str) -> None:
+        """Deactivate a user and revoke all their active sessions atomically.
+
+        Callers responsible for persisting is_active=False on the User row before
+        or after calling this helper.  Revokes all non-revoked sessions so that
+        ongoing refresh rotations are blocked immediately (A05 requirement).
+        """
+        sessions = (
+            await db.execute(select(UserSession).where(UserSession.actor_id == actor_id))
+        ).scalars().all()
+        now = datetime.now(UTC)
+        for s in sessions:
+            if s.is_active:
+                s.revoked_at = now
+        user = (
+            await db.execute(select(User).where(User.id == actor_id))
+        ).scalar_one_or_none()
+        if user is not None:
+            user.is_active = False
+        await db.commit()
 
     async def logout(self, db: AsyncSession, *, session_id: str) -> None:
         """Revoke the session identified by *session_id*.
