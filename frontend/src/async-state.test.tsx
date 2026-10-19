@@ -19,11 +19,6 @@ import core from "./__fixtures__/core.json";
 // Synthetic report/version DTOs generated through the real Core services.
 import reportFixture from "./__fixtures__/report.json";
 
-// Cold jsdom/icon rendering on the Intel macOS CI runner can exceed the
-// testing-library default of one second. Wait for the completed screen state;
-// this does not add a fixed delay or retry a failed product assertion.
-vi.setConfig({ testTimeout: 15_000 });
-
 afterEach(() => {
   cleanup();
   delete window.apex;
