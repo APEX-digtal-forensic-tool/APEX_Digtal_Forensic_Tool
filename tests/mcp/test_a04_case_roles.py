@@ -437,3 +437,106 @@ def test_analyst_cannot_raw_read(keypair) -> None:
             tool_name="apex.view.raw_read",
             target_case_ids=frozenset({"case-X"}),
         )
+
+
+# ---------------------------------------------------------------------------
+# A04 follow-up: scopes are checked per target case, not from the token-wide union
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("other_role", ["VIEWER", "ANALYST", "APPROVER", "EXPORTER"])
+def test_raw_read_denied_in_case_where_actor_is_not_admin(keypair, other_role: str) -> None:
+    """ADMIN in case-A must not leak apex:raw into a case where the role lacks it."""
+    private_key, kid = keypair
+    token = _make_access_token(
+        private_key, kid,
+        case_roles={"case-A": "ADMIN", "case-B": other_role},
+    )
+    # The union scopes really do contain apex:raw (that is the leak being closed).
+    assert "apex:raw" in token.scopes
+    session = _session_from_token(token)
+    gate = FrontendAuthorizationGate()
+
+    with pytest.raises(McpAuthorizationDeniedError):
+        gate.require(
+            session, token, _descriptor(approval=True),
+            tool_name="apex.view.raw_read",
+            target_case_ids=frozenset({"case-B"}),
+        )
+    # The legitimate ADMIN case keeps working.
+    gate.require(
+        session, token, _descriptor(approval=True),
+        tool_name="apex.view.raw_read",
+        target_case_ids=frozenset({"case-A"}),
+    )
+
+
+def test_raw_read_allowed_when_admin_in_every_target_case(keypair) -> None:
+    private_key, kid = keypair
+    token = _make_access_token(
+        private_key, kid,
+        case_roles={"case-A": "ADMIN", "case-B": "ADMIN"},
+    )
+    session = _session_from_token(token)
+    FrontendAuthorizationGate().require(
+        session, token, _descriptor(approval=True),
+        tool_name="apex.view.raw_read",
+        target_case_ids=frozenset({"case-A", "case-B"}),
+    )
+
+
+def test_multi_case_target_requires_scope_in_every_case(keypair) -> None:
+    """A tool spanning case-A and case-B needs the scope in both, not just one."""
+    private_key, kid = keypair
+    token = _make_access_token(
+        private_key, kid,
+        case_roles={"case-A": "ADMIN", "case-B": "ANALYST"},
+    )
+    session = _session_from_token(token)
+    gate = FrontendAuthorizationGate()
+
+    with pytest.raises(McpAuthorizationDeniedError):
+        gate.require(
+            session, token, _descriptor(approval=True),
+            tool_name="apex.view.raw_read",
+            target_case_ids=frozenset({"case-A", "case-B"}),
+        )
+
+
+def test_scope_gated_mutation_unaffected_for_analyst_case(keypair) -> None:
+    """Regression guard: ANALYST still mutates in its own case (write/confirm scopes)."""
+    private_key, kid = keypair
+    token = _make_access_token(
+        private_key, kid,
+        case_roles={"case-A": "ADMIN", "case-B": "ANALYST"},
+    )
+    session = _session_from_token(token)
+    FrontendAuthorizationGate().require(
+        session, token, _descriptor(mutates=True, approval=True),
+        tool_name="evidence.update",
+        target_case_ids=frozenset({"case-B"}),
+    )
+
+
+def test_case_without_role_entry_is_denied_even_for_reads(keypair) -> None:
+    """A case id absent from case_roles grants no scopes at all."""
+    private_key, kid = keypair
+    token = _make_access_token(
+        private_key, kid,
+        case_roles={"case-A": "ADMIN"},
+    )
+    session = _session_from_token(token)
+    # Forge a session that lists case-Z as allowed while case_roles omits it.
+    forged = FrontendSession(
+        actor_id=session.actor_id,
+        session_id=session.session_id,
+        tenant_id=session.tenant_id,
+        allowed_case_ids=frozenset({"case-A", "case-Z"}),
+        roles=session.roles,
+    )
+    with pytest.raises(McpAuthorizationDeniedError):
+        FrontendAuthorizationGate().require(
+            forged, token, _descriptor(),
+            tool_name="some.read.tool",
+            target_case_ids=frozenset({"case-Z"}),
+        )

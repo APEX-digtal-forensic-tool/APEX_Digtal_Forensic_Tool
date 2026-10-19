@@ -10,6 +10,7 @@ from typing import Any, Protocol
 
 from mcp.server.auth.provider import AccessToken, principal_components
 
+from apex_backend.auth.scopes import scopes_for_roles
 from apex_mcp.confirmation import (
     ConfirmationGrant,
     ConfirmationProvider,
@@ -126,6 +127,22 @@ class FrontendAuthorizationGate:
                 tool_name,
                 required=tuple(f"scope:{scope}" for scope in missing),
             )
+
+        # A04: the token's ``scopes`` claim is the union over every case the actor can
+        # access, so it only proves the scope is held *somewhere*.  When the token
+        # carries per-case roles, each target case must itself grant every required
+        # scope through the actor's role in that case.
+        case_roles_claim = (access_token.claims or {}).get("case_roles") or {}
+        if case_roles_claim:
+            for case_id in sorted(target_case_ids):
+                role = str(case_roles_claim.get(case_id, "")).strip().upper()
+                case_scopes = scopes_for_roles(frozenset({role})) if role else frozenset()
+                case_missing = sorted(required_scopes - case_scopes)
+                if case_missing:
+                    raise McpAuthorizationDeniedError(
+                        tool_name,
+                        required=tuple(f"scope:{scope}" for scope in case_missing),
+                    )
 
         required_roles: frozenset[str] = frozenset()
         if tool_name in _APPROVAL_TOOLS:
