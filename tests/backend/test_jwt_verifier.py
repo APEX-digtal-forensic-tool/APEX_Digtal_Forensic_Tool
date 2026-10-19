@@ -36,7 +36,7 @@ def keypair():
 
 
 def _make_verifier(jwks_body: dict[str, Any]) -> JwtTokenVerifier:
-    """Return a verifier whose JWKS fetch is mocked."""
+    """Return a verifier with a populated cache; refreshes must be mocked by the test."""
     verifier = JwtTokenVerifier(
         jwks_uri="http://test/.well-known/jwks.json",
         cache_ttl_seconds=300,
@@ -167,7 +167,11 @@ async def test_reject_unknown_kid(keypair: Any) -> None:
     verifier._fetched_at = time.monotonic()
 
     token = _make_access_token(private_key, kid)
-    result = await verifier.verify_token(token)
+    # Unknown keys trigger a refresh even while the cached keys are fresh.
+    # Keep this rejection test offline: never resolve the synthetic host "test".
+    with patch.object(verifier, "_fetch_jwks", new_callable=AsyncMock) as refresh:
+        result = await verifier.verify_token(token)
+    refresh.assert_awaited_once()
 
     assert result is None
 
