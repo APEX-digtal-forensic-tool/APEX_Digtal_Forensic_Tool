@@ -1,6 +1,8 @@
 """Bounded signature carving with provenance, cancellation and protected derived output."""
 
 import hashlib
+import importlib
+import importlib.util
 import json
 import struct
 import zlib
@@ -13,7 +15,11 @@ from apex_forensic.adapters.evidence.factory import evidence_reader
 from apex_forensic.adapters.filesystem.pytsk import PyTskFileSystemProvider
 from apex_forensic.adapters.filesystem.unallocated import free_ranges
 from apex_forensic.application.services.evidence_image import EvidenceImageService
-from apex_forensic.domain.errors import OperationCancelledError, ValidationError
+from apex_forensic.domain.errors import (
+    OperationCancelledError,
+    UnsupportedCapabilityError,
+    ValidationError,
+)
 from apex_forensic.jobs import CancellationToken
 
 SIGNATURES = {
@@ -73,9 +79,8 @@ def candidate_length(kind: str, data: bytes) -> int | None:
         try:
             from io import BytesIO
 
-            from PIL import Image
-
-            with Image.open(BytesIO(data[:end])) as image:
+            image_module = importlib.import_module("PIL.Image")
+            with image_module.open(BytesIO(data[:end])) as image:
                 image.verify()
             return end
         except (ImportError, OSError, ValueError, SyntaxError):
@@ -127,6 +132,10 @@ class CarvingService:
             or not 1 <= max_results <= 10000
         ):
             raise ValidationError("Invalid carving limits or formats.")
+        if set(formats) & {"JPEG", "GIF"} and importlib.util.find_spec("PIL") is None:
+            raise UnsupportedCapabilityError(
+                "JPEG/GIF carving requires Pillow.", required_capability="PILLOW_IMAGE_VALIDATION"
+            )
         evidence = self.images._get_evidence(evidence_id)
         run_id = str(uuid4())
         root = output_root / run_id
