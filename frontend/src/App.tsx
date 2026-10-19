@@ -32,6 +32,7 @@ import {
 } from "./icons";
 import { gateway, GatewayError, unwrap, type Row } from "./gateway";
 import { ImageInspector } from "./ImageInspector";
+import { AiAssistant } from "./AiAssistant";
 import type { CaseRecord } from "./contracts/generated/case";
 import type { GuiContext } from "./contracts/generated/gui-session-context";
 import {
@@ -2109,27 +2110,10 @@ export function App() {
               <X size={18} />
             </button>
           </header>
-          <div className="card">
-            <Badge value="EXTERNAL_CONFIGURATION_REQUIRED" />
-            <h3>AI 서비스 연결이 필요합니다</h3>
-            <p className="muted">
-              현재 선택한 자료의 컨텍스트와 엔진의 데이터 정책을 사용합니다.
-              실제 AI 실행은 MCP·AI 런타임 연결 후 제공됩니다.
-            </p>
-          </div>
-          <Fields
-            value={{
-              case_id: caseId || null,
-              evidence_id: evidenceId || null,
-              session_context_id: context?.session_context_id,
-              current_route: route,
-              selected_resource: selected ? resource(selected) : null,
-            }}
+          <AiAssistant
+            caseId={caseId}
+            selected={selected ? resource(selected) : null}
           />
-          <button disabled>현재 선택 분석 요청</button>
-          <p className="muted small">
-            관찰 사실 · 추론 · 권고 · 인용을 구분하여 표시합니다.
-          </p>
         </aside>
       )}
       {dialog && (

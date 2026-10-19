@@ -99,6 +99,7 @@ export function createDemoBridge(): DesktopBridge {
   };
   return {
     async invoke(op, p) {
+      if (op === "ai.analyze") return fail("DESKTOP_REQUIRED");
       if (op === "runtime") return ok(core.runtime);
       if (op === "cases.list") return ok(data.cases);
       if (p.case_id && !data.cases.some((c) => c.id === p.case_id))

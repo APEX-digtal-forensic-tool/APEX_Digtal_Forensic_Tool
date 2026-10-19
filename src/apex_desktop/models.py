@@ -70,6 +70,13 @@ class Raw(View):
     length: int = Field(default=4096, ge=1, le=1048576)
 
 
+class AiAnalyze(CaseInput):
+    resource_type: Literal[
+        "FILE_SYSTEM_NODE", "ARTIFACT", "TIMELINE_EVENT", "SEARCH_RESULT", "MACHINE_CANDIDATE"
+    ]
+    resource_id: str = Field(min_length=1, max_length=255)
+
+
 class ImageInspect(CaseInput):
     resource_type: Literal["FILE_SYSTEM_NODE", "ARTIFACT"]
     resource_id: str = Field(min_length=1, max_length=255)

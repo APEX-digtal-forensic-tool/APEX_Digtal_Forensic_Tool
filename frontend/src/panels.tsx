@@ -439,22 +439,26 @@ export function Reports({
     [error, setError] = useState<unknown>(null),
     [busy, setBusy] = useState(false);
   const [exportResult, setExportResult] = useState<Row | null>(null);
+  const [reportCursor, setReportCursor] = useState<string | null>(null);
   // Keep the current version and review dialog mounted during a refresh, but
   // never show the previous report's details under a new selection.
   const data = detail?.report.report_id === selected ? detail : null;
   const loadRevision = useRef(0);
-  const load = async (id = selected) => {
+  const load = async (id = selected, refreshList = true) => {
     const revision = ++loadRevision.current;
     setBusy(true);
     try {
       const [list, detail] = await Promise.all([
-        gateway.call("reports.list", { case_id: caseId }),
+        refreshList ? gateway.call("reports.list", { case_id: caseId }) : null,
         id
           ? gateway.call("reports.get", { case_id: caseId, report_id: id })
           : null,
       ]);
       if (revision !== loadRevision.current) return;
-      setReports(list.items);
+      if (list) {
+        setReports(list.items);
+        setReportCursor(list.page?.next_cursor ?? null);
+      }
       setDetail(detail);
       setError(null);
     } catch (err) {
@@ -464,12 +468,31 @@ export function Reports({
     }
   };
   useEffect(() => {
-    void load();
+    void load(selected, !selected);
     return () => {
       loadRevision.current++;
     };
   }, [caseId, selected]);
   const versions: Row[] = data?.versions ?? [];
+  const loadMore = async () => {
+    if (!reportCursor || busy) return;
+    const revision = ++loadRevision.current;
+    setBusy(true);
+    try {
+      const next = await gateway.call("reports.list", {
+        case_id: caseId,
+        cursor: reportCursor,
+      });
+      if (revision !== loadRevision.current) return;
+      setReports((previous) => [...previous, ...next.items]);
+      setReportCursor(next.page?.next_cursor ?? null);
+      setError(null);
+    } catch (err) {
+      if (revision === loadRevision.current) setError(err);
+    } finally {
+      if (revision === loadRevision.current) setBusy(false);
+    }
+  };
   const version =
     versions.find((v) => v.report_version_id === versionId) ?? versions.at(-1);
   const approved =
@@ -502,6 +525,11 @@ export function Reports({
             <Badge value={r.status} />
           </button>
         ))}
+        {reportCursor && (
+          <button disabled={busy} onClick={() => void loadMore()}>
+            보고서 더 보기
+          </button>
+        )}
       </aside>
       <div className="report-body">
         {error != null && <ErrorState error={error} retry={() => load()} />}{" "}

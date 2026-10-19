@@ -8,11 +8,11 @@
       "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
       "justification": "The interpolated pagination fragment is selected from fixed SQL literals; all cursor values remain bound parameters.",
       "locations": [
-        "src/apex_forensic/adapters/artifacts/browser.py:1559",
-        "src/apex_forensic/adapters/artifacts/browser.py:1632",
-        "src/apex_forensic/adapters/artifacts/browser.py:1753",
-        "src/apex_forensic/adapters/artifacts/browser.py:1823",
-        "src/apex_forensic/adapters/artifacts/browser.py:1911"
+        "src/apex_forensic/adapters/artifacts/browser.py:1566",
+        "src/apex_forensic/adapters/artifacts/browser.py:1639",
+        "src/apex_forensic/adapters/artifacts/browser.py:1760",
+        "src/apex_forensic/adapters/artifacts/browser.py:1830",
+        "src/apex_forensic/adapters/artifacts/browser.py:1918"
       ]
     },
     {
@@ -20,11 +20,11 @@
       "disposition": "FALSE_POSITIVE_WITH_JUSTIFICATION",
       "justification": "Browser schema expressions use only hardcoded table and column choices after observed-schema membership checks; no evidence value becomes SQL syntax.",
       "locations": [
-        "src/apex_forensic/adapters/artifacts/browser.py:1991",
-        "src/apex_forensic/adapters/artifacts/browser.py:2085",
-        "src/apex_forensic/adapters/artifacts/browser.py:2168",
-        "src/apex_forensic/adapters/artifacts/browser.py:2968",
-        "src/apex_forensic/adapters/artifacts/browser.py:2980"
+        "src/apex_forensic/adapters/artifacts/browser.py:1998",
+        "src/apex_forensic/adapters/artifacts/browser.py:2092",
+        "src/apex_forensic/adapters/artifacts/browser.py:2175",
+        "src/apex_forensic/adapters/artifacts/browser.py:2975",
+        "src/apex_forensic/adapters/artifacts/browser.py:2987"
       ]
     },
     {

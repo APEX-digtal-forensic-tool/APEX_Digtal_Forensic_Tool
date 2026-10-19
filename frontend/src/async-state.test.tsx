@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
@@ -12,15 +12,119 @@ import {
 } from "@testing-library/react";
 import { App } from "./App";
 import { Reports } from "./panels";
+import { AiAssistant } from "./AiAssistant";
 import { createDemoBridge } from "./demoBridge";
 import type { Reply, Row } from "./gateway";
 import core from "./__fixtures__/core.json";
 // Synthetic report/version DTOs generated through the real Core services.
 import reportFixture from "./__fixtures__/report.json";
 
+// Cold jsdom/icon rendering on the Intel macOS CI runner can exceed the
+// testing-library default of one second. Wait for the completed screen state;
+// this does not add a fixed delay or retry a failed product assertion.
+vi.setConfig({ testTimeout: 15_000 });
+
 afterEach(() => {
   cleanup();
   delete window.apex;
+});
+
+it("resets a new file's byte offset before reading it", async () => {
+  const bridge = createDemoBridge();
+  const original = bridge.invoke.bind(bridge);
+  const reads: Row[] = [];
+  bridge.invoke = async (op, payload) => {
+    if (op === "raw.read") reads.push(payload);
+    return original(op, payload);
+  };
+  window.apex = bridge;
+  await openFiles();
+  fireEvent.click(
+    await within(await screen.findByRole("table")).findByText("README.txt"),
+  );
+  await waitFor(() => expect(reads.length).toBe(1));
+  fireEvent.change(screen.getByLabelText("원본 바이트 오프셋"), {
+    target: { value: "4096" },
+  });
+  fireEvent.submit(
+    screen.getByLabelText("원본 바이트 오프셋").closest("form")!,
+  );
+  await waitFor(() => expect(reads.at(-1)?.offset).toBe(4096));
+  const start = reads.length;
+  fireEvent.click(
+    within(screen.getByRole("table")).getByText("한글-분석노트.txt"),
+  );
+  await waitFor(() => expect(reads.length).toBeGreaterThan(start));
+  expect(reads.slice(start).every((p) => p.offset === 0)).toBe(true);
+});
+
+it("loads the next report page using the returned cursor", async () => {
+  const bridge = createDemoBridge();
+  const original = bridge.invoke.bind(bridge);
+  const report = reportFixture.report;
+  const cursors: unknown[] = [];
+  bridge.invoke = async (op, payload) => {
+    if (op === "reports.list") {
+      cursors.push(payload.cursor);
+      return {
+        ok: true,
+        data: {
+          items: [
+            {
+              ...report,
+              report_id: payload.cursor
+                ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                : report.report_id,
+              title: payload.cursor ? "다음 페이지 보고서" : report.title,
+            },
+          ],
+          page: {
+            has_more: !payload.cursor,
+            next_cursor: payload.cursor ? null : "next-report",
+          },
+        },
+      };
+    }
+    return original(op, payload);
+  };
+  window.apex = bridge;
+  render(
+    <Reports
+      caseId={reportFixture.case_id}
+      evidenceId=""
+      renderer={{}}
+      onNotice={() => {}}
+    />,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "보고서 더 보기" }),
+  );
+  await screen.findByText("다음 페이지 보고서");
+  expect(cursors).toEqual([undefined, "next-report"]);
+});
+
+it("does not show an AI result after the selected source changes", async () => {
+  const bridge = createDemoBridge();
+  const pending = deferred<Reply<Row>>();
+  bridge.invoke = async () => pending.promise;
+  window.apex = bridge;
+  const rendered = render(
+    <AiAssistant
+      caseId="case"
+      selected={{ type: "FILE_SYSTEM_NODE", id: "first" }}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "현재 선택 분석 요청" }));
+  rendered.rerender(
+    <AiAssistant
+      caseId="case"
+      selected={{ type: "FILE_SYSTEM_NODE", id: "second" }}
+    />,
+  );
+  await act(async () =>
+    pending.resolve({ ok: true, data: { status: "CONFIGURATION_REQUIRED" } }),
+  );
+  expect(screen.queryByText(/분석 요청을 저장했습니다/)).toBeNull();
 });
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -29,7 +133,7 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-async function openFiles() {
+async function openFiles(expectRows = true) {
   render(<App />);
   await screen.findByText("데모 · 합성 데이터");
   fireEvent.change(screen.getByLabelText("현재 사건"), {
@@ -41,6 +145,12 @@ async function openFiles() {
     ).toBe(core.evidence[0].id),
   );
   fireEvent.click(screen.getByRole("button", { name: "파일 시스템" }));
+  if (expectRows)
+    await waitFor(
+      () =>
+        expect(document.querySelector("#main-workspace table")).not.toBeNull(),
+      { timeout: 10_000 },
+    );
 }
 
 it.each([false, true])(
@@ -163,7 +273,7 @@ it.each([false, true])(
       return original(op, payload);
     };
     window.apex = bridge;
-    await openFiles();
+    await openFiles(false);
     await waitFor(() => expect(fileCalls).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("button", { name: "분석 시작" }));
     await waitFor(() => expect(fileCalls).toBeGreaterThan(1));

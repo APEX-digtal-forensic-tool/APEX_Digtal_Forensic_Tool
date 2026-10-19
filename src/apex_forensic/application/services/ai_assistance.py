@@ -983,6 +983,7 @@ class AiAssistanceService:
         *,
         assistance_request_id: str,
         operation: AiRequestedOperation | str,
+        provider: AiAssistanceProviderPort | None = None,
     ) -> dict[str, Any]:
         """Execute one approved provider operation and ingest its validated result.
 
@@ -1037,7 +1038,8 @@ class AiAssistanceService:
                 },
             )
 
-        provider_capability = self._provider.capabilities()
+        active_provider = provider or self._provider
+        provider_capability = active_provider.capabilities()
         if (
             not provider_capability.is_available
             or operation_value not in provider_capability.supported_operations
@@ -1054,11 +1056,13 @@ class AiAssistanceService:
 
         if operation_value == AiRequestedOperation.RECOMMEND_KEYWORDS.value:
             result: dict[str, Any] = self.generate_keyword_recommendations(
-                assistance_request_id=assistance_request_id
+                assistance_request_id=assistance_request_id,
+                provider=provider,
             )
         else:
             result = self.generate_scope_summary(
-                assistance_request_id=assistance_request_id
+                assistance_request_id=assistance_request_id,
+                provider=provider,
             ).to_schema_dict()
         return self._execution_result(
             request=request,

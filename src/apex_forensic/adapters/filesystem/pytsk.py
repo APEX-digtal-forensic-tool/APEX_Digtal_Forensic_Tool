@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import mimetypes
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from types import ModuleType
@@ -19,7 +21,7 @@ from apex_forensic.domain.enums import (
     FileSystemNodeType,
     FileSystemProviderCapability,
 )
-from apex_forensic.domain.errors import UnsupportedCapabilityError, ValidationError
+from apex_forensic.domain.errors import RawReadError, UnsupportedCapabilityError, ValidationError
 from apex_forensic.domain.models import Evidence, EvidenceVolume, FileSystemNode
 from apex_forensic.ports.filesystem_provider import (
     FileSystemProviderCapabilities,
@@ -44,7 +46,7 @@ class PyTskFileSystemProvider:
         available = self._dependency_available()
         capabilities = (
             FileSystemProviderCapability.IMAGE_FILE_SYSTEM,
-            FileSystemProviderCapability.METADATA_ONLY,
+            FileSystemProviderCapability.FILE_CONTENT,
             FileSystemProviderCapability.STABLE_RAW_LOCATOR,
             FileSystemProviderCapability.FILE_EXTENTS,
             FileSystemProviderCapability.DELETED_ENTRIES,
@@ -60,7 +62,7 @@ class PyTskFileSystemProvider:
                 "backend_available": available,
                 "unavailable_reason": None if available else "PYTSK3_NOT_INSTALLED",
                 "supported_filesystem_families": list(_SUPPORTED_FS_FAMILIES),
-                "reads_file_body": False,
+                "reads_file_body": available,
                 "follows_symlinks_by_default": False,
                 "deleted_entries": "CANDIDATE_METADATA",
                 "unallocated_file_carving": "PLANNED",
@@ -69,6 +71,59 @@ class PyTskFileSystemProvider:
 
     def supports_evidence(self, evidence: Evidence) -> bool:
         return evidence.evidence_type in _DISK_IMAGE_FORMATS
+
+    def available(self) -> bool:
+        return self._dependency_available()
+
+    @contextmanager
+    def open_file(self, evidence: Evidence, node: FileSystemNode) -> Iterator[Any]:
+        """Open the unnamed logical data stream of an indexed, allocated file."""
+        self._ensure_supported(evidence)
+        if (
+            node.provider_id != self.provider_id
+            or node.is_deleted
+            or node.is_link
+            or node.node_type is not FileSystemNodeType.FILE
+            or node.evidence_id != evidence.evidence_id
+            or node.case_id != evidence.case_id
+        ):
+            raise RawReadError("RAW_LOCATOR_UNSUPPORTED", "Not an allocated image file.")
+        index, tsk_path = self._split_volume_path(node.original_relative_path)
+        metadata = node.provider_metadata
+        if index != metadata.get("volume_index") or tsk_path != metadata.get("tsk_path"):
+            raise RawReadError("RAW_SOURCE_OUTSIDE_EVIDENCE", "Indexed image location differs.")
+        volume = self._volume_by_index(evidence, index)
+        if volume is None or volume.byte_offset != metadata.get("volume_byte_offset"):
+            raise RawReadError("RAW_SOURCE_CHANGED", "Indexed image volume changed.")
+        pytsk3 = self._pytsk3()
+        before = evidence.source_path.stat()
+        image = pytsk3.Img_Info(str(evidence.source_path))
+        filesystem = file = None
+        try:
+            filesystem = pytsk3.FS_Info(image, offset=volume.byte_offset)
+            file = filesystem.open_meta(inode=int(metadata["inode"]))
+            meta = file.info.meta
+            if (
+                meta is None
+                or int(meta.addr) != int(metadata["inode"])
+                or int(meta.type) != int(pytsk3.TSK_FS_META_TYPE_REG)
+                or int(meta.size) != node.file_size
+                or int(meta.flags) & int(pytsk3.TSK_FS_META_FLAG_UNALLOC)
+            ):
+                raise RawReadError("RAW_SOURCE_CHANGED", "Indexed image file changed.")
+            yield file
+            after = evidence.source_path.stat()
+            if (before.st_size, before.st_mtime_ns, before.st_ino) != (
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ino,
+            ):
+                raise RawReadError("RAW_SOURCE_CHANGED", "Image changed while reading.")
+        except (OSError, ValueError, OverflowError, KeyError) as error:
+            raise RawReadError("RAW_SOURCE_UNAVAILABLE", "Image file could not be read.") from error
+        finally:
+            file = filesystem = None
+            image.close()
 
     def get_root_node(self, evidence: Evidence, *, index_revision: int) -> FileSystemNode:
         self._ensure_supported(evidence)
@@ -461,7 +516,7 @@ class PyTskFileSystemProvider:
                 "slack": slack,
                 "timestamp_warnings": timestamp_warnings,
                 "entry_sort_key": self._entry_sort_key(name, inode),
-                "reads_file_body": False,
+                "reads_file_body": not is_deleted and node_type is FileSystemNodeType.FILE,
             },
             is_partial=bool(timestamp_warnings),
             index_revision=index_revision,

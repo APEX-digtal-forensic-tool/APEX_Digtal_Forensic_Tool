@@ -406,7 +406,7 @@ def test_invalid_timestamp_is_preserved_with_warning_and_other_files_survive(
     assert not by_name["GOOD.TXT"].is_partial
 
 
-def test_image_raw_read_is_not_advertised_or_interpreted_as_host_path(services, image_case):
+def test_image_raw_read_uses_logical_file_content_and_rejects_nonfiles(services, image_case):
     case, _, nodes, _ = image_case
     for node in nodes:
         projection = services.views.project(
@@ -415,6 +415,18 @@ def test_image_raw_read_is_not_advertised_or_interpreted_as_host_path(services, 
             resource_id=node.node_id,
             view_mode="RAW",
         )
+        if node.original_name == "LIVE.TXT":
+            assert "view.raw-read" in projection.available_actions
+            raw = services.views.raw_read(
+                case_id=case.case_id,
+                resource_type="FILE_SYSTEM_NODE",
+                resource_id=node.node_id,
+                length=4,
+            )
+            assert raw.text_preview == "LIVE"
+            assert raw.hex_preview == b"LIVE".hex()
+            assert raw.total_length == 4
+            continue
         assert "view.raw-read" not in projection.available_actions
         with pytest.raises(RawReadError) as error:
             services.views.raw_read(

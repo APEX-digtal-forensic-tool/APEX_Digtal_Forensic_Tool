@@ -21,6 +21,7 @@ from apex_forensic.domain.models.artifact import ArtifactQuery
 from apex_forensic.jobs.cancellation import CancellationToken
 from apex_forensic.runtime.capabilities import capability_report
 
+from . import ai as desktop_ai
 from . import models as m
 from .tasks import ProgressCallback, Tasks, encode
 
@@ -41,6 +42,7 @@ MODELS: dict[str, type[m.Input]] = {
     "view": m.View,
     "raw.read": m.Raw,
     "media.inspect": m.ImageInspect,
+    "ai.analyze": m.AiAnalyze,
     "context.create": m.ContextCreate,
     "context.get": m.ContextGet,
     "context.update": m.ContextUpdate,
@@ -121,7 +123,7 @@ def invoke(
             "session_id": session_id,
             "mode": "LOCAL_OFFLINE",
             "operations": list(MODELS),
-            "ai": s.ai.capabilities(),
+            "ai": desktop_ai.runtime(s),
             "renderer": RuntimeReportRenderer(output_root=exports).capabilities(),
         }
     if operation == "cases.list":
@@ -195,6 +197,8 @@ def invoke(
             locale=case.locale,
             timezone=case.timezone,
         )
+    if operation == "ai.analyze":
+        return desktop_ai.analyze(s, **p, actor=actor)
     if operation == "context.get":
         return s.contexts.get(p["session_context_id"])
     if operation == "context.update":

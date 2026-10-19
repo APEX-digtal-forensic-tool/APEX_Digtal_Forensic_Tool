@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { gateway, type Row } from "../gateway";
 import {
   ErrorState,
@@ -40,6 +40,8 @@ export function FileViewer({
     selected && ["ROOT", "DIRECTORY"].includes(selected.node_type);
   const resourceType = selected?._resource_type ?? "FILE_SYSTEM_NODE";
   const resourceId = selected?._resource_id ?? selected?.id;
+  const sourceKey = `${caseId}:${resourceType}:${resourceId}`;
+  const previousSource = useRef(sourceKey);
   const isImage =
     !directory &&
     /\.(png|jpe?g|gif|tiff?|bmp|webp)$/i.test(selected?.original_name ?? "");
@@ -50,6 +52,14 @@ export function FileViewer({
         ? "image"
         : "raw";
   useEffect(() => {
+    if (previousSource.current !== sourceKey) {
+      previousSource.current = sourceKey;
+      setOffset("0");
+      if (range.offset !== 0) {
+        setRange({ offset: 0, length: 4096 });
+        return;
+      }
+    }
     let live = true;
     setProjection(null);
     setRaw(null);

@@ -13,6 +13,7 @@ from threading import BoundedSemaphore
 from typing import Any
 from uuid import uuid4
 
+from apex_forensic.adapters.filesystem.content import EvidenceFileContent
 from apex_forensic.constants import ENGINE_VERSION
 from apex_forensic.domain.errors import ApexError
 
@@ -53,8 +54,7 @@ class ImageInspectionService:
         if (
             action not in {"PREVIEW", "EXTRACT"}
             or channel not in {"RGB", "R", "G", "B", "A"}
-            or (bit is not None
-            and not 0 <= bit <= 7)
+            or (bit is not None and not 0 <= bit <= 7)
             or not channels
             or len(set(channels)) != len(channels)
             or any(c not in "RGBA" for c in channels)
@@ -68,16 +68,20 @@ class ImageInspectionService:
         evidence = self._repository.get_evidence(node.evidence_id)
         if evidence is None or evidence.case_id != case_id:
             raise _error("CONTEXT_SCOPE_MISMATCH")
-        try:
-            path = self._path(evidence.source_path, node)
-        except OSError as error:
-            raise _error("MEDIA_SOURCE_UNAVAILABLE") from error
         with _DECODE_SLOTS:
             try:
-                with path.open("rb") as handle:
-                    content = handle.read(MAX_IMAGE_BYTES + 1)
-                if len(content) > MAX_IMAGE_BYTES:
+                if (node.file_size or 0) > MAX_IMAGE_BYTES:
                     raise _error("MEDIA_LIMIT_EXCEEDED")
+                if EvidenceFileContent.is_image(node):
+                    content = b"".join(
+                        EvidenceFileContent.chunks(evidence, node, limit=MAX_IMAGE_BYTES)
+                    )
+                else:
+                    path = self._path(evidence.source_path, node)
+                    with path.open("rb") as handle:
+                        content = handle.read(MAX_IMAGE_BYTES + 1)
+                    if len(content) > MAX_IMAGE_BYTES:
+                        raise _error("MEDIA_LIMIT_EXCEEDED")
                 source_hash = hashlib.sha256(content).hexdigest()
                 if expected_hash and source_hash != expected_hash:
                     raise _error("MEDIA_SOURCE_CHANGED")

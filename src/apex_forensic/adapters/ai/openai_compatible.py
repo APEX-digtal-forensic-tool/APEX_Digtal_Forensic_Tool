@@ -6,6 +6,7 @@ import http.client
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, ClassVar
@@ -75,8 +76,14 @@ class OpenAICompatibleProvider:
     max_result_items = 1_000
     max_summary_length = 20_000
 
-    def __init__(self, config: OpenAICompatibleConfig) -> None:
+    def __init__(
+        self,
+        config: OpenAICompatibleConfig,
+        *,
+        request_payload: Callable[[AiAssistanceRequest], dict[str, Any]] | None = None,
+    ) -> None:
         self._config = config
+        self._request_payload = request_payload
 
     @property
     def provider_id(self) -> str:
@@ -162,6 +169,13 @@ class OpenAICompatibleProvider:
         if cancellation_requested:
             raise OperationCancelledError("AI provider request was cancelled before dispatch.")
         self._require_available()
+        # A trusted integration can evaluate and serialize the exact representation
+        # immediately before dispatch. Never replace it with the original request.
+        outgoing = (
+            self._request_payload(request)
+            if self._request_payload is not None
+            else _redact(request.to_schema_dict())
+        )
         body = {
             "model": self._config.model,
             "temperature": self._config.temperature,
@@ -172,6 +186,11 @@ class OpenAICompatibleProvider:
                     "content": (
                         "Return only JSON that matches the APEX AI ingest contract. "
                         "Do not include chain-of-thought or raw provider metadata."
+                        " For SUMMARIZE_SCOPE return title, summary_text, key_points (strings),"
+                        " citations (objects supplied in the request),"
+                        " and scope_context_id when available. If only structural projection"
+                        " fields are supplied, summarize only those fields; do not infer evidence"
+                        " contents. Return an empty citations list in that case."
                     ),
                 },
                 {
@@ -180,7 +199,7 @@ class OpenAICompatibleProvider:
                         {
                             "prompt_template_version": PROMPT_TEMPLATE_VERSION,
                             "operation": operation,
-                            "request": _redact(request.to_schema_dict()),
+                            "request": outgoing,
                             "citation_required": True,
                             "request_policy": self._config.request_policy,
                         },

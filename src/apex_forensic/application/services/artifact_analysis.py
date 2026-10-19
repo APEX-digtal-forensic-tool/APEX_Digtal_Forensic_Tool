@@ -10,13 +10,15 @@ import os
 import stat
 import time
 import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from apex_forensic._time import parse_timestamp, to_json_timestamp
 from apex_forensic.adapters.artifacts.windows.common import source_id_for
+from apex_forensic.adapters.filesystem.content import EvidenceFileContent
 from apex_forensic.domain.enums import (
     AnalysisProfileType,
     ArtifactCoverageStatus,
@@ -27,7 +29,12 @@ from apex_forensic.domain.enums import (
     JobType,
     ProgressUnit,
 )
-from apex_forensic.domain.errors import NotFoundError, StateConflictError, ValidationError
+from apex_forensic.domain.errors import (
+    ApexError,
+    NotFoundError,
+    StateConflictError,
+    ValidationError,
+)
 from apex_forensic.domain.models import (
     ArtifactCoverage,
     ArtifactIssue,
@@ -540,14 +547,14 @@ class ArtifactAnalysisService:
             state.coverage.processed_sources += 1
             return
         try:
-            file_path = self._path_for_node(state.evidence, node)
-            result = analyzer.analyze(
-                evidence=state.evidence,
-                node=node,
-                source=source,
-                file_path=file_path,
-                item_budget=self._analyzer_item_budget(state, source),
-            )
+            with self._source_path(state.evidence, node, state.cancellation_token) as file_path:
+                result = analyzer.analyze(
+                    evidence=state.evidence,
+                    node=node,
+                    source=source,
+                    file_path=file_path,
+                    item_budget=self._analyzer_item_budget(state, source),
+                )
         except Exception as analyzer_error:
             issue_data = ArtifactIssue(
                 severity="ERROR",
@@ -811,6 +818,29 @@ class ArtifactAnalysisService:
         source: ArtifactSource,
     ) -> str | None:
         try:
+            if EvidenceFileContent.is_image(node):
+                if source.source_kind is ArtifactSourceKind.BROWSER_SQLITE_DB:
+                    components = {
+                        "main": node,
+                        **{
+                            item.original_name[len(node.original_name) + 1 :]: item
+                            for item in self._sidecars(evidence, node)
+                            if item.original_name.endswith(("-wal", "-shm"))
+                        },
+                    }
+                    return canonical_sha256(
+                        {
+                            "source_path": node.display_path,
+                            "component_hashes": {
+                                key: EvidenceFileContent.sha256(evidence, item)
+                                for key, item in components.items()
+                            },
+                            "component_sizes": {
+                                key: item.file_size for key, item in components.items()
+                            },
+                        }
+                    )
+                return EvidenceFileContent.sha256(evidence, node)
             file_path = self._path_for_node(evidence, node)
             if source.source_kind is ArtifactSourceKind.BROWSER_SQLITE_DB:
                 return _browser_sqlite_source_fingerprint(file_path)
@@ -820,9 +850,37 @@ class ArtifactAnalysisService:
                 ArtifactSourceKind.AUDIO_FILE,
             }:
                 return _sha256_file(file_path)
-        except (OSError, ValidationError):
+        except (OSError, ApexError):
             return None
         return None
+
+    def _sidecars(self, evidence: Evidence, node: Any) -> tuple[Any, ...]:
+        return tuple(
+            item
+            for item in self._fs_repository.list_fs_nodes_for_evidence(evidence.evidence_id)
+            if item.parent_node_id == node.parent_node_id
+            and item.original_name
+            in {node.original_name + suffix for suffix in ("-wal", "-shm", "-journal")}
+            and EvidenceFileContent.supports(evidence, item)
+        )
+
+    @contextmanager
+    def _source_path(
+        self,
+        evidence: Evidence,
+        node: Any,
+        token: CancellationToken | None = None,
+    ) -> Iterator[Path]:
+        if not EvidenceFileContent.is_image(node):
+            yield self._path_for_node(evidence, node)
+        else:
+            with EvidenceFileContent.materialize(
+                evidence,
+                node,
+                siblings=self._sidecars(evidence, node),
+                cancellation_token=token,
+            ) as path:
+                yield path
 
     def _record_issue_for_state(
         self,

@@ -145,10 +145,12 @@ describe("desktop screens through the bridge", () => {
     fireEvent.click(screen.getByText("작업 0"));
     expect(screen.queryByRole("button", { name: /일시정지|Pause/ })).toBeNull();
   });
-  it("AI stays visibly unconfigured", async () => {
+  it("AI requires a selected resource before requesting analysis", async () => {
     render(<App />);
     fireEvent.click(screen.getByTitle("AI 도우미"));
-    expect(screen.getByText("AI 서비스 연결이 필요합니다")).toBeTruthy();
+    expect(
+      screen.getByText(/현재 선택을 고정한 뒤 사건 정책을 검사합니다/),
+    ).toBeTruthy();
     expect(
       (
         screen.getByRole("button", {

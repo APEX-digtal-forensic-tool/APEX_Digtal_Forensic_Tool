@@ -31,6 +31,7 @@ const operations = new Set([
   "view",
   "raw.read",
   "media.inspect",
+  "ai.analyze",
   "context.create",
   "context.get",
   "context.update",
