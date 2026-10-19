@@ -64,14 +64,38 @@ export function MachineSettings() {
       </p>
       <p>
         STT는 녹음의 음성을 글자로 바꾸는 기능입니다. API 키가 아닌 음성 인식용
-        모델 파일을 PC에 한 번 준비한 뒤 선택하면 오프라인으로 실행할 수
-        있습니다.
+        로컬 모델을 사용합니다. 설치 파일의 기본 다국어 모델로 한국어·영어를
+        오프라인에서 분석할 수 있습니다. 별도의 계정이나 다운로드는 필요하지
+        않습니다.
       </p>
       {error != null && <ErrorState error={error} />}
       {!data ? (
         !error && <Loading />
       ) : (
         <>
+          <h4>로컬 기능 준비 상태</h4>
+          <ul>
+            <li>
+              기본 STT 모델:{" "}
+              {data.bundled_stt?.available
+                ? data.bundled_stt.name
+                : "내장 모델 없음 · 소스 실행 시 자산 준비 또는 모델 선택 필요"}
+            </li>
+            <li>
+              영상 프레임 FFmpeg:{" "}
+              {data.media?.ffmpeg?.is_available ? "준비됨" : "준비 필요"}
+            </li>
+            <li>
+              영상·음성 정보 ffprobe:{" "}
+              {data.media?.ffprobe?.is_available ? "준비됨" : "준비 필요"}
+            </li>
+            <li>
+              DPAPI 복호화 엔진:{" "}
+              {data.dpapi?.runtime_status === "IMPLEMENTED_RUNTIME"
+                ? "준비됨 · 대상의 키·자격정보는 별도 필요"
+                : "라이브러리 준비 필요"}
+            </li>
+          </ul>
           {data.managed && (
             <p>환경변수로 관리되는 설정입니다. 실행 환경에서 변경해주세요.</p>
           )}
@@ -133,14 +157,19 @@ export function MachineSettings() {
               음성 모델 선택
             </button>
             <p>
-              {settings.model_label ?? settings.stt_model_path ?? "모델 미설정"}
+              {settings.model_label ??
+                settings.stt_model_path ??
+                (settings.stt_provider === "faster-whisper" &&
+                data.bundled_stt?.available
+                  ? "내장 다국어 모델 사용"
+                  : "모델 미설정")}
             </p>
             {settings.stt_provider === "faster-whisper" ? (
               <p>
-                Faster Whisper/CTranslate2 모델의 전체 폴더를 선택하세요.
-                model.bin, config.json, tokenizer.json, vocabulary 파일이
-                필요합니다. 한국어는 다국어 모델을 사용하세요. 이름이 .en으로
-                끝나는 모델은 영어 전용입니다.
+                더 큰 모델을 사용하려면 Faster Whisper/CTranslate2 모델의 전체
+                폴더를 선택하세요. model.bin, config.json, tokenizer.json,
+                vocabulary 파일이 필요합니다. 한국어는 다국어 모델을 사용하세요.
+                이름이 .en으로 끝나는 모델은 영어 전용입니다.
               </p>
             ) : (
               <p>
@@ -159,7 +188,9 @@ export function MachineSettings() {
                 }))
               }
             >
-              음성 모델 설정 해제
+              {settings.stt_provider === "faster-whisper"
+                ? "기본 내장 모델로 복원"
+                : "음성 모델 설정 해제"}
             </button>
             <button disabled={busy} onClick={() => void save()}>
               분석기 설정 저장
@@ -172,7 +203,14 @@ export function MachineSettings() {
           </p>
           <details>
             <summary>실행 가능 여부</summary>
-            <Fields value={{ ocr: data.ocr, stt: data.stt }} />
+            <Fields
+              value={{
+                ocr: data.ocr,
+                stt: data.stt,
+                media: data.media,
+                dpapi: data.dpapi,
+              }}
+            />
           </details>
         </>
       )}

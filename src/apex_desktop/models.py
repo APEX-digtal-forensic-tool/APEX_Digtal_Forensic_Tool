@@ -128,6 +128,13 @@ class ImageInspect(CaseInput):
     max_dimension: int = Field(default=1536, ge=256, le=4096)
 
 
+class VideoInspect(CaseInput):
+    resource_type: Literal["FILE_SYSTEM_NODE", "ARTIFACT"]
+    resource_id: str = Field(min_length=1, max_length=255)
+    timestamp_seconds: float = Field(default=0, ge=0, le=604800, allow_inf_nan=False)
+    max_dimension: int = Field(default=1536, ge=256, le=2048)
+
+
 class ContextCreate(CaseInput):
     pass
 

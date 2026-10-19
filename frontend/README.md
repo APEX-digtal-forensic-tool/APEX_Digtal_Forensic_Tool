@@ -8,7 +8,8 @@ Electron + React + TypeScript 데스크톱 앱입니다. 같은 저장소의 `ap
 
 ```powershell
 # 저장소 루트, Python 3.12 / Node.js 24 / uv 필요
-uv sync --locked --extra desktop --extra report-renderer
+uv sync --locked --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction --extra advanced-secrets
+uv run --no-sync python tools/prepare_desktop_assets.py
 cd frontend
 npm ci
 npm run dev

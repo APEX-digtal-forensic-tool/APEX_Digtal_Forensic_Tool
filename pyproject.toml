@@ -25,6 +25,7 @@ desktop = [
 ]
 desktop-build = [
   "pyinstaller>=6,<7",
+  "httpx>=0.27,<1",
 ]
 dev = [
   "bandit>=1.9,<2",

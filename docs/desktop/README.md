@@ -1,6 +1,8 @@
 # Windows / macOS 앱 및 로컬 API
 
-> 최신 기능 연결과 모델/API 설정은 [미구현·미연결 기능 후속 구현](../engine/completed-connections-2026-10-19.md)을 참고하세요. 아래 초기 구현 범위보다 E01/VHD/VHDX·복구·ADS·카빙·OCR/STT·AI 본문 기능이 확장되었습니다.
+> 최신 Windows 내장 도구·모델 구성은 [API 없는 로컬 실행 구성](offline-runtime-2026-10-19.md)을 참고하세요.
+
+> 이전 기능 연결과 모델/API 설정은 [미구현·미연결 기능 후속 구현](../engine/completed-connections-2026-10-19.md)을 참고하세요. 아래 초기 구현 범위보다 E01/VHD/VHDX·복구·ADS·카빙·OCR/STT·AI 본문 기능이 확장되었습니다.
 
 ## 범위와 기준
 
@@ -16,7 +18,8 @@ Windows x64 또는 macOS, Python 3.12, Node.js 24, uv가 필요합니다. 아래
 
 ```powershell
 uv python install 3.12
-uv sync --locked --python 3.12 --extra desktop --extra report-renderer
+uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction --extra advanced-secrets
+uv run --no-sync python tools/prepare_desktop_assets.py
 cd frontend
 npm ci
 npm run dev
@@ -73,7 +76,7 @@ GUI 컨텍스트 수정은 revision 순서로 직렬화합니다. 충돌 시 최
 
 ```sh
 # 저장소 루트, Windows/macOS 공통
-uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction
+uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction --extra advanced-secrets
 uv run --no-sync python tools/build_desktop_runtime.py
 uv run --no-sync python tools/verify_desktop_runtime.py
 cd frontend
@@ -82,7 +85,7 @@ npm ci
 
 Windows에서는 `npm run dist:win`, Mac에서는 `npm run dist:mac`을 실행합니다. 기존 `pwsh -File tools/build_desktop_runtime.ps1`도 공통 Python 빌더를 호출합니다.
 
-PyInstaller가 Core·로컬 API·기본 파일시스템 의존성·보고서 렌더러를 `desktop-runtime/`에 묶습니다. electron-builder는 Windows NSIS `.exe`, macOS `.dmg` 및 `.zip`을 `frontend/release/`에 만듭니다. Mac은 현재 호스트 아키텍처로 빌드하며, Intel과 Apple Silicon 패키지는 각각 해당 환경에서 생성합니다. Universal 바이너리나 다른 OS로의 교차 빌드는 제공하지 않습니다.
+빌드 시 고정 버전·SHA-256을 확인한 다국어 STT 모델과 Windows용 FFmpeg/ffprobe를 내려받습니다. 설치 후에는 모델 다운로드가 필요하지 않습니다. PyInstaller가 Core·로컬 API·파일시스템·보고서·OCR/STT 실행기·고급 DPAPI 의존성을 `desktop-runtime/`에 묶습니다. electron-builder는 Windows NSIS `.exe`, macOS `.dmg` 및 `.zip`을 `frontend/release/`에 만듭니다. Mac은 현재 호스트 아키텍처로 빌드하며, Intel과 Apple Silicon 패키지는 각각 해당 환경에서 생성합니다. Universal 바이너리나 다른 OS로의 교차 빌드는 제공하지 않습니다.
 
 개인 Mac에서 서명 인증서를 사용하지 않고 로컬 빌드를 확인하려면 `CSC_IDENTITY_AUTO_DISCOVERY=false npm run dist:mac`을 사용합니다. 공개 배포를 위한 Developer ID 서명·공증, 자동 업데이트는 별도 설정이 필요합니다. 로컬 빌드 성공은 배포용 서명 검증을 뜻하지 않습니다.
 

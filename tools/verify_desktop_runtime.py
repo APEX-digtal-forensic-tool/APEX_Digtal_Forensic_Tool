@@ -10,6 +10,7 @@ import secrets
 import subprocess
 import sys
 import time
+import wave
 from pathlib import Path
 from queue import Queue
 from tempfile import TemporaryDirectory
@@ -31,7 +32,13 @@ def main() -> None:
         root = Path(tmp).resolve()
         process = subprocess.Popen(
             [str(executable.resolve()), "--data-dir", str(root / "data")],
-            env={**os.environ, "APEX_DESKTOP_TOKEN": token},
+            env={
+                **os.environ,
+                "APEX_DESKTOP_TOKEN": token,
+                "HF_HUB_OFFLINE": "1",
+                "HF_HUB_DISABLE_TELEMETRY": "1",
+                "ORT_DISABLE_TELEMETRY": "1",
+            },
             stdout=subprocess.PIPE,
             text=True,
         )
@@ -82,12 +89,24 @@ def main() -> None:
                 assert result["ok"], result.get("error")
                 return result["data"]
 
-            assert operation("runtime", {})["capabilities"]
+            capabilities = operation("runtime", {})["capabilities"]["capabilities"]
+            assert capabilities
+            assert (
+                next(c for c in capabilities if c["id"] == "dpapi-impacket")["status"]
+                == "AVAILABLE"
+            )
+            local_tools = operation("machine.capabilities", {})
+            assert local_tools["bundled_stt"]["available"]
+            assert local_tools["stt"]["is_available"]
+            assert local_tools["dpapi"]["runtime_status"] == "IMPLEMENTED_RUNTIME"
+            if sys.platform == "win32":
+                assert local_tools["media"]["ffmpeg"]["is_available"]
+                assert local_tools["media"]["ffprobe"]["is_available"]
             case_id = operation("cases.create", {"name": "Packaged runtime fixture"})["id"]
             assert operation("cases.list", {})[0]["id"] == case_id
 
             def wait_task(task):
-                deadline = time.monotonic() + 60
+                deadline = time.monotonic() + 180
                 while time.monotonic() < deadline:
                     record = next(
                         item
@@ -209,7 +228,90 @@ def main() -> None:
                     )
                     assert raw["text_preview"] == "E01 가상 디스크의 실제 내용", raw
                 assert hashlib.sha256(source.read_bytes()).hexdigest() == item["sha256"]
-            print("Packaged indexing, search, E01/VHD/VHDX content and local OCR: PASS")
+
+            def register_file(source):
+                eid = wait_task(
+                    operation(
+                        "evidence.register",
+                        {
+                            "case_id": case_id,
+                            "source_path": str(source),
+                        },
+                    )
+                )["result"]["id"]
+                wait_task(
+                    operation(
+                        "analysis.start",
+                        {
+                            "case_id": case_id,
+                            "evidence_id": eid,
+                            "kind": "FILES",
+                            "profile_type": "FULL_ANALYSIS",
+                        },
+                    )
+                )
+                return operation("files.roots", {"case_id": case_id, "evidence_id": eid})[0]
+
+            # Native inference must load bundled multilingual weights with Hub offline.
+            audio = root / "offline-silence.wav"
+            with wave.open(str(audio), "wb") as handle:
+                handle.setnchannels(1)
+                handle.setsampwidth(2)
+                handle.setframerate(16000)
+                handle.writeframes(b"\x00\x00" * 32000)
+            audio_hash = hashlib.sha256(audio.read_bytes()).hexdigest()
+            node = register_file(audio)
+            operation("machine.configure", {"stt_provider": "faster-whisper"})
+            result = wait_task(
+                operation(
+                    "machine.run",
+                    {
+                        "case_id": case_id,
+                        "node_id": node["id"],
+                        "kind": "STT",
+                        "language": "ko",
+                    },
+                )
+            )
+            assert result["result"]["node_id"] == node["id"]
+            assert hashlib.sha256(audio.read_bytes()).hexdigest() == audio_hash
+            if sys.platform == "win32":
+                # Use the shipped executable, not a CI runner's global FFmpeg installation.
+                ffmpeg = executable.resolve().parent / "assets/media/bin/ffmpeg.exe"
+                video = root / "offline-video.mp4"
+                subprocess.run(
+                    [
+                        str(ffmpeg),
+                        "-v",
+                        "error",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "color=c=red:s=32x24:d=1:r=2",
+                        "-c:v",
+                        "mpeg4",
+                        str(video),
+                    ],
+                    check=True,
+                    timeout=30,
+                    capture_output=True,
+                )
+                before = hashlib.sha256(video.read_bytes()).hexdigest()
+                node = register_file(video)
+                frame = operation(
+                    "media.video",
+                    {
+                        "case_id": case_id,
+                        "resource_type": "FILE_SYSTEM_NODE",
+                        "resource_id": node["id"],
+                        "timestamp_seconds": 0.5,
+                    },
+                )
+                assert frame["metadata"]["width"] == 32
+                assert base64.b64decode(frame["image_url"].split(",", 1)[1]).startswith(b"\x89PNG")
+                assert frame["source_sha256"] == before
+                assert hashlib.sha256(video.read_bytes()).hexdigest() == before
+            print("Packaged image content, OCR, offline multilingual STT, DPAPI and media: PASS")
         finally:
             process.terminate()
             try:

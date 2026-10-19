@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from apex_forensic.constants import ENGINE_VERSION
+from apex_forensic.runtime.assets import media_executable
 
 AVAILABLE = "AVAILABLE"
 AVAILABLE_WITH_LIMITATIONS = "AVAILABLE_WITH_LIMITATIONS"
@@ -314,7 +315,11 @@ def _executable_capability(
     executable_name: str,
     version_args: tuple[str, ...],
 ) -> dict[str, Any]:
-    executable = shutil.which(executable_name)
+    executable = (
+        media_executable(executable_name)
+        if executable_name in {"ffmpeg", "ffprobe"}
+        else shutil.which(executable_name)
+    )
     if executable is None:
         return _capability(
             capability_id,

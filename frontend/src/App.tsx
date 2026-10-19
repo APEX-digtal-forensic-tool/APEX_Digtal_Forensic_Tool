@@ -34,6 +34,7 @@ import {
 } from "./icons";
 import { gateway, GatewayError, unwrap, type Row } from "./gateway";
 import { ImageInspector } from "./ImageInspector";
+import { VideoInspector } from "./VideoInspector";
 import { AiAssistant } from "./AiAssistant";
 import type { CaseRecord } from "./contracts/generated/case";
 import type { GuiContext } from "./contracts/generated/gui-session-context";
@@ -1578,17 +1579,24 @@ export function App() {
             </div>
             {inspector && route === "FILE_SYSTEM" && (
               <>
-              <ForensicTools caseId={caseId} evidenceId={evidenceId} selected={selected}
-                onTask={() => { setJobsOpen(true); refresh(); }} />
-              <FileViewer
-                key={`${caseId}:${evidenceId}:${selected?._resource_type ?? "FILE_SYSTEM_NODE"}:${selected?.id ?? "empty"}`}
-                caseId={caseId}
-                selected={selected}
-                height={inspectorHeight}
-                onHeight={setInspectorHeight}
-                onCollect={collectCitations}
-                onSelect={select}
-              />
+                <ForensicTools
+                  caseId={caseId}
+                  evidenceId={evidenceId}
+                  selected={selected}
+                  onTask={() => {
+                    setJobsOpen(true);
+                    refresh();
+                  }}
+                />
+                <FileViewer
+                  key={`${caseId}:${evidenceId}:${selected?._resource_type ?? "FILE_SYSTEM_NODE"}:${selected?.id ?? "empty"}`}
+                  caseId={caseId}
+                  selected={selected}
+                  height={inspectorHeight}
+                  onHeight={setInspectorHeight}
+                  onCollect={collectCitations}
+                  onSelect={select}
+                />
               </>
             )}
             {inspector && route !== "FILE_SYSTEM" && (
@@ -1714,6 +1722,18 @@ export function App() {
                             selected.original_name ?? selected.title ?? "",
                           ))) && (
                         <ImageInspector
+                          key={`${caseId}:${resource(selected).type}:${resource(selected).id}`}
+                          caseId={caseId}
+                          resourceType={resource(selected).type}
+                          resourceId={resource(selected).id}
+                        />
+                      )}
+                      {(selected.artifact_type === "MEDIA_VIDEO" ||
+                        (resource(selected).type === "FILE_SYSTEM_NODE" &&
+                          /\.(mp4|m4v|mov|3gp|3g2|avi|mkv|webm)$/i.test(
+                            selected.original_name ?? selected.title ?? "",
+                          ))) && (
+                        <VideoInspector
                           key={`${caseId}:${resource(selected).type}:${resource(selected).id}`}
                           caseId={caseId}
                           resourceType={resource(selected).type}

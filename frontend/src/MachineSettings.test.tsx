@@ -61,3 +61,25 @@ it("exposes a missing model and disables environment-managed settings", async ()
       .hasAttribute("disabled"),
   ).toBe(true);
 });
+
+it("uses and restores the bundled model without a file picker or API key", async () => {
+  const call = vi.spyOn(gateway, "call").mockResolvedValue({
+    ...capabilities,
+    settings: { ...capabilities.settings, stt_model_path: null },
+    bundled_stt: { available: true, name: "Whisper base · 다국어" },
+    media: { ffmpeg: { is_available: true }, ffprobe: { is_available: true } },
+    dpapi: { runtime_status: "IMPLEMENTED_RUNTIME" },
+  });
+  render(<MachineSettings />);
+  await screen.findByText("내장 다국어 모델 사용");
+  fireEvent.click(screen.getByText("기본 내장 모델로 복원"));
+  fireEvent.click(screen.getByText("분석기 설정 저장"));
+  await waitFor(() =>
+    expect(call).toHaveBeenCalledWith("machine.configure", {
+      ocr_provider: "auto",
+      stt_provider: "faster-whisper",
+      model_reference: null,
+      tessdata_reference: undefined,
+    }),
+  );
+});

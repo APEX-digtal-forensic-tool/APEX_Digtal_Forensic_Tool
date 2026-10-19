@@ -31,6 +31,7 @@ const operations = new Set([
   "view",
   "raw.read",
   "media.inspect",
+  "media.video",
   "ai.analyze",
   "ai.prepare",
   "machine.capabilities",

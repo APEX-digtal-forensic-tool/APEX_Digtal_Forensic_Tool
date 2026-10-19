@@ -9,6 +9,7 @@ from apex_forensic.adapters.report.runtime import RuntimeReportRenderer
 from apex_forensic.application.services.carving import CarvingService
 from apex_forensic.application.services.file_streams import FileStreamService
 from apex_forensic.application.services.image_inspection import ImageInspectionService
+from apex_forensic.application.services.video_inspection import VideoInspectionService
 from apex_forensic.config import ServiceBundle
 from apex_forensic.domain.enums import (
     AiSecretHandling,
@@ -55,6 +56,7 @@ MODELS: dict[str, type[m.Input]] = {
     "view": m.View,
     "raw.read": m.Raw,
     "media.inspect": m.ImageInspect,
+    "media.video": m.VideoInspect,
     "ai.analyze": m.AiAnalyze,
     "context.create": m.ContextCreate,
     "context.get": m.ContextGet,
@@ -255,6 +257,8 @@ def invoke(
             with destination.open("x", encoding="utf-8") as handle:
                 json.dump(result, handle, ensure_ascii=False, indent=2)
         return result
+    if operation == "media.video":
+        return VideoInspectionService(s.repository).inspect(**p)
     if operation == "context.create":
         case = s.cases.get_case(case_id)
         return s.contexts.create(

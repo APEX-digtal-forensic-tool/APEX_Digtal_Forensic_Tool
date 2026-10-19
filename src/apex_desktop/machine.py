@@ -16,6 +16,7 @@ from apex_forensic.adapters.machine_extraction.stt import local_model_available
 from apex_forensic.config import ServiceBundle
 from apex_forensic.domain.errors import ApexError, OperationCancelledError, ValidationError
 from apex_forensic.jobs import CancellationToken
+from apex_forensic.runtime.assets import bundled_stt_model
 
 
 def config(root: Path) -> dict[str, Any]:
@@ -53,7 +54,11 @@ def save_config(root: Path, values: dict[str, Any]) -> dict[str, Any]:
 def providers(root: Path) -> tuple[Any, Any]:
     settings = config(root)
     ocr = settings["ocr_provider"]
-    model = Path(settings["stt_model_path"]) if settings["stt_model_path"] else None
+    model = (
+        Path(settings["stt_model_path"])
+        if settings["stt_model_path"]
+        else (bundled_stt_model() if settings["stt_provider"] == "faster-whisper" else None)
+    )
     tessdata = Path(settings["tessdata_path"]) if settings["tessdata_path"] else None
     tesseract = TesseractCliOcrProvider(tessdata_prefix=tessdata)
     ocr_provider = (
@@ -70,12 +75,21 @@ def providers(root: Path) -> tuple[Any, Any]:
 
 
 def capabilities(root: Path) -> dict[str, Any]:
+    from apex_forensic.adapters.artifacts.media import _ffmpeg_capability, _ffprobe_capability
+    from apex_forensic.adapters.decryption.dpapi import DpapiOfflineProvider
+
     ocr, stt = providers(root)
     return {
         "settings": config(root),
         "managed": os.environ.get("APEX_DESKTOP_MACHINE_CONFIG") is not None,
         "ocr": ocr.capabilities().to_schema_dict(),
         "stt": stt.capabilities().to_schema_dict(),
+        "bundled_stt": {
+            "available": bundled_stt_model() is not None,
+            "name": "Whisper base · 다국어 (한국어·영어 포함)",
+        },
+        "media": {"ffmpeg": _ffmpeg_capability(), "ffprobe": _ffprobe_capability()},
+        "dpapi": DpapiOfflineProvider().capabilities().to_schema_dict(),
     }
 
 

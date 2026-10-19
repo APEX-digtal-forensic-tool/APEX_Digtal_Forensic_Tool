@@ -1,4 +1,8 @@
 export const errorMessages: Record<string, string> = {
+  VIDEO_LIMIT_EXCEEDED:
+    "영상 프레임 해상도 한도를 초과했습니다. 최대 8K UHD에 해당하는 33,177,600픽셀까지 지원합니다.",
+  VIDEO_FRAME_FAILED:
+    "영상 프레임을 읽지 못했습니다. 영상 길이 안의 시각인지 확인해주세요. 손상 파일·미지원 코덱 또는 디코딩 시간·크기 한도 초과일 수 있습니다.",
   STT_MODEL_INVALID:
     "음성 모델 구성이 올바르지 않습니다. Faster Whisper는 model.bin·config.json·tokenizer.json·vocabulary 파일이 있는 전체 폴더를, whisper.cpp는 모델 파일을 선택하세요.",
   STT_LANGUAGE_UNSUPPORTED:
@@ -12,9 +16,9 @@ export const errorMessages: Record<string, string> = {
   MEDIA_LIMIT_EXCEEDED:
     "이미지 분석 한도를 초과했습니다. 최대 64 MiB·2,500만 픽셀을 지원합니다. 미리보기 크기를 줄여 다시 시도할 수 있습니다.",
   MEDIA_SOURCE_CHANGED:
-    "등록된 분석 결과와 현재 이미지 해시가 다릅니다. 원본을 확인한 뒤 미디어를 다시 분석해주세요.",
+    "등록된 분석 결과와 현재 미디어 해시가 다릅니다. 원본을 확인한 뒤 미디어를 다시 분석해주세요.",
   MEDIA_SOURCE_UNAVAILABLE:
-    "이미지 원본을 읽을 수 없습니다. 연결된 증거와 파일의 읽기 가능 상태를 확인해주세요. 링크와 삭제 파일은 직접 분석할 수 없습니다.",
+    "미디어 원본을 읽을 수 없습니다. 연결된 증거와 파일의 읽기 가능 상태를 확인해주세요. 링크와 삭제 파일은 직접 분석할 수 없습니다.",
   MEDIA_DECODE_FAILED:
     "이미지를 디코딩하지 못했습니다. 파일 손상 또는 지원하지 않는 이미지 형식인지 확인해주세요.",
   MEDIA_FORMAT_UNSUPPORTED:
