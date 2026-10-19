@@ -160,7 +160,9 @@ class LogicalDirectoryFileSystemProvider:
             child_path = Path(entry.path)
             try:
                 child_path = self._validate_inside_root(root, child_path, follow=False)
-                stat_result = entry.stat(follow_symlinks=False)
+                # Windows DirEntry.stat() returns zero for inode/device/nlink.
+                # Query the path without following links to retain real identity.
+                stat_result = child_path.stat(follow_symlinks=False)
             except FileNotFoundError as error:
                 results.append(
                     ProviderScanIssue(

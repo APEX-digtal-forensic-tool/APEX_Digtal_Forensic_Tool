@@ -94,8 +94,15 @@ class EvidenceFileContent:
         else:
             path = cls.logical_path(evidence, node)
             try:
+                path_before = path.stat()
                 with path.open("rb") as handle:
                     before = os.fstat(handle.fileno())
+                    identity_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+                    if any(
+                        getattr(before, key) != getattr(path_before, key)
+                        for key in identity_fields
+                    ):
+                        raise RawReadError("RAW_SOURCE_CHANGED", "File changed while opening.")
                     if not stat.S_ISREG(before.st_mode) or before.st_size != node.file_size:
                         raise RawReadError("RAW_SOURCE_CHANGED", "Indexed file size changed.")
                     indexed = {
@@ -103,6 +110,12 @@ class EvidenceFileContent:
                         "st_ino": node.fs_metadata.get("inode"),
                         "st_dev": node.fs_metadata.get("device"),
                     }
+                    # Older Windows directory indexes used DirEntry.stat(), which
+                    # supplies zero for both identifiers. Preserve those indexes
+                    # without treating unknown values as real file identities.
+                    if node.platform == "win32" and indexed["st_ino"] == indexed["st_dev"] == 0:
+                        indexed.pop("st_ino")
+                        indexed.pop("st_dev")
                     if any(
                         value is not None and value != getattr(before, key)
                         for key, value in indexed.items()
@@ -111,10 +124,13 @@ class EvidenceFileContent:
                     yield handle
                     after = os.fstat(handle.fileno())
                     current = regular_path(path).stat()
-                    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+                    # On Windows/Python 3.12, stat and fstat can expose different
+                    # ctime meanings (birth vs change time). Compare ctime only
+                    # within the same API, retaining change detection for both.
+                    fields = (*identity_fields, "st_ctime_ns")
                     if any(
-                        getattr(before, key) != getattr(info, key)
-                        for info in (after, current)
+                        getattr(previous, key) != getattr(info, key)
+                        for previous, info in ((before, after), (path_before, current))
                         for key in fields
                     ):
                         raise RawReadError("RAW_SOURCE_CHANGED", "File changed while reading.")

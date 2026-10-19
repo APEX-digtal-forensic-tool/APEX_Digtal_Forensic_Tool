@@ -51,6 +51,32 @@
   E01/VHD/VHDX 내부 내용, 실제 OCR·오프라인 다국어 STT, DPAPI 로딩을 확인했다.
   Linux 소스 프로세스 검사이며 이 결과를 새 Windows 설치 파일 검증으로 대체하지 않는다.
 
+## 후속 Windows CI 실패 수정
+
+위 로컬 검증 이후 `f6838806`의 Windows Desktop CI에서 **7 failed, 81 passed,
+6 skipped**가 발생했다. macOS ARM/Intel 및 MCP 검사는 성공했다. Linux 테스트
+통과가 Windows 동작 확인을 대신하지 못한 회귀 오류다.
+
+- Python 3.12 Windows에서 경로 `stat()`와 열린 핸들 `fstat()`의 `ctime` 의미가
+  다를 수 있는데 이를 서로 비교해 변경되지 않은 파일을 `RAW_SOURCE_CHANGED`로
+  거부했다. AI 입력 준비·STT 임시 사본·Hex 읽기·이미지 검사에서 실패했다.
+- Windows `DirEntry.stat()`는 inode/device/nlink를 0으로 반환한다. 이를 실제
+  파일 식별값으로 저장·비교하면 디렉터리 내부 파일에서도 잘못된 변경 오류가 발생한다.
+- 수정: 경로 상태는 경로끼리, 핸들 상태는 핸들끼리 읽기 전후 비교한다. 경로와
+  핸들 사이에서는 식별값·크기·수정 시각을 비교한다. `ctime` 검사를 삭제하지 않았다.
+- 디렉터리 인덱싱은 링크를 따라가지 않는 경로 `stat`으로 실제 식별정보를 기록한다.
+  기존 Windows 인덱스의 inode/device가 모두 0인 경우에만 알 수 없는 식별값으로
+  처리하며, 크기·수정 시각 및 현재 읽기 전후 식별정보 검사는 유지한다.
+- Windows의 시간값 차이, 기존 0 식별값 인덱스, 디렉터리 식별값 저장 오류를
+  재현한 검사 **3개가 수정 전 실패**했고 수정 후 통과했다. 읽는 중 핸들의
+  `ctime`만 바뀌어도 계속 거부하는 검사도 추가했다.
+- 원본 무결성 회귀 검사 11개를 Windows/macOS Desktop CI에 포함하고 해당 테스트
+  파일 변경도 워크플로 실행 조건에 추가했다. 관련 로컬 검사 **35개 통과**,
+  Ruff·mypy 통과. 최종 전체 테스트와 네이티브 CI 결과는 PR 본문에 기록한다.
+
+참고: [Python 3.12 os 문서](https://docs.python.org/3.12/library/os.html#os.DirEntry.stat),
+[CPython Windows stat 구현](https://github.com/python/cpython/blob/3.12/Modules/posixmodule.c).
+
 ## 남아 있는 검증/지원 한계
 
 - 실제 원격 AI 제공자 호출은 API 설정 제공 후 검증할 항목이다. 현재는 준비·가림·검토·정책·가짜 전송 경로를 검사한다.
