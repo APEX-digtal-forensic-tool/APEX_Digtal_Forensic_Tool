@@ -4,7 +4,7 @@
 
 이 문서는 앞선 `frontend-engine-integration-2026-10-19.md`에서 남아 있던 6개 기능의 후속 구현을 설명한다. 모든 포렌식 형식·암호화·손상 조합에서 오류가 없다는 보증은 아니다.
 
-추가 재점검에서 발견한 결함의 수정 내용과 STT 모델 준비 방법은 [전체 연결 재점검](reaudit-2026-10-19.md)을 함께 확인한다. 아래 검증 수치는 첫 구현 시점의 기록이다.
+추가 재점검은 [최종 경계 검사](final-audit-2026-10-19.md)를, 최신 설치 구성은 [API 없는 로컬 실행](../desktop/offline-runtime-2026-10-19.md)을 따른다. 아래 검증 수치는 첫 구현 시점의 기록이다.
 
 ## 기능별 실제 경로
 
@@ -42,14 +42,14 @@ $env:APEX_AI_API_KEY = '실제 키'
 
 Windows 설치 파일에 RapidOCR·ONNX Runtime·Faster Whisper 라이브러리를 포함한다. 빌드 단계에서 영어/기본 OCR 및 한국어 OCR 모델을 확보·체크섬 검증한 후 묶는다. 설치된 앱의 OCR 실행 시 원본을 외부에 보내지 않는다. 소스 환경의 첫 RapidOCR 초기화는 공개 모델을 다운로드할 수 있다.
 
-- OCR 자동 선택은 설치된 Tesseract를 우선 사용하고, 없으면 RapidOCR를 사용한다. RapidOCR의 한국어 선택은 한국어 인식 모델을 사용한다. Tesseract는 선택한 언어의 traineddata가 있어야 한다.
-- STT는 **설정 → 로컬 OCR·음성 인식 → 음성 모델 선택**에서 Faster Whisper/CTranslate2 모델 폴더를 선택한다. 폴더에는 `model.bin`, `config.json`, `tokenizer.json`, `vocabulary.*` 등 해당 모델 파일이 필요하다. whisper.cpp를 선택하면 로컬 실행 파일과 모델 파일이 필요하다.
-- STT 모델은 API 키와 별개다. 앱이 임의 모델을 자동 다운로드하지 않는다. 작은 영어 전용 모델은 한국어 음성 인식용 모델을 대신하지 않는다.
+- OCR 자동 선택은 설치된 Tesseract가 요청 언어를 지원하면 사용하고, 그렇지 않으면 사용 가능한 RapidOCR로 전환한다. 한국어 RapidOCR 모델도 설치 파일에 포함한다. Tesseract를 명시적으로 선택할 때는 해당 언어의 traineddata가 필요하다.
+- 최신 설치 파일에는 **Whisper base 다국어 모델**이 들어 있다. 사용자 지정 모델이 없으면 이를 자동 선택하므로 기본 STT에는 모델 선택이나 API 키가 필요하지 않다. 다른 Faster Whisper/CTranslate2 모델을 사용할 때만 설정에서 전체 폴더를 선택한다. whisper.cpp는 실행 파일과 호환 모델을 별도로 준비하는 선택적 대체 분석기다.
+- 모델 다운로드는 빌드 단계에서 수행한다. 설치된 앱의 기본 추론은 로컬 파일만 사용하며, 영어 전용 `.en` 모델을 사용자 지정했을 때는 한국어 요청을 거부한다.
 - 설정은 앱 데이터 폴더의 `machine-settings.json`에 보관한다. `APEX_DESKTOP_MACHINE_CONFIG`로 관리되는 환경에서는 UI 덮어쓰기를 거부한다.
 - PyAV 19가 faster-whisper 1.2의 `metadata_errors` 인자를 제거한 호환성 문제를 실제 실행에서 발견하여 `av<19`로 제한했다.
 
 ```sh
-uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction --extra dev
+uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction --extra advanced-secrets --extra dev
 uv run --no-sync python tools/build_desktop_runtime.py
 uv run --no-sync python tools/verify_desktop_runtime.py
 cd frontend

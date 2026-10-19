@@ -29,6 +29,9 @@ export function ForensicTools({
   const file = selected?.node_type === "FILE";
   const imageFile = selected?.provider_id === "apex.pytsk_filesystem_provider";
   useEffect(() => {
+    setCarveOffset("0");
+  }, [caseId, evidenceId]);
+  useEffect(() => {
     revision.current++;
     setResult(null);
     setError(null);
@@ -111,6 +114,7 @@ export function ForensicTools({
                 스트림
                 <select
                   aria-label="데이터 스트림"
+                  disabled={busy}
                   value={streamId}
                   onChange={(e) => {
                     setStreamId(e.target.value);
@@ -128,14 +132,19 @@ export function ForensicTools({
               <label>
                 스트림 오프셋
                 <input
+                  disabled={busy}
                   value={offset}
-                  onChange={(e) => setOffset(e.target.value)}
+                  onChange={(e) => {
+                    setOffset(e.target.value);
+                    setResult(null);
+                  }}
                 />
               </label>
               <button
                 disabled={
                   busy ||
                   !streamId ||
+                  !offset.trim() ||
                   !Number.isSafeInteger(Number(offset)) ||
                   Number(offset) < 0
                 }
@@ -172,6 +181,7 @@ export function ForensicTools({
           <label>
             언어
             <select
+              disabled={busy}
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
             >
@@ -213,7 +223,11 @@ export function ForensicTools({
           </p>
           <label>
             탐색 범위
-            <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <select
+              disabled={busy}
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+            >
               <option value="UNALLOCATED">미할당 영역</option>
               <option value="IMAGE">이미지 전체</option>
             </select>
@@ -222,6 +236,7 @@ export function ForensicTools({
             한 작업의 탐색량 (MiB)
             <input
               type="number"
+              disabled={busy}
               min="1"
               max="1048576"
               value={budget}
@@ -231,6 +246,7 @@ export function ForensicTools({
           <label>
             탐색 시작 오프셋
             <input
+              disabled={busy}
               value={carveOffset}
               onChange={(e) => setCarveOffset(e.target.value)}
             />
@@ -238,8 +254,11 @@ export function ForensicTools({
           <button
             disabled={
               busy ||
+              !budget.trim() ||
               !Number.isSafeInteger(Number(budget)) ||
               Number(budget) < 1 ||
+              Number(budget) > 1048576 ||
+              !carveOffset.trim() ||
               !Number.isSafeInteger(Number(carveOffset)) ||
               Number(carveOffset) < 0
             }

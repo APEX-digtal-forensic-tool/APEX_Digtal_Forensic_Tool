@@ -211,7 +211,14 @@ class Tasks:
             self.records[task_id] = record
             token = CancellationToken.new()
             self.tokens[task_id] = token
-            self._save()
+            try:
+                self._save()
+            except Exception:
+                # Admission failed: no worker will run this record. Leaving it
+                # QUEUED would permanently consume one of the 16 queue slots.
+                self.records.pop(task_id, None)
+                self.tokens.pop(task_id, None)
+                raise
 
         def progress(job: Job) -> None:
             with self.lock:
@@ -255,7 +262,17 @@ class Tasks:
                     self.tokens.pop(task_id, None)
                     self._save()
 
-        self.pool.submit(worker)
+        try:
+            self.pool.submit(worker)
+        except Exception:
+            with self.lock:
+                self.records.pop(task_id, None)
+                self.tokens.pop(task_id, None)
+                # The executor may have shut down between admission and submit.
+                # Remove the already-written receipt as well as the in-memory slot.
+                with contextlib.suppress(OSError):
+                    self._save()
+            raise
         return record.copy()
 
     def cancel(self, case_id: str, task_id: str) -> TaskRecord:

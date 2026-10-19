@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -91,8 +92,36 @@ class EvidenceFileContent:
             with PyTskFileSystemProvider().open_file(evidence, node) as handle:
                 yield handle
         else:
-            with cls.logical_path(evidence, node).open("rb") as handle:
-                yield handle
+            path = cls.logical_path(evidence, node)
+            try:
+                with path.open("rb") as handle:
+                    before = os.fstat(handle.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_size != node.file_size:
+                        raise RawReadError("RAW_SOURCE_CHANGED", "Indexed file size changed.")
+                    indexed = {
+                        "st_mtime_ns": node.raw_timestamps.get("modified"),
+                        "st_ino": node.fs_metadata.get("inode"),
+                        "st_dev": node.fs_metadata.get("device"),
+                    }
+                    if any(
+                        value is not None and value != getattr(before, key)
+                        for key, value in indexed.items()
+                    ):
+                        raise RawReadError("RAW_SOURCE_CHANGED", "Indexed file identity changed.")
+                    yield handle
+                    after = os.fstat(handle.fileno())
+                    current = regular_path(path).stat()
+                    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+                    if any(
+                        getattr(before, key) != getattr(info, key)
+                        for info in (after, current)
+                        for key in fields
+                    ):
+                        raise RawReadError("RAW_SOURCE_CHANGED", "File changed while reading.")
+            except OSError as error:
+                raise RawReadError(
+                    "RAW_SOURCE_UNAVAILABLE", "Source file is unavailable."
+                ) from error
 
     @staticmethod
     def _read(handle: Any, offset: int, length: int) -> bytes:
@@ -120,7 +149,10 @@ class EvidenceFileContent:
         if offset > size:
             raise RawReadError("RAW_RANGE_INVALID", "Offset is beyond file EOF.")
         with cls.open(evidence, node) as handle:
-            data = cls._read(handle, offset, min(length, size - offset))
+            expected = min(length, size - offset)
+            data = cls._read(handle, offset, expected)
+            if len(data) != expected:
+                raise RawReadError("RAW_SOURCE_CHANGED", "Unexpected end of source file.")
         check_cancel(cancellation_token)
         return data
 
@@ -165,14 +197,12 @@ class EvidenceFileContent:
         cancellation_token: CancellationToken | None = None,
     ) -> Iterator[Path]:
         """Supply path-only parsers with a disposable copy, including SQLite sidecars."""
-        if not cls.is_image(node):
-            yield cls.logical_path(evidence, node)
-            return
+        check_cancel(cancellation_token)
         sources = (node, *siblings)
         if sum(item.file_size or 0 for item in sources) > MAX_MATERIALIZED_BYTES:
             raise RawReadError("RAW_READ_LIMIT_EXCEEDED", "Source and sidecars exceed limit.")
         # TemporaryDirectory creates a private directory; it is removed on every exit.
-        with TemporaryDirectory(prefix="apex-image-source-") as temp:
+        with TemporaryDirectory(prefix="apex-source-") as temp:
             primary = Path(temp) / "source"
             for item in sources:
                 suffix = (

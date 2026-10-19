@@ -2,6 +2,7 @@
 import React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -23,6 +24,83 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+it("does not carry a carving resume offset into another evidence", () => {
+  const onTask = vi.fn();
+  const view = render(
+    <ForensicTools
+      caseId="case"
+      evidenceId="one"
+      selected={null}
+      onTask={onTask}
+    />,
+  );
+  fireEvent.click(screen.getByText("복구·카빙·OCR·ADS"));
+  fireEvent.click(screen.getByText("파일 시그니처 카빙"));
+  fireEvent.change(screen.getByLabelText("탐색 시작 오프셋"), {
+    target: { value: "268435440" },
+  });
+  view.rerender(
+    <ForensicTools
+      caseId="case"
+      evidenceId="two"
+      selected={null}
+      onTask={onTask}
+    />,
+  );
+  fireEvent.click(screen.getByText("복구·카빙·OCR·ADS"));
+  expect(
+    (screen.getByLabelText("탐색 시작 오프셋") as HTMLInputElement).value,
+  ).toBe("0");
+  for (const value of ["", "1048577", "1.5"]) {
+    fireEvent.change(screen.getByLabelText("한 작업의 탐색량 (MiB)"), {
+      target: { value },
+    });
+    expect(screen.getByText("카빙 시작").hasAttribute("disabled")).toBe(true);
+  }
+});
+
+it("keeps stream selection and offset fixed until the requested read completes", async () => {
+  let finish!: (value: any) => void;
+  vi.spyOn(gateway, "call").mockImplementation(async (op) =>
+    op === "files.streams"
+      ? { streams: [{ id: 2, name: "hidden", size: 20 }] }
+      : new Promise((resolve) => {
+          finish = resolve;
+        }),
+  );
+  render(
+    <ForensicTools
+      caseId="case"
+      evidenceId="evidence"
+      onTask={vi.fn()}
+      selected={{
+        id: "node",
+        node_type: "FILE",
+        provider_id: "apex.pytsk_filesystem_provider",
+      }}
+    />,
+  );
+  fireEvent.click(screen.getByText("복구·카빙·OCR·ADS"));
+  fireEvent.click(screen.getByText("NTFS 데이터 스트림 (ADS)"));
+  fireEvent.click(screen.getByText("데이터 스트림 조회"));
+  await screen.findByRole("option", { name: "hidden · 20 bytes" });
+  fireEvent.click(screen.getByText("스트림 읽기"));
+  expect(screen.getByLabelText("데이터 스트림").hasAttribute("disabled")).toBe(
+    true,
+  );
+  expect(screen.getByLabelText("스트림 오프셋").hasAttribute("disabled")).toBe(
+    true,
+  );
+  await act(async () => finish({ text_preview: "selected stream bytes" }));
+  expect(screen.getByLabelText("데이터 스트림").hasAttribute("disabled")).toBe(
+    false,
+  );
+  fireEvent.change(screen.getByLabelText("스트림 오프셋"), {
+    target: { value: " " },
+  });
+  expect(screen.getByText("스트림 읽기").hasAttribute("disabled")).toBe(true);
 });
 
 it("sends the selected ADS id and offset and registers export tasks", async () => {

@@ -3129,24 +3129,19 @@ class SafeRawRangeReader:
         path = (
             evidence.source_path if image_file else EvidenceFileContent.logical_path(evidence, node)
         )
-        total_length = node.file_size or 0 if image_file else path.stat().st_size
+        total_length = node.file_size or 0
         absolute_offset = base_offset + offset
         if absolute_offset > total_length:
             raise RawReadError(
                 "RAW_RANGE_INVALID", "Raw read offset is beyond EOF.", target="offset"
             )
-        if image_file:
-            data = EvidenceFileContent.read(
-                evidence,
-                node,
-                offset=absolute_offset,
-                length=read_length,
-                cancellation_token=cancellation_token,
-            )
-        else:
-            with path.open("rb") as handle:
-                handle.seek(absolute_offset)
-                data = handle.read(read_length)
+        data = EvidenceFileContent.read(
+            evidence,
+            node,
+            offset=absolute_offset,
+            length=read_length,
+            cancellation_token=cancellation_token,
+        )
         self._check_cancel(cancellation_token)
         returned_length = len(data)
         hash_data = hashlib.sha256(data).hexdigest()

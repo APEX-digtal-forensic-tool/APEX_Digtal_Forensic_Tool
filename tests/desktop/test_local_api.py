@@ -401,6 +401,15 @@ def test_image_scope_changed_source_links_and_bounds(client, tmp_path, monkeypat
     )
     path.unlink()
     path.write_bytes(b"not an image")
+    # Re-index the new bytes so this exercises decoding, not stale-source rejection.
+    wait(
+        client,
+        args["case_id"],
+        call(
+            client, "analysis.start", case_id=args["case_id"],
+            evidence_id=artifact["evidence_id"], kind="FILES", profile_type="FULL_ANALYSIS",
+        ),
+    )
     node_args = {
         **args,
         "resource_type": "FILE_SYSTEM_NODE",

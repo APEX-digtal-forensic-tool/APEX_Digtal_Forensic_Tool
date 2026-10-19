@@ -61,7 +61,12 @@ export const errorMessages: Record<string, string> = {
   DEMO_SEARCH_MODE_UNSUPPORTED:
     "더미 데이터 검색은 TERM·PHRASE·PREFIX·EXACT를 지원합니다. 정규식 검색은 실제 데스크톱 엔진에서 사용할 수 있습니다.",
   STATE_CONFLICT: "최신 상태와 요청이 충돌합니다. 새로고침 후 확인해주세요.",
-  RAW_READ_LIMIT_EXCEEDED: "원본은 한 번에 최대 1 MiB까지 읽을 수 있습니다.",
+  RAW_READ_LIMIT_EXCEEDED:
+    "원본 읽기 또는 분석용 사본의 크기 제한을 초과했습니다. 범위를 줄이거나 해당 기능의 파일 크기 제한을 확인해주세요.",
+  RAW_SOURCE_CHANGED:
+    "인덱싱 이후 또는 읽는 중에 원본 파일이 변경되었습니다. 증거 무결성을 확인하고 다시 인덱싱해주세요.",
+  RAW_SOURCE_UNAVAILABLE:
+    "원본 파일을 읽을 수 없습니다. 증거 경로와 접근 권한을 확인해주세요.",
   RAW_RANGE_NOT_SATISFIABLE: "원본 데이터 범위를 벗어났습니다.",
   AUTH_LOGIN_FAILED: "이메일, 비밀번호 또는 테넌트 ID를 확인해주세요.",
   AUTH_ORIGIN_INVALID:
