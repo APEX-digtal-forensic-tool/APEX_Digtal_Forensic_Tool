@@ -113,6 +113,7 @@ class RapidOcrProvider:
             )
         language = "korean" if "kor" in requested else "default"
         if self._engine is None or self._engine_language != language:
+            importlib.import_module("onnxruntime").disable_telemetry_events()
             rapidocr = importlib.import_module("rapidocr")
             if language == "korean":
                 types = importlib.import_module("rapidocr.utils.typings")

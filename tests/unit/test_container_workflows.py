@@ -102,6 +102,26 @@ def png_bytes():
     return buffer.getvalue()
 
 
+def test_empty_deleted_file_is_recovered_as_empty_not_unreadable(services, tmp_path):
+    path = tmp_path / "empty-deleted.img"
+    _write_fat12_image(path)
+    image = bytearray(path.read_bytes())
+    entry = image.index(b"\xe5ELETED")
+    image[entry + 28:entry + 32] = bytes(4)  # Deleted entry with zero logical size.
+    path.write_bytes(image)
+    before = hashlib.sha256(image).hexdigest()
+    _, _, nodes = index_image(services, path)
+    deleted = next(n for n in nodes.values() if n.is_deleted)
+    result = services.images.recover_deleted_file(
+        node_id=deleted.node_id, output_root=tmp_path / "recovered-empty"
+    )
+    assert Path(result["output_path"]).read_bytes() == b""
+    assert result["recovered_bytes"] == result["logical_size"] == 0
+    assert result["sha256"] == hashlib.sha256(b"").hexdigest()
+    assert result["partial"] is False
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == before
+
+
 def test_ewf_rejects_unrelated_extra_segment_and_segment_symlink(tmp_path):
     from apex_forensic.adapters.evidence.container import ContainerImageReader
 

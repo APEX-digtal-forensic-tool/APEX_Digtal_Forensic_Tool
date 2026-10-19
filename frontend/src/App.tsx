@@ -2058,6 +2058,11 @@ export function App() {
                       TIMELINE: "타임라인",
                       HASH: "무결성 해시",
                       VERIFY: "무결성 재검증",
+                      RECOVERY: "삭제 파일 복구",
+                      STREAM_EXPORT: "NTFS 스트림 내보내기",
+                      CARVING: "파일 시그니처 카빙",
+                      OCR: "문자 추출",
+                      STT: "음성 인식",
                     }[t.kind as string] ?? t.kind}
                   </strong>
                   <Badge value={t.status} />

@@ -230,6 +230,10 @@ else {
           ["tessdata_reference", "tessdata_path"],
         ]) {
           if (payload[referenceKey] !== undefined) {
+            if (payload[referenceKey] === null) {
+              configured[pathKey] = null;
+              continue;
+            }
             const path = picked.get(String(payload[referenceKey]));
             if (!path) return fail("PICKER_REFERENCE_REQUIRED");
             configured[pathKey] = path;

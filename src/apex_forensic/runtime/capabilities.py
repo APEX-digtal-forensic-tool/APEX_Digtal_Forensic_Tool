@@ -418,6 +418,7 @@ def _onnxruntime_capability() -> dict[str, Any]:
     )
     if capability["status"] == AVAILABLE:
         module = importlib.import_module("onnxruntime")
+        module.disable_telemetry_events()
         capability["details"] = {"providers": list(module.get_available_providers())}
     return capability
 

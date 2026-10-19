@@ -1,4 +1,12 @@
 export const errorMessages: Record<string, string> = {
+  STT_MODEL_INVALID:
+    "음성 모델 구성이 올바르지 않습니다. Faster Whisper는 model.bin·config.json·tokenizer.json·vocabulary 파일이 있는 전체 폴더를, whisper.cpp는 모델 파일을 선택하세요.",
+  STT_LANGUAGE_UNSUPPORTED:
+    "이 모델은 영어 전용입니다. 한국어 음성을 인식하려면 다국어 모델을 선택해주세요.",
+  MACHINE_SETTINGS_MANAGED:
+    "환경변수로 관리되는 분석기 설정입니다. 실행 환경의 APEX_DESKTOP_MACHINE_CONFIG를 변경해주세요.",
+  AI_TEXT_EXTRACTION_REQUIRED:
+    "텍스트로 읽을 수 없는 파일입니다. 이미지·음성은 OCR·STT를 실행하고 추출 후보에서 분석을 요청하세요.",
   ARCHIVE_REQUIRES_EXTRACTION:
     "이 파일은 압축 파일입니다. 원본을 보관하고 별도 폴더에 압축을 해제한 뒤 ‘폴더 추가’로 가져오세요. 압축 파일 내부의 파일시스템 분석은 지원하지 않습니다.",
   MEDIA_LIMIT_EXCEEDED:
@@ -6,7 +14,7 @@ export const errorMessages: Record<string, string> = {
   MEDIA_SOURCE_CHANGED:
     "등록된 분석 결과와 현재 이미지 해시가 다릅니다. 원본을 확인한 뒤 미디어를 다시 분석해주세요.",
   MEDIA_SOURCE_UNAVAILABLE:
-    "이미지 원본을 읽을 수 없습니다. 연결된 증거 폴더와 파일을 확인해주세요. 링크 또는 디스크 이미지 내부의 픽셀 분석은 지원하지 않습니다.",
+    "이미지 원본을 읽을 수 없습니다. 연결된 증거와 파일의 읽기 가능 상태를 확인해주세요. 링크와 삭제 파일은 직접 분석할 수 없습니다.",
   MEDIA_DECODE_FAILED:
     "이미지를 디코딩하지 못했습니다. 파일 손상 또는 지원하지 않는 이미지 형식인지 확인해주세요.",
   MEDIA_FORMAT_UNSUPPORTED:

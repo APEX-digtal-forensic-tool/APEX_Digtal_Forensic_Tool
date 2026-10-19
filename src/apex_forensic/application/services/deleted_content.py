@@ -53,7 +53,7 @@ def recover_logical(
                 dest.write(data)
                 digest.update(data)
                 cursor += count
-        if copied == 0:
+        if copied == 0 and node.file_size > 0:
             raise ValidationError("Deleted file recovery produced no readable bytes.")
         check_cancel()
         images._publish_output(temp, output, overwrite=overwrite)

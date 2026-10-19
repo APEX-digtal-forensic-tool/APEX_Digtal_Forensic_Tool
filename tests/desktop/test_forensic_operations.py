@@ -4,6 +4,7 @@ import base64
 import gzip
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from test_local_api import call, wait
@@ -105,6 +106,9 @@ def test_machine_task_persists_candidates_and_real_source_locator(
     class Provider:
         provider_id = "synthetic-runtime"
         provider_version = "1.0"
+
+        def capabilities(self):
+            return SimpleNamespace(metadata={"languages": ["eng", "kor"]})
 
         def analyze_image(self, path, **kwargs):
             seen.append((path.read_bytes(), kwargs))

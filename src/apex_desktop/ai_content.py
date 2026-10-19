@@ -24,8 +24,11 @@ def redact_text(text: str) -> str:
         flags=re.S,
     )
     text = re.sub(
-        r"(?i)\b(password|passwd|api[_-]?key|access[_-]?token|secret|authorization)"
-        r"\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)",
+        r"(?i)(?<![\w-])[\"']?"
+        r"(password|passwd|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|authorization)"
+        r"[\"']?\s*[:=]\s*"
+        r"(?:\"(?:\\.|[^\"\\])*(?:\"|\Z)|'(?:\\.|[^'\\])*(?:'|\Z)|"
+        r"(?:Bearer|Basic)\s+[^\s,;}]+|[^\s,;}]+)",
         r"\1=[REDACTED]",
         text,
     )

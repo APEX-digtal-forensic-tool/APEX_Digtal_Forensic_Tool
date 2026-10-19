@@ -17,11 +17,37 @@ from typing import Any
 
 from apex_forensic._time import utc_now
 from apex_forensic.constants import ENGINE_VERSION
-from apex_forensic.domain.errors import OperationCancelledError, UnsupportedCapabilityError
+from apex_forensic.domain.errors import (
+    ApexError,
+    OperationCancelledError,
+    UnsupportedCapabilityError,
+)
 from apex_forensic.domain.models import ProviderCapability
 
 MAX_AUDIO_BYTES = 200 * 1024 * 1024
 MAX_STT_OUTPUT_BYTES = 10 * 1024 * 1024
+
+
+def local_model_available(path: Path | None) -> bool:
+    """Check a complete offline CTranslate2 bundle without loading model weights."""
+    if path is None or not path.is_dir():
+        return False
+    try:
+        required = [path / name for name in ("model.bin", "config.json", "tokenizer.json")]
+        if not all(item.is_file() and item.stat().st_size > 0 for item in required):
+            return False
+        if not any(
+            item.is_file() and item.stat().st_size > 0 for item in path.glob("vocabulary.*")
+        ):
+            return False
+        for item in required[1:]:
+            if item.stat().st_size > 32 * 1024 * 1024:
+                return False
+            if not isinstance(json.loads(item.read_text(encoding="utf-8")), dict):
+                return False
+    except (OSError, UnicodeError, ValueError):
+        return False
+    return True
 
 
 class WhisperCppCliSttProvider:
@@ -116,8 +142,7 @@ class WhisperCppCliSttProvider:
                 "-of",
                 str(output_stem),
             ]
-            if language:
-                command.extend(["-l", language])
+            command.extend(["-l", language or "auto"])
             try:
                 completed = subprocess.run(
                     command,
@@ -144,7 +169,15 @@ class WhisperCppCliSttProvider:
                 payload = json.loads(json_path.read_text(encoding="utf-8"))
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise UnsupportedCapabilityError("STT provider output is corrupt.") from exc
-        return _segments(payload, language)
+        model_info = payload.get("model", {}) if isinstance(payload, dict) else {}
+        if language not in {None, "en"} and model_info.get("multilingual") is False:
+            raise ApexError("STT_LANGUAGE_UNSUPPORTED", "error.stt_language_unsupported")
+        rows = _segments(payload, language)
+        source_sha256 = _file_sha256(resolved)
+        for row in rows:
+            row["source_sha256"] = source_sha256
+            row["model_id"] = f"whisper.cpp:{self._model_path.name}"
+        return rows
 
     def _model_metadata(self) -> dict[str, Any]:
         if self._model_path is None:
@@ -197,15 +230,7 @@ class FasterWhisperSttProvider:
 
     def capabilities(self) -> ProviderCapability:
         dependency_available = _module_available("faster_whisper")
-        model_available = (
-            self._model_path is not None
-            and self._model_path.is_dir()
-            and all(
-                (self._model_path / name).is_file()
-                for name in ("model.bin", "config.json", "tokenizer.json")
-            )
-            and any(self._model_path.glob("vocabulary.*"))
-        )
+        model_available = local_model_available(self._model_path)
         available = dependency_available and model_available
         warnings: list[dict[str, Any]] = []
         if not dependency_available:
@@ -254,8 +279,7 @@ class FasterWhisperSttProvider:
     ) -> list[dict[str, Any]]:
         if cancellation_requested:
             raise OperationCancelledError("STT analysis was cancelled before dispatch.")
-        capability = self.capabilities()
-        if not capability.is_available or self._model_path is None:
+        if not _module_available("faster_whisper") or not local_model_available(self._model_path):
             raise UnsupportedCapabilityError(
                 "faster-whisper or the configured local model is unavailable.",
                 target="stt_provider",
@@ -285,14 +309,17 @@ class FasterWhisperSttProvider:
 
     def _transcribe(self, path: Path, language: str | None) -> list[dict[str, Any]]:
         engine = self._faster_whisper_engine()
+        if language not in {None, "en"} and not engine.model.is_multilingual:
+            raise ApexError("STT_LANGUAGE_UNSUPPORTED", "error.stt_language_unsupported")
         segments, info = engine.transcribe(
             str(path),
             language=language,
             vad_filter=False,
             word_timestamps=False,
         )
-        detected_language = language or str(getattr(info, "language", "") or "") or None
+        detected_language = str(getattr(info, "language", "") or language or "") or None
         model_id = None if self._model_path is None else self._model_path.resolve().name
+        source_sha256 = _file_sha256(path)
         rows: list[dict[str, Any]] = []
         for segment in segments:
             text = str(getattr(segment, "text", "") or "").strip()
@@ -307,13 +334,14 @@ class FasterWhisperSttProvider:
                     "audio_start_ms": _milliseconds(getattr(segment, "start", None)),
                     "audio_end_ms": _milliseconds(getattr(segment, "end", None)),
                     "model_id": f"faster-whisper:{model_id}" if model_id else "faster-whisper",
-                    "source_sha256": _file_sha256(path),
+                    "source_sha256": source_sha256,
                 }
             )
         return rows
 
     def _faster_whisper_engine(self) -> Any:
         if self._engine is None:
+            importlib.import_module("onnxruntime").disable_telemetry_events()
             module = importlib.import_module("faster_whisper")
             self._engine = module.WhisperModel(
                 str(self._model_path.resolve()) if self._model_path is not None else "",
@@ -332,7 +360,7 @@ class FasterWhisperSttProvider:
                 "version": None,
             }
         resolved = self._model_path.resolve()
-        if not resolved.exists():
+        if not local_model_available(resolved):
             return {
                 "path": str(resolved),
                 "available": False,
@@ -354,6 +382,8 @@ def _segments(payload: Any, language: str | None) -> list[dict[str, Any]]:
     raw_segments = payload.get("transcription") or payload.get("segments") or []
     if not isinstance(raw_segments, list):
         return []
+    detected = payload.get("result", {})
+    detected_language = detected.get("language") if isinstance(detected, dict) else None
     rows: list[dict[str, Any]] = []
     for segment in raw_segments:
         if not isinstance(segment, dict):
@@ -364,10 +394,10 @@ def _segments(payload: Any, language: str | None) -> list[dict[str, Any]]:
         rows.append(
             {
                 "text": text,
-                "language": language or segment.get("language"),
-                "confidence": _score(segment.get("confidence") or segment.get("probability")),
-                "audio_start_ms": _milliseconds(_first_present(segment, "start", "t0")),
-                "audio_end_ms": _milliseconds(_first_present(segment, "end", "t1")),
+                "language": detected_language or segment.get("language") or language,
+                "confidence": _score(segment.get("confidence", segment.get("probability"))),
+                "audio_start_ms": _segment_time(segment, "from", "start", "t0"),
+                "audio_end_ms": _segment_time(segment, "to", "end", "t1"),
             }
         )
     return rows
@@ -402,17 +432,24 @@ def _path_size(path: Path) -> int:
     return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
 
 
-def _first_present(row: dict[str, Any], primary: str, fallback: str) -> Any:
-    if primary in row:
-        return row[primary]
-    return row.get(fallback)
+def _segment_time(row: dict[str, Any], offset: str, seconds: str, ticks: str) -> int | None:
+    # whisper.cpp JSON offsets are milliseconds; t0/t1 are 10 ms ticks.
+    offsets = row.get("offsets")
+    if isinstance(offsets, dict) and offset in offsets:
+        return _milliseconds(offsets[offset], scale=1)
+    if seconds in row:
+        return _milliseconds(row[seconds])
+    return _milliseconds(row.get(ticks), scale=10)
 
 
-def _milliseconds(value: Any) -> int | None:
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value * 1000)
+def _milliseconds(value: Any, *, scale: int = 1000) -> int | None:
+    if (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    ):
+        return round(value * scale)
     return None
 
 

@@ -12,8 +12,9 @@ from apex_forensic.adapters.machine_extraction import (
     TesseractCliOcrProvider,
     WhisperCppCliSttProvider,
 )
+from apex_forensic.adapters.machine_extraction.stt import local_model_available
 from apex_forensic.config import ServiceBundle
-from apex_forensic.domain.errors import OperationCancelledError, ValidationError
+from apex_forensic.domain.errors import ApexError, OperationCancelledError, ValidationError
 from apex_forensic.jobs import CancellationToken
 
 
@@ -28,11 +29,20 @@ def config(root: Path) -> dict[str, Any]:
 
 
 def save_config(root: Path, values: dict[str, Any]) -> dict[str, Any]:
-    for key in ("stt_model_path", "tessdata_path"):
-        if values.get(key) and not Path(values[key]).exists():
-            raise ValidationError("Configured model path does not exist.", target=key)
     if os.environ.get("APEX_DESKTOP_MACHINE_CONFIG") is not None:
-        raise ValidationError("Machine settings are managed by APEX_DESKTOP_MACHINE_CONFIG.")
+        raise ApexError("MACHINE_SETTINGS_MANAGED", "error.machine_settings_managed")
+    model = Path(values["stt_model_path"]) if values.get("stt_model_path") else None
+    if model is not None:
+        valid = (
+            model.is_file() and model.stat().st_size > 0
+            if values.get("stt_provider") == "whisper.cpp"
+            else local_model_available(model)
+        )
+        if not valid:
+            raise ApexError("STT_MODEL_INVALID", "error.stt_model_invalid", target="stt_model_path")
+    tessdata = values.get("tessdata_path")
+    if tessdata and not Path(tessdata).is_dir():
+        raise ValidationError("OCR language models require a directory.", target="tessdata_path")
     path = root / "machine-settings.json"
     temp = path.with_suffix(".tmp")
     temp.write_text(json.dumps(values), encoding="utf-8")
@@ -63,6 +73,7 @@ def capabilities(root: Path) -> dict[str, Any]:
     ocr, stt = providers(root)
     return {
         "settings": config(root),
+        "managed": os.environ.get("APEX_DESKTOP_MACHINE_CONFIG") is not None,
         "ocr": ocr.capabilities().to_schema_dict(),
         "stt": stt.capabilities().to_schema_dict(),
     }
@@ -96,6 +107,12 @@ def run(
         else {"en": "eng", "ko": "kor"}.get(language, language)
     )
     ocr, stt = providers(root)
+    if kind == "OCR" and config(root)["ocr_provider"] == "auto":
+        supported = set(ocr.capabilities().metadata.get("languages", []))
+        if not set(language.split("+")).issubset(supported):
+            fallback = RapidOcrProvider()
+            if fallback.capabilities().is_available:
+                ocr = fallback
     with EvidenceFileContent.materialize(evidence, node, cancellation_token=token) as source:
         if kind == "OCR":
             provider = ocr

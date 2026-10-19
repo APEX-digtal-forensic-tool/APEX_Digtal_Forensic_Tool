@@ -217,7 +217,7 @@ class EvidenceImageService:
             raise NotFoundError("FS_NODE_NOT_FOUND", f"Filesystem node not found: {node_id}")
         if not node.is_deleted:
             raise ValidationError("Only deleted file nodes can be recovered.", target="node_id")
-        if node.file_size is None or node.file_size <= 0:
+        if node.file_size is None or node.file_size < 0:
             raise ValidationError("Deleted file has no recoverable logical size.", target="node_id")
         if use_filesystem and node.provider_id == "apex.pytsk_filesystem_provider":
             from apex_forensic.application.services.deleted_content import recover_logical
