@@ -133,7 +133,7 @@ def make_raw_locator(
 
 def make_citation(
     *,
-    artifact_id: str,
+    artifact_id: str | None,
     case_id: str,
     evidence_id: str,
     source_file_node_id: str,

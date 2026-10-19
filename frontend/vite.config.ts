@@ -1,9 +1,17 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { randomBytes } from "node:crypto";
 export default defineConfig(({ command }) => {
   const nonce = randomBytes(18).toString("base64");
   return {
+    test: {
+      setupFiles: ["./src/test-setup.ts"],
+      // Multi-screen jsdom flows need a shared budget on slower CI runners.
+      // Keep assertions and per-query waits unchanged; do not retry failures.
+      testTimeout: 15_000,
+      // Avoid competing full-App renders on the Intel macOS hosted runner.
+      maxWorkers: process.env.CI ? 2 : undefined,
+    },
     plugins: [
       react(),
       ...(command === "serve"

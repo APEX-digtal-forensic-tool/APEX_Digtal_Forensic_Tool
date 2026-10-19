@@ -162,9 +162,9 @@ def test_deleted_file_recovery_and_range_export_create_bounded_derived_outputs(
     assert Path(slack["output_path"]).read_bytes() == b"\x00" * 508
     assert slack["zero_filled"] is True
     events = services.custody.list_events(evidence.evidence_id)
-    assert [
-        event.to_schema_dict()["event_type"] for event in events
-    ].count(CustodyEventType.EXPORTED.value) == 3
+    assert [event.to_schema_dict()["event_type"] for event in events].count(
+        CustodyEventType.EXPORTED.value
+    ) == 3
 
 
 def test_deleted_file_recovery_cleans_temporary_output_on_reader_failure(
@@ -219,6 +219,7 @@ def test_deleted_file_recovery_cleans_temporary_output_on_reader_failure(
     with pytest.raises(ValidationError):
         services.images.recover_deleted_file(
             node_id=deleted.node_id,
+            use_filesystem=False,
             output_root=output_root,
             filename="partial.bin",
         )

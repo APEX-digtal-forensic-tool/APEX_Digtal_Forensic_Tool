@@ -171,6 +171,8 @@ def test_whisper_adapter_records_model_metadata_and_cleans_temp(
             "confidence": 0.87,
             "audio_start_ms": 0,
             "audio_end_ms": 1250,
+            "source_sha256": hashlib.sha256(audio.read_bytes()).hexdigest(),
+            "model_id": "whisper.cpp:ggml-synthetic.bin",
         }
     ]
     assert temp_record.is_file()

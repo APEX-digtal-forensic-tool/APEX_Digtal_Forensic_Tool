@@ -9,10 +9,9 @@ from typing import TYPE_CHECKING, Any
 
 from apex_forensic._time import to_json_timestamp
 from apex_forensic.adapters.evidence import (
-    EwfEvidenceReader,
     RawImageReader,
-    VirtualDiskEvidenceReader,
 )
+from apex_forensic.adapters.evidence.container import ContainerImageReader
 from apex_forensic.constants import DEFAULT_HASH_CHUNK_SIZE, ENGINE_VERSION, SCHEMA_VERSION
 from apex_forensic.domain.enums import (
     CustodyEventType,
@@ -518,7 +517,7 @@ class EvidenceManager:
                 },
             )
         if evidence_type is EvidenceFormat.E01:
-            probe = EwfEvidenceReader.probe(path)
+            probe = ContainerImageReader.probe(path)
             return (
                 probe.reader_id,
                 probe.reader_version,
@@ -530,7 +529,7 @@ class EvidenceManager:
                     "container_hash_only": True,
                 },
             )
-        probe = VirtualDiskEvidenceReader.probe(path)
+        probe = ContainerImageReader.probe(path)
         return (
             probe.reader_id,
             probe.reader_version,

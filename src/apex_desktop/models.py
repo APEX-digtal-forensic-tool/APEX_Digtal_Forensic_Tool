@@ -70,6 +70,51 @@ class Raw(View):
     length: int = Field(default=4096, ge=1, le=1048576)
 
 
+class AiAnalyze(CaseInput):
+    resource_type: Literal[
+        "FILE_SYSTEM_NODE", "ARTIFACT", "TIMELINE_EVENT", "SEARCH_RESULT", "MACHINE_CANDIDATE"
+    ]
+    resource_id: str = Field(min_length=1, max_length=255)
+    mode: Literal["STRUCTURE", "CONTENT"] = "STRUCTURE"
+    reviewed_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+class FileAction(CaseInput):
+    node_id: str = Field(min_length=1, max_length=255)
+
+
+class Stream(FileAction):
+    stream_id: int = Field(ge=0, le=65535)
+
+
+class StreamRead(Stream):
+    offset: int = Field(default=0, ge=0)
+    length: int = Field(default=4096, ge=1, le=1048576)
+
+
+class Carve(EvidenceInput):
+    scope: Literal["UNALLOCATED", "IMAGE"] = "UNALLOCATED"
+    formats: list[Literal["PNG", "JPEG", "PDF", "ZIP", "GIF"]] = Field(
+        default=["PNG", "JPEG", "PDF", "ZIP", "GIF"], min_length=1, max_length=5
+    )
+    start_offset: int = Field(default=0, ge=0)
+    max_scan_bytes: int = Field(default=268435456, ge=1, le=1099511627776)
+    max_file_bytes: int = Field(default=67108864, ge=1024, le=268435456)
+    max_results: int = Field(default=1000, ge=1, le=10000)
+
+
+class MachineRun(FileAction):
+    kind: Literal["OCR", "STT"]
+    language: str = Field(default="eng", pattern=r"^[a-z]{2,8}(?:\+[a-z_]{2,12})*$")
+
+
+class MachineSettings(Input):
+    ocr_provider: Literal["auto", "tesseract", "rapidocr"] = "auto"
+    stt_provider: Literal["faster-whisper", "whisper.cpp"] = "faster-whisper"
+    stt_model_path: str | None = Field(default=None, max_length=32767)
+    tessdata_path: str | None = Field(default=None, max_length=32767)
+
+
 class ImageInspect(CaseInput):
     resource_type: Literal["FILE_SYSTEM_NODE", "ARTIFACT"]
     resource_id: str = Field(min_length=1, max_length=255)
@@ -81,6 +126,13 @@ class ImageInspect(CaseInput):
     pixel_offset: int = Field(default=0, ge=0, lt=25_000_000)
     byte_limit: int = Field(default=512, ge=1, le=65536)
     max_dimension: int = Field(default=1536, ge=256, le=4096)
+
+
+class VideoInspect(CaseInput):
+    resource_type: Literal["FILE_SYSTEM_NODE", "ARTIFACT"]
+    resource_id: str = Field(min_length=1, max_length=255)
+    timestamp_seconds: float = Field(default=0, ge=0, le=604800, allow_inf_nan=False)
+    max_dimension: int = Field(default=1536, ge=256, le=2048)
 
 
 class ContextCreate(CaseInput):

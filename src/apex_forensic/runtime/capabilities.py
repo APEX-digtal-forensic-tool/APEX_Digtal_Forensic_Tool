@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from apex_forensic.constants import ENGINE_VERSION
+from apex_forensic.runtime.assets import media_executable
 
 AVAILABLE = "AVAILABLE"
 AVAILABLE_WITH_LIMITATIONS = "AVAILABLE_WITH_LIMITATIONS"
@@ -39,6 +40,24 @@ def capability_report() -> dict[str, Any]:
         _sqlite_fts5_capability(),
         _internal_capability("raw-dd-img", "apex_forensic.adapters.evidence.raw"),
         _module_capability("pytsk3", "pytsk3", required_attributes=("Img_Info", "FS_Info")),
+        _module_capability(
+            "e01-container",
+            "dissect.evidence.ewf",
+            distribution="dissect.evidence",
+            required_attributes=("EWF",),
+        ),
+        _module_capability(
+            "vhd-container",
+            "dissect.hypervisor.disk.vhd",
+            distribution="dissect.hypervisor",
+            required_attributes=("VHD",),
+        ),
+        _module_capability(
+            "vhdx-container",
+            "dissect.hypervisor.disk.vhdx",
+            distribution="dissect.hypervisor",
+            required_attributes=("VHDX",),
+        ),
         _module_capability("e01-libewf", "pyewf", required_attributes=("handle",)),
         _module_capability("vhd-libvhdi", "pyvhdilib", required_attributes=("file",)),
         _executable_capability("vhdx-qemu-img", "qemu-img", ("--version",)),
@@ -110,9 +129,7 @@ def capability_report() -> dict[str, Any]:
         "schema_version": "1.0.0",
         "engine_version": ENGINE_VERSION,
         "status": (
-            AVAILABLE
-            if unavailable == 0 and host_required == 0
-            else AVAILABLE_WITH_LIMITATIONS
+            AVAILABLE if unavailable == 0 and host_required == 0 else AVAILABLE_WITH_LIMITATIONS
         ),
         "host": {
             "os": platform.system(),
@@ -298,7 +315,11 @@ def _executable_capability(
     executable_name: str,
     version_args: tuple[str, ...],
 ) -> dict[str, Any]:
-    executable = shutil.which(executable_name)
+    executable = (
+        media_executable(executable_name)
+        if executable_name in {"ffmpeg", "ffprobe"}
+        else shutil.which(executable_name)
+    )
     if executable is None:
         return _capability(
             capability_id,
@@ -402,6 +423,7 @@ def _onnxruntime_capability() -> dict[str, Any]:
     )
     if capability["status"] == AVAILABLE:
         module = importlib.import_module("onnxruntime")
+        module.disable_telemetry_events()
         capability["details"] = {"providers": list(module.get_available_providers())}
     return capability
 

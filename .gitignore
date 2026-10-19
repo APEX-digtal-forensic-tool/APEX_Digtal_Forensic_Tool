@@ -27,6 +27,7 @@ frontend/release/
 desktop-runtime/
 *.spec
 desktop-runtime-build/
+desktop-assets/
 build/desktop/
 
 # Local challenge evidence, extracted answers, and native verification captures

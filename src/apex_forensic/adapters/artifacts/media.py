@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
-import shutil
 import struct
 import subprocess
 import threading
@@ -40,6 +39,7 @@ from apex_forensic.domain.models import (
     FileSystemNode,
 )
 from apex_forensic.domain.services.canonical import canonical_sha256
+from apex_forensic.runtime.assets import media_executable
 
 _IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "tif", "tiff", "bmp", "webp"}
 _VIDEO_EXTENSIONS = {"mp4", "m4v", "mov", "3gp", "3g2", "avi", "mkv", "webm"}
@@ -52,6 +52,11 @@ _FFPROBE_TIMEOUT_SECONDS = 10
 _FFMPEG_FRAME_TIMEOUT_SECONDS = 15
 _MAX_FFPROBE_JSON_BYTES = 1_048_576
 _MAX_FFMPEG_OUTPUT_BYTES = 8 * 1024 * 1024
+# Do not let an evidence file act as a playlist referencing network/local secrets.
+_LOCAL_MEDIA_FORMATS = (
+    "mov,matroska,webm,avi,asf,mpeg,mpegts,flv,ogg,wav,mp3,flac,aac,"
+    "image2,png_pipe,jpeg_pipe,gif"
+)
 _MAC_EPOCH = datetime(1904, 1, 1, tzinfo=UTC)
 
 
@@ -146,7 +151,7 @@ class MediaMetadataAnalyzer:
                 if _pillow_available()
                 else "THUMBNAIL_CACHE_DERIVATIVE_METADATA",
                 "VIDEO_FRAME_SAMPLING_FFMPEG"
-                if shutil.which("ffmpeg")
+                if media_executable("ffmpeg")
                 else "VIDEO_FRAME_SAMPLING_POLICY",
             ),
             unavailable_capabilities=(
@@ -454,17 +459,17 @@ def _pillow_capability() -> dict[str, Any]:
 
 
 def _ffmpeg_unavailable_capabilities() -> tuple[str, ...]:
-    return () if shutil.which("ffmpeg") else ("FFMPEG_FRAME_SAMPLING",)
+    return () if media_executable("ffmpeg") else ("FFMPEG_FRAME_SAMPLING",)
 
 
 def _ffmpeg_capability() -> dict[str, Any]:
-    executable = shutil.which("ffmpeg")
+    executable = media_executable("ffmpeg")
     if executable is None:
         return {
             "is_available": False,
             "backend_id": "ffmpeg",
             "backend_version": None,
-            "unavailable_reason": "ffmpeg executable was not found on PATH.",
+            "unavailable_reason": "ffmpeg executable was not found in the app bundle or PATH.",
             "timeout_seconds": _FFMPEG_FRAME_TIMEOUT_SECONDS,
             "max_output_bytes": _MAX_FFMPEG_OUTPUT_BYTES,
         }
@@ -553,8 +558,10 @@ def _ffmpeg_sample_frame(
     file_path: Path,
     timestamp_seconds: float,
     max_output_bytes: int = _MAX_FFMPEG_OUTPUT_BYTES,
+    include_content: bool = False,
+    max_dimension: int = 1536,
 ) -> dict[str, Any]:
-    executable = shutil.which("ffmpeg")
+    executable = media_executable("ffmpeg")
     if executable is None:
         return {"status": "CAPABILITY_UNAVAILABLE", "reason": "FFMPEG_UNAVAILABLE"}
     timestamp = max(0.0, timestamp_seconds)
@@ -563,12 +570,19 @@ def _ffmpeg_sample_frame(
             executable,
             "-hide_banner",
             "-nostdin",
+            "-protocol_whitelist",
+            "file,pipe",
+            "-format_whitelist",
+            _LOCAL_MEDIA_FORMATS,
             "-ss",
             f"{timestamp:.3f}",
             "-i",
             str(file_path),
             "-frames:v",
             "1",
+            "-vf",
+            f"scale=w='min({max_dimension},iw)':h='min({max_dimension},ih)'"
+            ":force_original_aspect_ratio=decrease",
             "-f",
             "image2pipe",
             "-vcodec",
@@ -598,21 +612,22 @@ def _ffmpeg_sample_frame(
         "output_format": "PNG",
         "size_bytes": len(result.stdout),
         "sha256": sha256_hex(result.stdout),
+        **({"content_bytes": result.stdout} if include_content else {}),
     }
 
 
 def _ffprobe_unavailable_capabilities() -> tuple[str, ...]:
-    return () if shutil.which("ffprobe") else ("FFPROBE",)
+    return () if media_executable("ffprobe") else ("FFPROBE",)
 
 
 def _ffprobe_capability() -> dict[str, Any]:
-    executable = shutil.which("ffprobe")
+    executable = media_executable("ffprobe")
     if executable is None:
         return {
             "is_available": False,
             "backend_id": "ffprobe",
             "backend_version": None,
-            "unavailable_reason": "ffprobe executable was not found on PATH.",
+            "unavailable_reason": "ffprobe executable was not found in the app bundle or PATH.",
         }
     try:
         completed = _run_bounded_process(
@@ -749,7 +764,7 @@ def _run_bounded_process(
 
 
 def _ffprobe_metadata(*, file_path: Path, media_kind: str) -> dict[str, Any]:
-    executable = shutil.which("ffprobe")
+    executable = media_executable("ffprobe")
     if executable is None:
         return {
             "metadata": {},
@@ -767,6 +782,10 @@ def _ffprobe_metadata(*, file_path: Path, media_kind: str) -> dict[str, Any]:
         }
     args = [
         executable,
+        "-protocol_whitelist",
+        "file,pipe",
+        "-format_whitelist",
+        _LOCAL_MEDIA_FORMATS,
         "-v",
         "error",
         "-show_format",

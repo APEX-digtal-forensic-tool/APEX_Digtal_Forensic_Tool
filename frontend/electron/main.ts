@@ -31,6 +31,17 @@ const operations = new Set([
   "view",
   "raw.read",
   "media.inspect",
+  "media.video",
+  "ai.analyze",
+  "ai.prepare",
+  "machine.capabilities",
+  "machine.configure",
+  "machine.run",
+  "files.streams",
+  "streams.read",
+  "streams.export",
+  "files.recover",
+  "evidence.carve",
   "context.create",
   "context.get",
   "context.update",
@@ -205,6 +216,34 @@ else {
         payload.source_path = path;
         const result = await local(operation, payload);
         if (result.ok) picked.delete(reference);
+        return result;
+      }
+      if (operation === "machine.configure") {
+        const old = await local("machine.capabilities", {});
+        if (!old.ok) return old;
+        const configured: Record<string, unknown> = {
+          ...old.data.settings,
+          ocr_provider: payload.ocr_provider,
+          stt_provider: payload.stt_provider,
+        };
+        for (const [referenceKey, pathKey] of [
+          ["model_reference", "stt_model_path"],
+          ["tessdata_reference", "tessdata_path"],
+        ]) {
+          if (payload[referenceKey] !== undefined) {
+            if (payload[referenceKey] === null) {
+              configured[pathKey] = null;
+              continue;
+            }
+            const path = picked.get(String(payload[referenceKey]));
+            if (!path) return fail("PICKER_REFERENCE_REQUIRED");
+            configured[pathKey] = path;
+          }
+        }
+        const result = await local(operation, configured);
+        if (result.ok)
+          for (const key of ["model_reference", "tessdata_reference"])
+            picked.delete(String(payload[key]));
         return result;
       }
       return local(operation, payload);

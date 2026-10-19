@@ -293,7 +293,10 @@ class BrowserHistoryAnalyzer:
         page: _BrowserExtractionPage | None = None
         db_kind = "UNKNOWN"
         try:
-            with _browser_sqlite_snapshot(file_path) as snapshot:
+            with _browser_sqlite_snapshot(
+                file_path,
+                source_identity=node.display_path if node.platform == "DISK_IMAGE" else None,
+            ) as snapshot:
                 profile = profile | {"snapshot": snapshot.metadata}
                 with closing(_connect_read_only(snapshot.database_path)) as connection:
                     connection.row_factory = sqlite3.Row
@@ -429,7 +432,11 @@ def _connect_read_only(path: Path) -> sqlite3.Connection:
 
 
 @contextmanager
-def _browser_sqlite_snapshot(path: Path) -> Iterator[_BrowserSQLiteSnapshot]:
+def _browser_sqlite_snapshot(
+    path: Path,
+    *,
+    source_identity: str | None = None,
+) -> Iterator[_BrowserSQLiteSnapshot]:
     temporary_directory = tempfile.TemporaryDirectory(prefix="apex-browser-snapshot-")
     temp_dir = Path(temporary_directory.name)
     try:
@@ -453,7 +460,7 @@ def _browser_sqlite_snapshot(path: Path) -> Iterator[_BrowserSQLiteSnapshot]:
                 shm_preserved = True
         snapshot_hash = canonical_sha256(
             {
-                "source_path": str(path),
+                "source_path": source_identity or str(path),
                 "component_hashes": component_hashes,
                 "component_sizes": component_sizes,
             }

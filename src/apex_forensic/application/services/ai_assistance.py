@@ -161,6 +161,7 @@ class AiAssistanceService:
         max_summary_length: int = 4000,
         ttl_seconds: int = DEFAULT_REQUEST_TTL_SECONDS,
         correlation_id: str | None = None,
+        payload_fingerprint: str | None = None,
     ) -> AiAssistanceRequest:
         correlation_id = _optional_non_empty(correlation_id, "correlation_id")
         self._require_case(case_id)
@@ -273,10 +274,17 @@ class AiAssistanceService:
             "max_summary_length": max_summary_length,
             "request_version": AI_REQUEST_VERSION,
         }
+        if payload_fingerprint is not None:
+            if len(payload_fingerprint) != 64 or any(
+                c not in "0123456789abcdef" for c in payload_fingerprint
+            ):
+                raise ValidationError(
+                    "Invalid AI payload fingerprint.", target="payload_fingerprint"
+                )
+            # Bind reviewed content to result reuse without changing legacy request identities.
+            fingerprint_payload["payload_fingerprint"] = payload_fingerprint
         request_fingerprint = canonical_sha256(fingerprint_payload)
-        existing = self._repository.get_ai_assistance_request_by_fingerprint(
-            request_fingerprint
-        )
+        existing = self._repository.get_ai_assistance_request_by_fingerprint(request_fingerprint)
         if existing is not None:
             return cast(AiAssistanceRequest, existing)
         request = AiAssistanceRequest(
@@ -319,9 +327,7 @@ class AiAssistanceService:
             )
         return cast(AiAssistanceRequest, request)
 
-    def list_requests_by_case(
-        self, case_id: str, *, limit: int = 100
-    ) -> list[AiAssistanceRequest]:
+    def list_requests_by_case(self, case_id: str, *, limit: int = 100) -> list[AiAssistanceRequest]:
         self._require_case(case_id)
         return cast(
             list[AiAssistanceRequest],
@@ -456,8 +462,7 @@ class AiAssistanceService:
                 "model_id": model_id,
                 "external_request_id": external_request_id,
                 "recommendations": [
-                    _without_generated_fields(item.to_schema_dict())
-                    for item in recommendations
+                    _without_generated_fields(item.to_schema_dict()) for item in recommendations
                 ],
                 "warnings": warnings,
             }
@@ -863,9 +868,7 @@ class AiAssistanceService:
                 "match_mode": match_mode,
             }
         )
-        existing = self._repository.get_ai_keyword_promotion_by_fingerprint(
-            promotion_fingerprint
-        )
+        existing = self._repository.get_ai_keyword_promotion_by_fingerprint(promotion_fingerprint)
         if existing is not None:
             return cast(AiKeywordPromotion, existing)
         duplicate = _keyword_set_duplicate(
@@ -983,6 +986,7 @@ class AiAssistanceService:
         *,
         assistance_request_id: str,
         operation: AiRequestedOperation | str,
+        provider: AiAssistanceProviderPort | None = None,
     ) -> dict[str, Any]:
         """Execute one approved provider operation and ingest its validated result.
 
@@ -1037,7 +1041,8 @@ class AiAssistanceService:
                 },
             )
 
-        provider_capability = self._provider.capabilities()
+        active_provider = provider or self._provider
+        provider_capability = active_provider.capabilities()
         if (
             not provider_capability.is_available
             or operation_value not in provider_capability.supported_operations
@@ -1054,11 +1059,13 @@ class AiAssistanceService:
 
         if operation_value == AiRequestedOperation.RECOMMEND_KEYWORDS.value:
             result: dict[str, Any] = self.generate_keyword_recommendations(
-                assistance_request_id=assistance_request_id
+                assistance_request_id=assistance_request_id,
+                provider=provider,
             )
         else:
             result = self.generate_scope_summary(
-                assistance_request_id=assistance_request_id
+                assistance_request_id=assistance_request_id,
+                provider=provider,
             ).to_schema_dict()
         return self._execution_result(
             request=request,
@@ -1075,15 +1082,11 @@ class AiAssistanceService:
         operation: str,
     ) -> dict[str, Any] | None:
         if operation == AiRequestedOperation.RECOMMEND_KEYWORDS.value:
-            batch = self._repository.get_ai_keyword_batch_by_request(
-                assistance_request_id
-            )
+            batch = self._repository.get_ai_keyword_batch_by_request(assistance_request_id)
             if batch is None:
                 return None
             return self.get_keyword_batch(batch.recommendation_batch_id)
-        summary = self._repository.get_ai_scope_summary_by_request(
-            assistance_request_id
-        )
+        summary = self._repository.get_ai_scope_summary_by_request(assistance_request_id)
         if summary is None:
             return None
         return self.get_scope_summary(summary.scope_summary_id).to_schema_dict()
@@ -1406,8 +1409,7 @@ class AiAssistanceService:
         self, snapshot: AnalysisContextSnapshot, requested_scopes: list[str] | None
     ) -> list[str]:
         scopes = [
-            _scope_value(item, "requested_scopes")
-            for item in (requested_scopes or snapshot.scopes)
+            _scope_value(item, "requested_scopes") for item in (requested_scopes or snapshot.scopes)
         ]
         scopes = _dedupe(scopes)
         if not scopes:
@@ -1685,9 +1687,7 @@ class AiAssistanceService:
                 target="case_id",
             )
 
-    def _require_promotable_recommendation(
-        self, recommendation: AiKeywordRecommendation
-    ) -> None:
+    def _require_promotable_recommendation(self, recommendation: AiKeywordRecommendation) -> None:
         if recommendation.review_status not in {
             AiReviewStatus.ACCEPTED.value,
             AiReviewStatus.CORRECTED.value,

@@ -1507,7 +1507,7 @@ def test_phase5_media_raster_thumbnail_rendering_and_frame_capability(
 
     capability = media_adapter.MediaMetadataAnalyzer().capabilities().to_schema_dict()
     ffmpeg = capability["metadata"]["ffmpeg"]
-    if media_adapter.shutil.which("ffmpeg") is None:
+    if media_adapter.media_executable("ffmpeg") is None:
         assert "FFMPEG_FRAME_SAMPLING" in capability["unavailable_capabilities"]
         assert ffmpeg["is_available"] is False
     else:
@@ -1520,8 +1520,8 @@ def test_phase5_media_raster_thumbnail_rendering_and_frame_capability(
 
 
 def test_phase5_ffmpeg_video_frame_sampling_runtime(tmp_path: Path) -> None:
-    ffmpeg = media_adapter.shutil.which("ffmpeg")
-    ffprobe = media_adapter.shutil.which("ffprobe")
+    ffmpeg = media_adapter.media_executable("ffmpeg")
+    ffprobe = media_adapter.media_executable("ffprobe")
     if ffmpeg is None or ffprobe is None:
         pytest.skip("ffmpeg/ffprobe binaries are not available on PATH")
     video = tmp_path / "sample.mp4"
@@ -1610,7 +1610,7 @@ def test_phase5_ffprobe_bounded_output_timeout_and_argv_safety(
     )
     assert timed_out.timed_out is True
 
-    monkeypatch.setattr(media_adapter.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(media_adapter, "media_executable", lambda _name: None)
     unavailable = media_adapter._ffprobe_metadata(
         file_path=tmp_path / "missing.mp4",
         media_kind="VIDEO",
@@ -1638,7 +1638,7 @@ def test_phase5_ffprobe_bounded_output_timeout_and_argv_safety(
             **popen_kwargs,
         )
 
-    monkeypatch.setattr(media_adapter.shutil, "which", lambda _name: str(tmp_path / "ffprobe"))
+    monkeypatch.setattr(media_adapter, "media_executable", lambda _name: str(tmp_path / "ffprobe"))
     monkeypatch.setattr(media_adapter.subprocess, "Popen", popen_ffprobe)
 
     normal = media_adapter._ffprobe_metadata(file_path=injected_path, media_kind="VIDEO")

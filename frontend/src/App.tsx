@@ -1,3 +1,5 @@
+import { ForensicTools } from "./ForensicTools";
+import { MachineSettings } from "./MachineSettings";
 import {
   useCallback,
   useEffect,
@@ -32,6 +34,8 @@ import {
 } from "./icons";
 import { gateway, GatewayError, unwrap, type Row } from "./gateway";
 import { ImageInspector } from "./ImageInspector";
+import { VideoInspector } from "./VideoInspector";
+import { AiAssistant } from "./AiAssistant";
 import type { CaseRecord } from "./contracts/generated/case";
 import type { GuiContext } from "./contracts/generated/gui-session-context";
 import {
@@ -1221,6 +1225,7 @@ export function App() {
         ) : route === "SETTINGS" ? (
           <div className="settings scroll">
             <AccountPanel />
+            <MachineSettings />
             {caseId && <PolicyPanel key={caseId} caseId={caseId} />}
             <div className="card">
               <h3>런타임 기능</h3>
@@ -1573,15 +1578,26 @@ export function App() {
               </div>
             </div>
             {inspector && route === "FILE_SYSTEM" && (
-              <FileViewer
-                key={`${caseId}:${evidenceId}:${selected?._resource_type ?? "FILE_SYSTEM_NODE"}:${selected?.id ?? "empty"}`}
-                caseId={caseId}
-                selected={selected}
-                height={inspectorHeight}
-                onHeight={setInspectorHeight}
-                onCollect={collectCitations}
-                onSelect={select}
-              />
+              <>
+                <ForensicTools
+                  caseId={caseId}
+                  evidenceId={evidenceId}
+                  selected={selected}
+                  onTask={() => {
+                    setJobsOpen(true);
+                    refresh();
+                  }}
+                />
+                <FileViewer
+                  key={`${caseId}:${evidenceId}:${selected?._resource_type ?? "FILE_SYSTEM_NODE"}:${selected?.id ?? "empty"}`}
+                  caseId={caseId}
+                  selected={selected}
+                  height={inspectorHeight}
+                  onHeight={setInspectorHeight}
+                  onCollect={collectCitations}
+                  onSelect={select}
+                />
+              </>
             )}
             {inspector && route !== "FILE_SYSTEM" && (
               <section
@@ -1706,6 +1722,18 @@ export function App() {
                             selected.original_name ?? selected.title ?? "",
                           ))) && (
                         <ImageInspector
+                          key={`${caseId}:${resource(selected).type}:${resource(selected).id}`}
+                          caseId={caseId}
+                          resourceType={resource(selected).type}
+                          resourceId={resource(selected).id}
+                        />
+                      )}
+                      {(selected.artifact_type === "MEDIA_VIDEO" ||
+                        (resource(selected).type === "FILE_SYSTEM_NODE" &&
+                          /\.(mp4|m4v|mov|3gp|3g2|avi|mkv|webm)$/i.test(
+                            selected.original_name ?? selected.title ?? "",
+                          ))) && (
+                        <VideoInspector
                           key={`${caseId}:${resource(selected).type}:${resource(selected).id}`}
                           caseId={caseId}
                           resourceType={resource(selected).type}
@@ -2050,6 +2078,11 @@ export function App() {
                       TIMELINE: "타임라인",
                       HASH: "무결성 해시",
                       VERIFY: "무결성 재검증",
+                      RECOVERY: "삭제 파일 복구",
+                      STREAM_EXPORT: "NTFS 스트림 내보내기",
+                      CARVING: "파일 시그니처 카빙",
+                      OCR: "문자 추출",
+                      STT: "음성 인식",
                     }[t.kind as string] ?? t.kind}
                   </strong>
                   <Badge value={t.status} />
@@ -2109,27 +2142,10 @@ export function App() {
               <X size={18} />
             </button>
           </header>
-          <div className="card">
-            <Badge value="EXTERNAL_CONFIGURATION_REQUIRED" />
-            <h3>AI 서비스 연결이 필요합니다</h3>
-            <p className="muted">
-              현재 선택한 자료의 컨텍스트와 엔진의 데이터 정책을 사용합니다.
-              실제 AI 실행은 MCP·AI 런타임 연결 후 제공됩니다.
-            </p>
-          </div>
-          <Fields
-            value={{
-              case_id: caseId || null,
-              evidence_id: evidenceId || null,
-              session_context_id: context?.session_context_id,
-              current_route: route,
-              selected_resource: selected ? resource(selected) : null,
-            }}
+          <AiAssistant
+            caseId={caseId}
+            selected={selected ? resource(selected) : null}
           />
-          <button disabled>현재 선택 분석 요청</button>
-          <p className="muted small">
-            관찰 사실 · 추론 · 권고 · 인용을 구분하여 표시합니다.
-          </p>
         </aside>
       )}
       {dialog && (

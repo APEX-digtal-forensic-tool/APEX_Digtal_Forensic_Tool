@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import codecs
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
@@ -12,6 +13,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from apex_forensic._time import parse_timestamp, to_json_timestamp
+from apex_forensic.adapters.artifacts.windows.common import make_citation, make_raw_locator
+from apex_forensic.adapters.filesystem.content import EvidenceFileContent
 from apex_forensic.constants import ENGINE_VERSION, SCHEMA_VERSION
 from apex_forensic.domain.enums import (
     AiAssistancePurpose,
@@ -961,7 +964,6 @@ _MUTATING_OPERATIONS = {
     ) in _REPORT_DESCRIPTOR_SCHEMAS.items()
     if mutates_state
 }
-
 
 
 def _enum_value(value: Any) -> str:
@@ -2119,6 +2121,26 @@ class ContextService:
             node = self._repository.get_fs_node(resource_id)
             if node is None:
                 raise _resource_error(resource_type, resource_id)
+            locator = make_raw_locator(
+                evidence_id=node.evidence_id,
+                source_file_node_id=node.node_id,
+                source_path=node.display_path,
+                source_reference=f"filesystem-index:{node.index_revision}",
+                locator_type="BYTE_RANGE" if node.node_type.value == "FILE" else "LOGICAL_PATH",
+                offset=0 if node.node_type.value == "FILE" else None,
+                length=node.file_size or None,
+                details={"provider_id": node.provider_id, "index_revision": node.index_revision},
+            )
+            citation = make_citation(
+                artifact_id=None,
+                case_id=node.case_id,
+                evidence_id=node.evidence_id,
+                source_file_node_id=node.node_id,
+                source_path=node.display_path,
+                source_reference=f"filesystem-index:{node.index_revision}",
+                raw_locator=locator,
+            )
+            citation["created_at"] = to_json_timestamp(node.updated_at)
             return {
                 "resource_type": resource_type,
                 "resource_id": resource_id,
@@ -2129,7 +2151,7 @@ class ContextService:
                 "title": node.display_path or node.original_name,
                 "summary": node.node_type.value,
                 "raw_locator": node.raw_locator,
-                "citations": [],
+                "citations": [citation],
                 "fields": node.to_schema_dict(),
                 "analyzer_id": node.provider_id,
                 "analyzer_version": node.provider_version,
@@ -2384,9 +2406,8 @@ class ContextService:
             )
         status = RevisionStatus.CURRENT
         reason = None
-        if (
-            baseline_revision is not None
-            and str(current.current_revision) != str(baseline_revision)
+        if baseline_revision is not None and str(current.current_revision) != str(
+            baseline_revision
         ):
             status = RevisionStatus.STALE
             reason = self._stale_reason_for_resource_type(resource_type)
@@ -2420,9 +2441,8 @@ class ContextService:
             )
         status = RevisionStatus.CURRENT
         reason = None
-        if (
-            baseline_revision is not None
-            and str(execution.execution_revision) != str(baseline_revision)
+        if baseline_revision is not None and str(execution.execution_revision) != str(
+            baseline_revision
         ):
             status = RevisionStatus.STALE
             reason = StaleReason.SEARCH_EXECUTION_STALE.value
@@ -2822,9 +2842,8 @@ class ViewProjectionService:
             for key, value in fields.items()
             if key not in omitted and value is not None
         }
-        if (
-            fields.get("artifact_type") == "MEDIA_IMAGE"
-            and isinstance(fields.get("fields"), Mapping)
+        if fields.get("artifact_type") == "MEDIA_IMAGE" and isinstance(
+            fields.get("fields"), Mapping
         ):
             media = fields["fields"]
             result["image_metadata"] = {
@@ -2877,10 +2896,19 @@ class ViewProjectionService:
             badges.append("CITED")
         return badges
 
-    @staticmethod
-    def _available_actions(resource_type: str, info: dict[str, Any]) -> list[str]:
+    def _available_actions(self, resource_type: str, info: dict[str, Any]) -> list[str]:
         actions = ["view.simple", "view.detailed", "view.raw"]
-        if info.get("raw_locator") is not None:
+        evidence = self._repository.get_evidence(info.get("evidence_id"))
+        locator = info.get("raw_locator")
+        node = None
+        if isinstance(locator, dict):
+            source_id = locator.get("source_id") or locator.get("source_file_node_id")
+            if resource_type == ResourceType.FILE_SYSTEM_NODE.value:
+                source_id = info.get("resource_id")
+            if source_id is not None:
+                node = self._repository.get_fs_node(str(source_id))
+        # Image filesystem locators are metadata, not host filesystem paths.
+        if locator is not None and SafeRawRangeReader.supports_source(evidence, node):
             actions.append("view.raw-read")
         if resource_type == ResourceType.MACHINE_CANDIDATE.value:
             actions.append("candidate.review")
@@ -2907,8 +2935,13 @@ class SafeRawRangeReader:
             "supports_directory_evidence": True,
             "supports_logical_file_evidence": True,
             "supports_disk_image_raw_offsets": False,
+            "supports_image_file_content": True,
             "supports_logical_fields": True,
         }
+
+    @staticmethod
+    def supports_source(evidence: Any, node: Any) -> bool:
+        return EvidenceFileContent.supports(evidence, node)
 
     def validate_locator(self, *, case_id: str, raw_locator: dict[str, Any]) -> dict[str, Any]:
         evidence_id = raw_locator.get("evidence_id")
@@ -2943,6 +2976,12 @@ class SafeRawRangeReader:
                 "Raw locator source does not belong to the evidence.",
                 target="source_id",
             )
+        if not self.supports_source(evidence, node):
+            raise RawReadError(
+                "RAW_LOCATOR_UNSUPPORTED",
+                "The indexed source does not support logical content reads.",
+                target="raw_locator",
+            )
         indexed_relative_path = self._clean_relative_path(node.original_relative_path)
         requested_relative_path = raw_locator.get("relative_path")
         if requested_relative_path is not None:
@@ -2953,10 +2992,22 @@ class SafeRawRangeReader:
                     "Raw locator path does not match the indexed source node.",
                     target="raw_locator",
                 )
+        if EvidenceFileContent.is_image(node):
+            # The caller's inode, volume and extents are never used for opening a file.
+            for field in ("inode", "volume_index", "volume_byte_offset", "tsk_path"):
+                if field in raw_locator and raw_locator[field] != node.provider_metadata.get(field):
+                    raise RawReadError(
+                        "RAW_SOURCE_OUTSIDE_EVIDENCE",
+                        "Locator differs from the indexed source.",
+                        target="raw_locator",
+                    )
+            return {"evidence": evidence, "node": node, "raw_locator": raw_locator}
         root = Path(evidence.source_path).resolve(strict=True)
         base = root if root.is_dir() else root.parent
-        candidate = root if indexed_relative_path == "." else root.joinpath(
-            *PurePosixPath(indexed_relative_path).parts
+        candidate = (
+            root
+            if indexed_relative_path == "."
+            else root.joinpath(*PurePosixPath(indexed_relative_path).parts)
         )
         try:
             candidate.resolve(strict=False).relative_to(base)
@@ -3065,22 +3116,32 @@ class SafeRawRangeReader:
                 requested_length=requested_length,
             )
         base_offset = int(locator_offset)
+        if base_offset < 0:
+            raise RawReadError("RAW_RANGE_INVALID", "Negative locator offset.")
         allowed_length = int(locator_length) if locator_length is not None else requested_length
         if offset > allowed_length:
             raise RawReadError(
                 "RAW_RANGE_INVALID", "Raw read offset is beyond the locator range.", target="offset"
             )
         read_length = min(requested_length, allowed_length - offset)
-        path = self._path_for_locator(validation["evidence"], validation["node"], raw_locator)
-        total_length = path.stat().st_size
+        evidence, node = validation["evidence"], validation["node"]
+        image_file = EvidenceFileContent.is_image(node)
+        path = (
+            evidence.source_path if image_file else EvidenceFileContent.logical_path(evidence, node)
+        )
+        total_length = node.file_size or 0
         absolute_offset = base_offset + offset
         if absolute_offset > total_length:
             raise RawReadError(
                 "RAW_RANGE_INVALID", "Raw read offset is beyond EOF.", target="offset"
             )
-        with path.open("rb") as handle:
-            handle.seek(absolute_offset)
-            data = handle.read(read_length)
+        data = EvidenceFileContent.read(
+            evidence,
+            node,
+            offset=absolute_offset,
+            length=read_length,
+            cancellation_token=cancellation_token,
+        )
         self._check_cancel(cancellation_token)
         returned_length = len(data)
         hash_data = hashlib.sha256(data).hexdigest()
@@ -3091,7 +3152,7 @@ class SafeRawRangeReader:
             evidence_id=str(raw_locator.get("evidence_id")),
             resource_type=_enum_value(resource_type),
             resource_id=resource_id,
-            source_path=str(path),
+            source_path=node.display_path if image_file else str(path),
             raw_locator=raw_locator,
             locator_type=locator_type,
             requested_offset=offset,
@@ -3259,12 +3320,13 @@ class SafeRawRangeReader:
         cleaned = pure.as_posix()
         if cleaned in {"", "."}:
             return "."
-        return cleaned.lstrip("./")
+        return cleaned
 
     @staticmethod
     def _locator_type(raw_locator: dict[str, Any]) -> str:
         raw_type = str(raw_locator.get("locator_type") or "UNKNOWN")
         aliases = {
+            "IMAGE_FILE_SYSTEM_OBJECT": RawLocatorType.FILE_BYTE_RANGE.value,
             "BYTE_RANGE": RawLocatorType.FILE_BYTE_RANGE.value,
             "LOGICAL_PATH": RawLocatorType.FILE_BYTE_RANGE.value,
             "SQLITE_ROW": RawLocatorType.SQLITE_ROW.value,
@@ -3282,12 +3344,19 @@ class SafeRawRangeReader:
 
     @staticmethod
     def _text_preview(data: bytes, encoding: Any) -> tuple[str | None, str]:
-        if b"\\x00" in data:
+        if b"\x00" in data and not encoding and not data.startswith((b"\xff\xfe", b"\xfe\xff")):
             return None, "application/octet-stream"
-        candidates = [str(encoding)] if encoding else ["utf-8"]
+        candidates = (
+            [str(encoding)]
+            if encoding
+            else ["utf-16" if data.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig"]
+        )
         for candidate in candidates:
             try:
-                return data[:RAW_PREVIEW_BYTES].decode(candidate, errors="strict"), "text/plain"
+                # A bounded preview can end in the middle of a UTF-8/UTF-16
+                # character. Preserve valid text and defer that incomplete tail.
+                decoder = codecs.getincrementaldecoder(candidate)(errors="strict")
+                return decoder.decode(data[:RAW_PREVIEW_BYTES], final=False), "text/plain"
             except (LookupError, UnicodeDecodeError):
                 continue
         return None, "application/octet-stream"
@@ -3332,6 +3401,7 @@ class EngineInterfaceService:
         reports: Any | None = None,
         clock: Clock,
         id_generator: IdGenerator,
+        register_descriptors: bool = True,
     ) -> None:
         self._repository = repository
         self._contexts = contexts
@@ -3340,7 +3410,8 @@ class EngineInterfaceService:
         self._reports = reports
         self._clock = clock
         self._id_generator = id_generator
-        self._register_default_tool_descriptors()
+        if register_descriptors:
+            self._register_default_tool_descriptors()
 
     def version(self) -> EngineInterfaceVersion:
         runtime_ai_available = False

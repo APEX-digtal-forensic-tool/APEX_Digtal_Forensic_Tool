@@ -1436,3 +1436,9 @@ tr:focus-visible {
   font-family: monospace;
   margin-top: 8px;
 }
+
+/* Native dialog keeps focus in advanced evidence tools. */
+dialog.forensic-tools { width: min(760px, 92vw); max-height: 86vh; overflow: auto; color: inherit; }
+dialog.forensic-tools::backdrop { background: rgb(0 0 0 / 65%); }
+.forensic-tools label { display: block; margin: 10px 0; }
+.forensic-tools button { margin: 5px 8px 5px 0; }

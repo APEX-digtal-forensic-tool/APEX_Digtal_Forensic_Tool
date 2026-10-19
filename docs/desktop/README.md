@@ -1,5 +1,9 @@
 # Windows / macOS 앱 및 로컬 API
 
+> 최신 Windows 내장 도구·모델 구성은 [API 없는 로컬 실행 구성](offline-runtime-2026-10-19.md)을 참고하세요.
+
+> 이전 기능 연결과 모델/API 설정은 [미구현·미연결 기능 후속 구현](../engine/completed-connections-2026-10-19.md)을 참고하세요. 아래 초기 구현 범위보다 E01/VHD/VHDX·복구·ADS·카빙·OCR/STT·AI 본문 기능이 확장되었습니다.
+
 ## 범위와 기준
 
 Windows x64와 macOS Apple Silicon/Intel을 대상으로 하는 Electron + React + TypeScript 앱입니다. 로컬 FastAPI를 통해 기존 Core를 재사용하며, 기존 계정 인증과 비로그인 로컬 분석을 지원합니다.
@@ -14,7 +18,8 @@ Windows x64 또는 macOS, Python 3.12, Node.js 24, uv가 필요합니다. 아래
 
 ```powershell
 uv python install 3.12
-uv sync --locked --python 3.12 --extra desktop --extra report-renderer
+uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction --extra advanced-secrets
+uv run --no-sync python tools/prepare_desktop_assets.py
 cd frontend
 npm ci
 npm run dev
@@ -49,7 +54,7 @@ Electron이 Windows에서는 `.venv/Scripts/python.exe`, macOS에서는 `.venv/b
 
 비밀번호는 요청 후 입력 상태에서 제거합니다. 접근·갱신 토큰은 Electron main 프로세스 메모리에만 보관하고 renderer, localStorage, 로컬 분석 DB로 전달하지 않습니다. 현재 앱은 만료 후 재로그인 방식이며 자동 refresh는 후속 범위입니다. 로그아웃은 앱의 메모리 세션을 제거합니다. 앱은 서버 logout API를 호출하지 않으므로 서버 측 토큰 폐기를 수행했다고 표시하지 않습니다.
 
-로컬 분석자의 `local:<UUID>`와 서버 계정 권한은 별개입니다. 로그인하거나 정책을 켜는 것만으로 증거가 서버에 전송되지 않습니다. AI 실행 연결이 없어 현재 앱에서 외부 증거 전송은 발생하지 않습니다. 정책 기본값과 수정 충돌 판단은 기존 Core가 수행합니다. `ALLOW_WITH_REDACTION` 등 변환 후 재평가 상태를 최종 허용으로 표시하지 않습니다.
+로컬 분석자의 `local:<UUID>`와 서버 계정 권한은 별개입니다. 로그인하거나 정책을 켜는 것만으로 증거가 서버에 전송되지 않습니다. AI 설정이 없으면 외부 전송은 발생하지 않습니다. 제공자를 설정한 경우에도 사건 정책이 최종 허용한 구조 정보 또는 사용자가 검토한 발췌문만 전송합니다. 정책 기본값과 수정 충돌 판단은 기존 Core가 수행합니다. `ALLOW_WITH_REDACTION` 등 변환 후 재평가 상태를 최종 허용으로 표시하지 않습니다.
 
 원격 LLM/MCP 실행 연결에는 실제 서비스 주소와 전송·승인 계약 확인이 필요합니다. 첨부 아키텍처의 서버 측 기술 선택을 이번 클라이언트 구현에서 임의로 확정하지 않았습니다.
 
@@ -71,7 +76,7 @@ GUI 컨텍스트 수정은 revision 순서로 직렬화합니다. 충돌 시 최
 
 ```sh
 # 저장소 루트, Windows/macOS 공통
-uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer
+uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction --extra advanced-secrets
 uv run --no-sync python tools/build_desktop_runtime.py
 uv run --no-sync python tools/verify_desktop_runtime.py
 cd frontend
@@ -80,7 +85,7 @@ npm ci
 
 Windows에서는 `npm run dist:win`, Mac에서는 `npm run dist:mac`을 실행합니다. 기존 `pwsh -File tools/build_desktop_runtime.ps1`도 공통 Python 빌더를 호출합니다.
 
-PyInstaller가 Core·로컬 API·기본 파일시스템 의존성·보고서 렌더러를 `desktop-runtime/`에 묶습니다. electron-builder는 Windows NSIS `.exe`, macOS `.dmg` 및 `.zip`을 `frontend/release/`에 만듭니다. Mac은 현재 호스트 아키텍처로 빌드하며, Intel과 Apple Silicon 패키지는 각각 해당 환경에서 생성합니다. Universal 바이너리나 다른 OS로의 교차 빌드는 제공하지 않습니다.
+빌드 시 고정 버전·SHA-256을 확인한 다국어 STT 모델과 Windows용 FFmpeg/ffprobe를 내려받습니다. 설치 후에는 모델 다운로드가 필요하지 않습니다. PyInstaller가 Core·로컬 API·파일시스템·보고서·OCR/STT 실행기·고급 DPAPI 의존성을 `desktop-runtime/`에 묶습니다. electron-builder는 Windows NSIS `.exe`, macOS `.dmg` 및 `.zip`을 `frontend/release/`에 만듭니다. Mac은 현재 호스트 아키텍처로 빌드하며, Intel과 Apple Silicon 패키지는 각각 해당 환경에서 생성합니다. Universal 바이너리나 다른 OS로의 교차 빌드는 제공하지 않습니다.
 
 개인 Mac에서 서명 인증서를 사용하지 않고 로컬 빌드를 확인하려면 `CSC_IDENTITY_AUTO_DISCOVERY=false npm run dist:mac`을 사용합니다. 공개 배포를 위한 Developer ID 서명·공증, 자동 업데이트는 별도 설정이 필요합니다. 로컬 빌드 성공은 배포용 서명 검증을 뜻하지 않습니다.
 

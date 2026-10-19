@@ -10,7 +10,6 @@ from apex_forensic.application.services.file_system_index import FileSystemIndex
 from apex_forensic.domain.enums import AnalysisProfileType, FileSystemNodeType
 from apex_forensic.domain.errors import (
     StateConflictError,
-    UnsupportedCapabilityError,
     ValidationError,
 )
 from apex_forensic.jobs import CancellationToken, PauseToken
@@ -312,16 +311,16 @@ def test_bounded_queue_records_warning(services, tmp_path: Path) -> None:
     assert any(warning["code"] == "WORK_QUEUE_FULL" for warning in job.warnings)
 
 
-def test_disk_image_provider_returns_capability_unavailable(services, tmp_path: Path) -> None:
+def test_malformed_e01_returns_validation_error(services, tmp_path: Path) -> None:
     image = tmp_path / "disk.e01"
     image.write_bytes(b"image metadata only")
     case = services.cases.create_case(name="Image Case")
     evidence = services.evidence.register_evidence(case_id=case.case_id, source_path=image)
 
-    with pytest.raises(UnsupportedCapabilityError) as error:
+    with pytest.raises(ValidationError) as error:
         services.fs.index_evidence(case_id=case.case_id, evidence_id=evidence.evidence_id)
 
-    assert error.value.code == "CAPABILITY_UNAVAILABLE"
+    assert error.value.code == "VALIDATION_ERROR"
 
 
 class _WarningProvider(LogicalDirectoryFileSystemProvider):

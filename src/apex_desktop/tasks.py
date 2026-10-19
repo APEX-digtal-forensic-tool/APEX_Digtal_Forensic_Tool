@@ -69,14 +69,15 @@ class Tasks:
         self.records: dict[str, TaskRecord] = {}
         self.tokens: dict[str, CancellationToken] = {}
         self.journal_recovered: bool = False  # True if journal was corrupt and reset
-        # Receipts contain status/IDs only; forensic results remain in Core storage.
+        # Receipts keep status and derived-output references. Evidence content and
+        # full analysis results remain in Core storage or exported manifests.
         if journal.exists():
             import json
 
-            raw = journal.read_text(encoding="utf-8")
             parsed_ok = False
             records_raw: list[Any] = []
             try:
+                raw = journal.read_text(encoding="utf-8")
                 data = json.loads(raw)
                 if not isinstance(data, list):
                     raise ValueError(
@@ -87,8 +88,9 @@ class Tasks:
                         raise ValueError(f"tasks.json item is not a dict: {item!r}")
                     if "task_id" not in item or "status" not in item or "case_id" not in item:
                         raise ValueError(f"tasks.json item missing required keys: {item!r}")
-                    if not isinstance(item["case_id"], str) or not item["case_id"].strip():
-                        raise ValueError(f"tasks.json item has invalid case_id: {item!r}")
+                    for key in ("task_id", "case_id", "status"):
+                        if not isinstance(item[key], str) or not item[key].strip():
+                            raise ValueError(f"tasks.json item has invalid {key}")
                 records_raw = data
                 parsed_ok = True
             except Exception as exc:
@@ -112,12 +114,62 @@ class Tasks:
                 for record in records_raw:
                     if record["status"] in {"RUNNING", "QUEUED", "CANCELLING"}:
                         record["status"] = "INTERRUPTED"
+                    record["actions"] = []  # No live cancellation tokens survive a restart.
+                    record.setdefault("kind", "UNKNOWN")
+                    record.setdefault("job", None)
+                    record.setdefault("error", None)
                     self.records[record["task_id"]] = record
 
     def _save(self) -> None:
         import json
 
-        receipts = [{k: v for k, v in r.items() if k != "result"} for r in self.records.values()]
+        receipts = []
+        for record in self.records.values():
+            receipt = {k: v for k, v in record.items() if k != "result"}
+            result = record.get("result")
+            if record["kind"] in {
+                "RECOVERY",
+                "STREAM_EXPORT",
+                "CARVING",
+                "OCR",
+                "STT",
+            } and isinstance(result, dict):
+                summary = {
+                    key: result[key]
+                    for key in (
+                        "node_id",
+                        "evidence_id",
+                        "output_path",
+                        "manifest_path",
+                        "run_id",
+                        "sha256",
+                        "stream",
+                        "exported_bytes",
+                        "logical_size",
+                        "output_size",
+                        "recovered_bytes",
+                        "missing_ranges",
+                        "missing_range_policy",
+                        "partial",
+                        "recovery_method",
+                        "warnings",
+                        "scope",
+                        "semantics",
+                        "next_offset",
+                        "coverage_complete",
+                        "scanned_bytes",
+                        "candidate_read_bytes",
+                        "max_file_bytes",
+                        "skipped_signatures",
+                        "candidate_count",
+                        "candidate_ids",
+                    )
+                    if key in result
+                }
+                if isinstance(result.get("candidates"), list):
+                    summary["candidate_count"] = len(result["candidates"])
+                receipt["result"] = summary
+            receipts.append(receipt)
         tmp = self.journal.with_suffix(".tmp")
         try:
             tmp.write_text(json.dumps(receipts, ensure_ascii=False), encoding="utf-8")
@@ -131,7 +183,11 @@ class Tasks:
             return [r.copy() for r in self.records.values() if r["case_id"] == case_id][-100:]
 
     def start(
-        self, case_id: str, kind: str, run: TaskRun, cancellable: bool = True,
+        self,
+        case_id: str,
+        kind: str,
+        run: TaskRun,
+        cancellable: bool = True,
     ) -> TaskRecord:
         with self.lock:
             if (
@@ -155,7 +211,14 @@ class Tasks:
             self.records[task_id] = record
             token = CancellationToken.new()
             self.tokens[task_id] = token
-            self._save()
+            try:
+                self._save()
+            except Exception:
+                # Admission failed: no worker will run this record. Leaving it
+                # QUEUED would permanently consume one of the 16 queue slots.
+                self.records.pop(task_id, None)
+                self.tokens.pop(task_id, None)
+                raise
 
         def progress(job: Job) -> None:
             with self.lock:
@@ -176,6 +239,10 @@ class Tasks:
                     record["result"] = result
                     job = record.get("job")
                     record["status"] = (job or {}).get("status", "SUCCEEDED")
+                    if isinstance(result, dict) and (
+                        result.get("partial") or result.get("coverage_complete") is False
+                    ):
+                        record["status"] = "PARTIAL"
                     if isinstance(result, list):
                         for item in result:
                             if isinstance(item, dict) and "job_type" in item:
@@ -195,7 +262,17 @@ class Tasks:
                     self.tokens.pop(task_id, None)
                     self._save()
 
-        self.pool.submit(worker)
+        try:
+            self.pool.submit(worker)
+        except Exception:
+            with self.lock:
+                self.records.pop(task_id, None)
+                self.tokens.pop(task_id, None)
+                # The executor may have shut down between admission and submit.
+                # Remove the already-written receipt as well as the in-memory slot.
+                with contextlib.suppress(OSError):
+                    self._save()
+            raise
         return record.copy()
 
     def cancel(self, case_id: str, task_id: str) -> TaskRecord:

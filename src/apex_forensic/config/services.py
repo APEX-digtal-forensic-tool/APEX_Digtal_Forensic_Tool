@@ -160,6 +160,7 @@ def build_services(
         repository=repository,
         clock=clock,
         id_generator=ids,
+        initialize_capabilities=initialize,
     )
     contexts = ContextService(repository=repository, clock=clock, id_generator=ids)
     ai = AiAssistanceService(
@@ -184,15 +185,20 @@ def build_services(
         clock=clock,
         id_generator=ids,
     )
-    interface = EngineInterfaceService(
-        repository=repository,
-        contexts=contexts,
-        views=views,
-        ai=ai,
-        reports=reports,
-        clock=clock,
-        id_generator=ids,
-    )
+    # Register descriptors once at initialization and commit before returning.
+    # Per-request/background connections must not hold a write transaction during
+    # decoding or inference, or even task-status reads compete for a writer lock.
+    with repository.connection:
+        interface = EngineInterfaceService(
+            repository=repository,
+            contexts=contexts,
+            views=views,
+            ai=ai,
+            reports=reports,
+            clock=clock,
+            id_generator=ids,
+            register_descriptors=initialize,
+        )
     cases = CaseManager(repository=repository, clock=clock, id_generator=ids)
     return ServiceBundle(
         repository=repository,

@@ -30,6 +30,7 @@ class RapidOcrProvider:
     def __init__(self, *, timeout: float = 30.0) -> None:
         self._timeout = timeout
         self._engine: Any | None = None
+        self._engine_language = ""
 
     def capabilities(self) -> ProviderCapability:
         rapidocr_available = _module_available("rapidocr")
@@ -65,8 +66,8 @@ class RapidOcrProvider:
                 "candidate_is_observed_fact": False,
                 "engine": "rapidocr",
                 "inference_backend": "onnxruntime" if onnx_available else None,
-                "languages": ["eng", "ch_sim"],
-                "korean_fixture_status": "BLOCKED_FONT_OR_MODEL",
+                "languages": ["eng", "ch_sim", "kor"],
+                "korean_model": "korean_PP-OCRv5_rec_mobile",
             },
             updated_at=utc_now(),
         )
@@ -95,17 +96,37 @@ class RapidOcrProvider:
                 "OCR source image exceeds the size limit.",
                 target="path",
             )
-        engine = self._rapidocr_engine()
+        engine = self._rapidocr_engine(languages)
         started = datetime.now().astimezone()
         output = engine(str(resolved))
         rows = _rapidocr_rows(output, "+".join(languages or ["auto"]), started)
+        for row in rows:
+            row["model_id"] = f"rapidocr-{self._engine_language}-onnxruntime"
         _attach_source_hash(rows, resolved)
         return rows
 
-    def _rapidocr_engine(self) -> Any:
-        if self._engine is None:
+    def _rapidocr_engine(self, languages: list[str] | None = None) -> Any:
+        requested = set(languages or ["eng"])
+        if requested - {"eng", "ch_sim", "kor"}:
+            raise UnsupportedCapabilityError(
+                "Requested RapidOCR language is not configured.", target="languages"
+            )
+        language = "korean" if "kor" in requested else "default"
+        if self._engine is None or self._engine_language != language:
+            importlib.import_module("onnxruntime").disable_telemetry_events()
             rapidocr = importlib.import_module("rapidocr")
-            self._engine = rapidocr.RapidOCR()
+            if language == "korean":
+                types = importlib.import_module("rapidocr.utils.typings")
+                self._engine = rapidocr.RapidOCR(
+                    params={
+                        "Rec.lang_type": types.LangRec.KOREAN,
+                        "Rec.ocr_version": types.OCRVersion.PPOCRV5,
+                        "Rec.model_type": types.ModelType.MOBILE,
+                    }
+                )
+            else:
+                self._engine = rapidocr.RapidOCR()
+            self._engine_language = language
         return self._engine
 
 

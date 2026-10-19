@@ -2940,6 +2940,12 @@ class SQLiteRepository:
         ).fetchall()
         return [self._row_to_evidence(row) for row in rows]
 
+    def list_all_evidence(self) -> list[Evidence]:
+        """Return registered sources for derived-output collision checks."""
+
+        rows = self.connection.execute("SELECT * FROM evidence").fetchall()
+        return [self._row_to_evidence(row) for row in rows]
+
     def replace_evidence_volumes(
         self, evidence_id: str, volumes: list[EvidenceVolume]
     ) -> None:
@@ -9912,6 +9918,10 @@ class SQLiteRepository:
         }
 
     def _row_to_fs_node(self, row: sqlite3.Row) -> FileSystemNode:
+        confidence = str(row["mime_confidence"])
+        if row["provider_id"] == "apex.pytsk_filesystem_provider":
+            # Read compatibility for nodes indexed before the provider contract fix.
+            confidence = {"NONE": "UNKNOWN", "EXTENSION": "LOW"}.get(confidence, confidence)
         return FileSystemNode(
             node_id=str(row["node_id"]),
             case_id=str(row["case_id"]),
@@ -9927,7 +9937,7 @@ class SQLiteRepository:
             file_size=row["file_size"],
             extension=row["extension"],
             mime_candidate=row["mime_candidate"],
-            mime_confidence=str(row["mime_confidence"]),
+            mime_confidence=confidence,
             fs_metadata=json.loads(str(row["fs_metadata_json"])),
             platform=str(row["platform"]),
             timestamp_meanings=json.loads(str(row["timestamp_meanings_json"])),

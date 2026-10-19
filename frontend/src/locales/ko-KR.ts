@@ -1,12 +1,24 @@
 export const errorMessages: Record<string, string> = {
+  VIDEO_LIMIT_EXCEEDED:
+    "영상 프레임 해상도 한도를 초과했습니다. 최대 8K UHD에 해당하는 33,177,600픽셀까지 지원합니다.",
+  VIDEO_FRAME_FAILED:
+    "영상 프레임을 읽지 못했습니다. 영상 길이 안의 시각인지 확인해주세요. 손상 파일·미지원 코덱 또는 디코딩 시간·크기 한도 초과일 수 있습니다.",
+  STT_MODEL_INVALID:
+    "음성 모델 구성이 올바르지 않습니다. Faster Whisper는 model.bin·config.json·tokenizer.json·vocabulary 파일이 있는 전체 폴더를, whisper.cpp는 모델 파일을 선택하세요.",
+  STT_LANGUAGE_UNSUPPORTED:
+    "이 모델은 영어 전용입니다. 한국어 음성을 인식하려면 다국어 모델을 선택해주세요.",
+  MACHINE_SETTINGS_MANAGED:
+    "환경변수로 관리되는 분석기 설정입니다. 실행 환경의 APEX_DESKTOP_MACHINE_CONFIG를 변경해주세요.",
+  AI_TEXT_EXTRACTION_REQUIRED:
+    "텍스트로 읽을 수 없는 파일입니다. 이미지·음성은 OCR·STT를 실행하고 추출 후보에서 분석을 요청하세요.",
   ARCHIVE_REQUIRES_EXTRACTION:
     "이 파일은 압축 파일입니다. 원본을 보관하고 별도 폴더에 압축을 해제한 뒤 ‘폴더 추가’로 가져오세요. 압축 파일 내부의 파일시스템 분석은 지원하지 않습니다.",
   MEDIA_LIMIT_EXCEEDED:
     "이미지 분석 한도를 초과했습니다. 최대 64 MiB·2,500만 픽셀을 지원합니다. 미리보기 크기를 줄여 다시 시도할 수 있습니다.",
   MEDIA_SOURCE_CHANGED:
-    "등록된 분석 결과와 현재 이미지 해시가 다릅니다. 원본을 확인한 뒤 미디어를 다시 분석해주세요.",
+    "등록된 분석 결과와 현재 미디어 해시가 다릅니다. 원본을 확인한 뒤 미디어를 다시 분석해주세요.",
   MEDIA_SOURCE_UNAVAILABLE:
-    "이미지 원본을 읽을 수 없습니다. 연결된 증거 폴더와 파일을 확인해주세요. 링크 또는 디스크 이미지 내부의 픽셀 분석은 지원하지 않습니다.",
+    "미디어 원본을 읽을 수 없습니다. 연결된 증거와 파일의 읽기 가능 상태를 확인해주세요. 링크와 삭제 파일은 직접 분석할 수 없습니다.",
   MEDIA_DECODE_FAILED:
     "이미지를 디코딩하지 못했습니다. 파일 손상 또는 지원하지 않는 이미지 형식인지 확인해주세요.",
   MEDIA_FORMAT_UNSUPPORTED:
@@ -49,7 +61,12 @@ export const errorMessages: Record<string, string> = {
   DEMO_SEARCH_MODE_UNSUPPORTED:
     "더미 데이터 검색은 TERM·PHRASE·PREFIX·EXACT를 지원합니다. 정규식 검색은 실제 데스크톱 엔진에서 사용할 수 있습니다.",
   STATE_CONFLICT: "최신 상태와 요청이 충돌합니다. 새로고침 후 확인해주세요.",
-  RAW_READ_LIMIT_EXCEEDED: "원본은 한 번에 최대 1 MiB까지 읽을 수 있습니다.",
+  RAW_READ_LIMIT_EXCEEDED:
+    "원본 읽기 또는 분석용 사본의 크기 제한을 초과했습니다. 범위를 줄이거나 해당 기능의 파일 크기 제한을 확인해주세요.",
+  RAW_SOURCE_CHANGED:
+    "인덱싱 이후 또는 읽는 중에 원본 파일이 변경되었습니다. 증거 무결성을 확인하고 다시 인덱싱해주세요.",
+  RAW_SOURCE_UNAVAILABLE:
+    "원본 파일을 읽을 수 없습니다. 증거 경로와 접근 권한을 확인해주세요.",
   RAW_RANGE_NOT_SATISFIABLE: "원본 데이터 범위를 벗어났습니다.",
   AUTH_LOGIN_FAILED: "이메일, 비밀번호 또는 테넌트 ID를 확인해주세요.",
   AUTH_ORIGIN_INVALID:
