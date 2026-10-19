@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 export default defineConfig(({ command }) => {
   const nonce = randomBytes(18).toString("base64");
   return {
+    test: { setupFiles: ["./src/test-setup.ts"] },
     plugins: [
       react(),
       ...(command === "serve"

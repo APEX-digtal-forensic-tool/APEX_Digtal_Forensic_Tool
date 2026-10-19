@@ -197,7 +197,15 @@ class FasterWhisperSttProvider:
 
     def capabilities(self) -> ProviderCapability:
         dependency_available = _module_available("faster_whisper")
-        model_available = self._model_path is not None and self._model_path.exists()
+        model_available = (
+            self._model_path is not None
+            and self._model_path.is_dir()
+            and all(
+                (self._model_path / name).is_file()
+                for name in ("model.bin", "config.json", "tokenizer.json")
+            )
+            and any(self._model_path.glob("vocabulary.*"))
+        )
         available = dependency_available and model_available
         warnings: list[dict[str, Any]] = []
         if not dependency_available:
@@ -311,6 +319,7 @@ class FasterWhisperSttProvider:
                 str(self._model_path.resolve()) if self._model_path is not None else "",
                 device=self._device,
                 compute_type=self._compute_type,
+                local_files_only=True,
             )
         return self._engine
 

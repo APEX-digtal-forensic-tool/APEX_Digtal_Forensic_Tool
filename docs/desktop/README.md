@@ -1,5 +1,7 @@
 # Windows / macOS 앱 및 로컬 API
 
+> 최신 기능 연결과 모델/API 설정은 [미구현·미연결 기능 후속 구현](../engine/completed-connections-2026-10-19.md)을 참고하세요. 아래 초기 구현 범위보다 E01/VHD/VHDX·복구·ADS·카빙·OCR/STT·AI 본문 기능이 확장되었습니다.
+
 ## 범위와 기준
 
 Windows x64와 macOS Apple Silicon/Intel을 대상으로 하는 Electron + React + TypeScript 앱입니다. 로컬 FastAPI를 통해 기존 Core를 재사용하며, 기존 계정 인증과 비로그인 로컬 분석을 지원합니다.
@@ -49,7 +51,7 @@ Electron이 Windows에서는 `.venv/Scripts/python.exe`, macOS에서는 `.venv/b
 
 비밀번호는 요청 후 입력 상태에서 제거합니다. 접근·갱신 토큰은 Electron main 프로세스 메모리에만 보관하고 renderer, localStorage, 로컬 분석 DB로 전달하지 않습니다. 현재 앱은 만료 후 재로그인 방식이며 자동 refresh는 후속 범위입니다. 로그아웃은 앱의 메모리 세션을 제거합니다. 앱은 서버 logout API를 호출하지 않으므로 서버 측 토큰 폐기를 수행했다고 표시하지 않습니다.
 
-로컬 분석자의 `local:<UUID>`와 서버 계정 권한은 별개입니다. 로그인하거나 정책을 켜는 것만으로 증거가 서버에 전송되지 않습니다. AI 실행 연결이 없어 현재 앱에서 외부 증거 전송은 발생하지 않습니다. 정책 기본값과 수정 충돌 판단은 기존 Core가 수행합니다. `ALLOW_WITH_REDACTION` 등 변환 후 재평가 상태를 최종 허용으로 표시하지 않습니다.
+로컬 분석자의 `local:<UUID>`와 서버 계정 권한은 별개입니다. 로그인하거나 정책을 켜는 것만으로 증거가 서버에 전송되지 않습니다. AI 설정이 없으면 외부 전송은 발생하지 않습니다. 제공자를 설정한 경우에도 사건 정책이 최종 허용한 구조 정보 또는 사용자가 검토한 발췌문만 전송합니다. 정책 기본값과 수정 충돌 판단은 기존 Core가 수행합니다. `ALLOW_WITH_REDACTION` 등 변환 후 재평가 상태를 최종 허용으로 표시하지 않습니다.
 
 원격 LLM/MCP 실행 연결에는 실제 서비스 주소와 전송·승인 계약 확인이 필요합니다. 첨부 아키텍처의 서버 측 기술 선택을 이번 클라이언트 구현에서 임의로 확정하지 않았습니다.
 
@@ -71,7 +73,7 @@ GUI 컨텍스트 수정은 revision 순서로 직렬화합니다. 충돌 시 최
 
 ```sh
 # 저장소 루트, Windows/macOS 공통
-uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer
+uv sync --locked --python 3.12 --extra desktop --extra desktop-build --extra report-renderer --extra browser-media --extra windows-artifacts --extra machine-extraction
 uv run --no-sync python tools/build_desktop_runtime.py
 uv run --no-sync python tools/verify_desktop_runtime.py
 cd frontend

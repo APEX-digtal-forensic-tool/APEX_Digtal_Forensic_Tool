@@ -176,6 +176,10 @@ class Tasks:
                     record["result"] = result
                     job = record.get("job")
                     record["status"] = (job or {}).get("status", "SUCCEEDED")
+                    if isinstance(result, dict) and (
+                        result.get("partial") or result.get("coverage_complete") is False
+                    ):
+                        record["status"] = "PARTIAL"
                     if isinstance(result, list):
                         for item in result:
                             if isinstance(item, dict) and "job_type" in item:

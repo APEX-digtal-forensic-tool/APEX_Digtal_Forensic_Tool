@@ -10,6 +10,7 @@ from apex_forensic.adapters.ai.openai_compatible import (
 )
 from apex_forensic.config import AiProviderRuntimeConfig, ServiceBundle
 from apex_forensic.domain.enums import (
+    AiDataForm,
     AiDataSourceType,
     AiDestinationCategory,
     AiEgressDecision,
@@ -17,6 +18,10 @@ from apex_forensic.domain.enums import (
 )
 from apex_forensic.domain.errors import ApexError, ValidationError
 from apex_forensic.domain.models import AiAssistanceRequest
+from apex_forensic.domain.models.ai_governance import AiEgressData
+from apex_forensic.domain.services.ai_projection import ai_data_reference
+
+from .ai_content import excerpt
 
 
 def provider_config() -> OpenAICompatibleConfig | None:
@@ -53,20 +58,38 @@ def runtime(services: ServiceBundle) -> dict[str, Any]:
 
 
 class GovernedDesktopProvider(OpenAICompatibleProvider):
-    """Send only the exact policy-approved structural projection.
+    """Send exactly the policy-approved projection or explicitly reviewed excerpt.
 
-    Paths, excerpts, raw bytes and arbitrary forensic text never leave this route.
-    The result retains local citations as provenance, explicitly marked as a
-    structural summary rather than interpretation of original evidence contents.
+    Both modes retain local citations and classify generated results as AI inference.
     """
 
-    def __init__(self, config: OpenAICompatibleConfig, services: ServiceBundle) -> None:
+    def __init__(
+        self,
+        config: OpenAICompatibleConfig,
+        services: ServiceBundle,
+        content: dict[str, Any] | None = None,
+    ) -> None:
         self.services = services
         self.audit: Any = None
         self.projection: Any = None
+        self.content = content
         super().__init__(config, request_payload=self._approved_payload)
 
     def _approved_payload(self, request: AiAssistanceRequest) -> dict[str, Any]:
+        if self.content is not None:
+            self.audit = self.services.ai_egress.evaluate(
+                AiEgressData(
+                    source=ai_data_reference(request),
+                    classification=DataClassification.SECRET,
+                    contains_secrets=False,
+                    data_form=AiDataForm.REDACTED,
+                    content_fingerprint=self.content["fingerprint"],
+                ),
+                destination=AiDestinationCategory.EXTERNAL,
+            )
+            if self.audit.result.decision is not AiEgressDecision.ALLOW:
+                raise ApexError("AI_EGRESS_DENIED", "error.ai_egress_denied")
+            return dict(self.content["payload"])
         self.projection = self.services.ai_projections.create(
             case_id=request.case_id,
             source_id=request.assistance_request_id,
@@ -93,10 +116,13 @@ class GovernedDesktopProvider(OpenAICompatibleProvider):
         result["referenced_resource_ids"] = []
         result.setdefault("warnings", []).append(
             {
-                "code": "AI_STRUCTURAL_PROJECTION_ONLY",
+                "code": "AI_REVIEWED_EXCERPT" if self.content else "AI_STRUCTURAL_PROJECTION_ONLY",
                 "developer_message": (
-                    "Only structural policy-approved fields were sent. Local citations identify "
-                    "the selected sources, not evidence text read by the model."
+                    "A locally reviewed, bounded excerpt was analyzed; this is AI inference."
+                    if self.content
+                    else "Only structural policy-approved fields were sent. "
+                    "Local citations identify the selected sources, "
+                    "not evidence text read by the model."
                 ),
             }
         )
@@ -104,7 +130,15 @@ class GovernedDesktopProvider(OpenAICompatibleProvider):
 
 
 def analyze(
-    services: ServiceBundle, *, case_id: str, resource_type: str, resource_id: str, actor: str
+    services: ServiceBundle,
+    *,
+    case_id: str,
+    resource_type: str,
+    resource_id: str,
+    actor: str,
+    mode: str = "STRUCTURE",
+    reviewed_fingerprint: str | None = None,
+    prepare_only: bool = False,
 ) -> dict[str, Any]:
     resources = {
         "FILE_SYSTEM_NODE",
@@ -121,16 +155,30 @@ def analyze(
         purpose="AI_REQUEST",
         resources={resource_type: [resource_id]},
     )
+    content = (
+        excerpt(services, case_id=case_id, resource_type=resource_type, resource_id=resource_id)
+        if mode == "CONTENT"
+        else None
+    )
     request = services.ai.create_request_from_context_snapshot(
         case_id=case_id,
         context_snapshot_id=snapshot.context_snapshot_id,
         requested_operations=["SUMMARIZE_SCOPE"],
+        payload_fingerprint=content["fingerprint"] if content else None,
     )
     response: dict[str, Any] = {"request": request.to_schema_dict(), "execution": None}
+    if content is not None:
+        response.update(preview=content, mode=mode)
+        if prepare_only or reviewed_fingerprint != content["fingerprint"]:
+            return {**response, "status": "REVIEW_REQUIRED"}
+    elif mode != "STRUCTURE":
+        raise ValidationError("Unknown AI analysis mode.")
+    elif prepare_only:
+        return {**response, "status": "PREPARED"}
     config = provider_config()
     if config is None:
         return {**response, "status": "CONFIGURATION_REQUIRED"}
-    provider = GovernedDesktopProvider(config, services)
+    provider = GovernedDesktopProvider(config, services, content=content)
     try:
         execution = services.ai.execute_request(
             assistance_request_id=request.assistance_request_id,

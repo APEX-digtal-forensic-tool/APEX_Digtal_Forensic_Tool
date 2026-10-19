@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import re
+import stat
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType, TracebackType
@@ -325,6 +326,12 @@ class EwfEvidenceReader:
             candidate_match = segment_pattern.match(candidate.name)
             if candidate_match is None:
                 continue
+            info = candidate.lstat()
+            if candidate.is_symlink() or (
+                getattr(info, "st_file_attributes", 0)
+                & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+            ):
+                raise ValidationError("EWF segment links are not followed.", target="path")
             discovered[int(candidate_match.group("num"))] = candidate
         if 1 not in discovered:
             raise ValidationError("EWF first segment is missing.", target="path")

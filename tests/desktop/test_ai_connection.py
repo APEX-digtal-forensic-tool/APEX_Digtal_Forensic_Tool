@@ -133,3 +133,110 @@ def test_ai_selection_cannot_cross_case(services, selection, provider):
     with pytest.raises(ApexError):
         analyze(services, **selection)
     assert provider == []
+
+
+def test_content_prepare_without_api_and_fingerprint_requires_review(
+    services, selection, monkeypatch
+):
+    monkeypatch.delenv("APEX_DESKTOP_AI_CONFIG", raising=False)
+    prepared = analyze(services, **selection, mode="CONTENT", prepare_only=True)
+    assert prepared["status"] == "REVIEW_REQUIRED"
+    assert "private forensic content" in prepared["preview"]["payload"]["text"]
+    unreviewed = analyze(services, **selection, mode="CONTENT", reviewed_fingerprint="0" * 64)
+    assert unreviewed["status"] == "REVIEW_REQUIRED"
+    reviewed = analyze(
+        services,
+        **selection,
+        mode="CONTENT",
+        reviewed_fingerprint=prepared["preview"]["fingerprint"],
+    )
+    assert reviewed["status"] == "CONFIGURATION_REQUIRED"
+
+
+def test_reviewed_content_requires_policy_and_sends_exact_redacted_payload(
+    services, selection, provider, tmp_path
+):
+    # Change the synthetic file before preparation and refresh its indexed identity.
+    source = tmp_path / "private-name.txt"
+    source.write_text("Meeting at 10. password=DO_NOT_SEND api_key=HIDDEN_TOKEN")
+    node = services.fs.get_node(selection["resource_id"])
+    services.fs.index_evidence(
+        case_id=node.case_id,
+        evidence_id=node.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+    )
+    selection["resource_id"] = services.repository.list_fs_nodes_for_evidence(node.evidence_id)[
+        0
+    ].node_id
+    prepared = analyze(services, **selection, mode="CONTENT", prepare_only=True)
+    fingerprint = prepared["preview"]["fingerprint"]
+    payload = prepared["preview"]["payload"]
+    assert "Meeting at 10" in payload["text"]
+    assert "DO_NOT_SEND" not in payload["text"] and "HIDDEN_TOKEN" not in payload["text"]
+    args = {**selection, "mode": "CONTENT", "reviewed_fingerprint": fingerprint}
+    assert analyze(services, **args)["status"] == "POLICY_DENIED"
+    services.ai_policies.configure(
+        case_id=selection["case_id"],
+        expected_revision=0,
+        ai_enabled=True,
+        external_allowed=True,
+        local_only=False,
+        allowed_classifications=(DataClassification.SECRET,),
+    )
+    # Projection-only policies do not silently authorize text after user review.
+    assert analyze(services, **args)["status"] == "POLICY_DENIED"
+    assert provider == []
+    services.ai_policies.configure(
+        case_id=selection["case_id"],
+        expected_revision=1,
+        ai_enabled=True,
+        external_allowed=True,
+        local_only=False,
+        projection_required=False,
+        allowed_classifications=(DataClassification.SECRET,),
+    )
+    result = analyze(services, **args)
+    assert result["status"] == "COMPLETED", result
+    assert json.loads(provider[0]["messages"][1]["content"])["request"] == payload
+    assert result["audit"]["result"]["data"]["classification"] == "SECRET"
+    assert result["execution"]["result"]["citations"]
+    serialized = json.dumps(provider)
+    assert "DO_NOT_SEND" not in serialized and "private-name" not in serialized
+
+
+def test_truncated_private_key_is_redacted():
+    from apex_desktop.ai_content import redact_text
+
+    assert redact_text("note\n-----BEGIN RSA PRIVATE KEY-----\npartial secret") == (
+        "note\n[REDACTED_PRIVATE_KEY]"
+    )
+
+
+def test_content_never_replays_a_structural_result_for_same_snapshot(
+    services, selection, provider, monkeypatch
+):
+    services.ai_policies.configure(
+        case_id=selection["case_id"],
+        expected_revision=0,
+        ai_enabled=True,
+        external_allowed=True,
+        local_only=False,
+        projection_required=False,
+        allowed_classifications=(DataClassification.SECRET,),
+    )
+    structural = analyze(services, **selection)
+    snapshot = services.contexts.get_snapshot(structural["request"]["context_snapshot_id"])
+    monkeypatch.setattr(services.contexts, "build_from_selection", lambda **kwargs: snapshot)
+    prepared = analyze(services, **selection, mode="CONTENT", prepare_only=True)
+    result = analyze(
+        services,
+        **selection,
+        mode="CONTENT",
+        reviewed_fingerprint=prepared["preview"]["fingerprint"],
+    )
+    assert result["status"] == "COMPLETED"
+    assert (
+        result["request"]["assistance_request_id"] != structural["request"]["assistance_request_id"]
+    )
+    assert len(provider) == 2
+    assert result["execution"]["replayed"] is False

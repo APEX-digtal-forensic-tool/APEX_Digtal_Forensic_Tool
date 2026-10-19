@@ -1,5 +1,8 @@
 """Smoke a packaged runtime on the build host without writing to user evidence."""
 
+import base64
+import gzip
+import hashlib
 import http.client
 import json
 import os
@@ -15,9 +18,14 @@ from threading import Thread
 
 def main() -> None:
     token = secrets.token_hex(32)
-    executable = Path(sys.argv[1]) if len(sys.argv) > 1 else (
-        Path(__file__).resolve().parents[1] / "desktop-runtime"
-        / ("apex-local-api.exe" if sys.platform == "win32" else "apex-local-api")
+    executable = (
+        Path(sys.argv[1])
+        if len(sys.argv) > 1
+        else (
+            Path(__file__).resolve().parents[1]
+            / "desktop-runtime"
+            / ("apex-local-api.exe" if sys.platform == "win32" else "apex-local-api")
+        )
     )
     with TemporaryDirectory() as tmp:
         root = Path(tmp).resolve()
@@ -64,9 +72,12 @@ def main() -> None:
                     if attempt == 49:
                         raise
                     time.sleep(0.1)
+
             def operation(name, payload):
                 result = request_json(
-                    "POST", "/v1/operations/" + name, payload=payload,
+                    "POST",
+                    "/v1/operations/" + name,
+                    payload=payload,
                 )
                 assert result["ok"], result.get("error")
                 return result["data"]
@@ -79,7 +90,8 @@ def main() -> None:
                 deadline = time.monotonic() + 60
                 while time.monotonic() < deadline:
                     record = next(
-                        item for item in operation("tasks.list", {"case_id": case_id})
+                        item
+                        for item in operation("tasks.list", {"case_id": case_id})
                         if item["task_id"] == task["task_id"]
                     )
                     if record["status"] not in {"RUNNING", "QUEUED", "CANCELLING"}:
@@ -91,25 +103,113 @@ def main() -> None:
             evidence = root / "synthetic-evidence"
             evidence.mkdir()
             (evidence / "packaged-fixture.txt").write_text("synthetic only", encoding="utf-8")
-            registered = wait_task(operation("evidence.register", {
-                "case_id": case_id, "source_path": str(evidence),
-            }))
+            registered = wait_task(
+                operation(
+                    "evidence.register",
+                    {
+                        "case_id": case_id,
+                        "source_path": str(evidence),
+                    },
+                )
+            )
             evidence_id = registered["result"]["id"]
             for kind in ["FILES", "SEARCH"]:
-                wait_task(operation("analysis.start", {
-                    "case_id": case_id, "evidence_id": evidence_id,
-                    "kind": kind, "profile_type": "FULL_ANALYSIS",
-                }))
+                wait_task(
+                    operation(
+                        "analysis.start",
+                        {
+                            "case_id": case_id,
+                            "evidence_id": evidence_id,
+                            "kind": kind,
+                            "profile_type": "FULL_ANALYSIS",
+                        },
+                    )
+                )
             roots = operation("files.roots", {"case_id": case_id, "evidence_id": evidence_id})
-            page = operation("files.list", {
-                "case_id": case_id, "evidence_id": evidence_id,
-                "parent_node_id": roots[0]["id"],
-            })
+            page = operation(
+                "files.list",
+                {
+                    "case_id": case_id,
+                    "evidence_id": evidence_id,
+                    "parent_node_id": roots[0]["id"],
+                },
+            )
             assert page["items"][0]["original_name"] == "packaged-fixture.txt"
-            assert operation("search.query", {
-                "case_id": case_id, "query_text": "packaged",
-            })["results"]
-            print("Packaged health, case/evidence, file indexing and search: PASS")
+            assert operation(
+                "search.query",
+                {
+                    "case_id": case_id,
+                    "query_text": "packaged",
+                },
+            )["results"]
+            fixtures = json.loads(
+                (
+                    Path(__file__).resolve().parents[1] / "tests/fixtures/container-images.json"
+                ).read_text()
+            )
+            for filename in ("compressed.E01", "disk.vhd", "disk.vhdx", "ocr.png"):
+                item = fixtures[filename]
+                data = gzip.decompress(base64.b64decode(item["gzip_base64"]))
+                assert hashlib.sha256(data).hexdigest() == item["sha256"]
+                source = root / filename
+                source.write_bytes(data)
+                eid = wait_task(
+                    operation(
+                        "evidence.register",
+                        {
+                            "case_id": case_id,
+                            "source_path": str(source),
+                        },
+                    )
+                )["result"]["id"]
+                wait_task(
+                    operation(
+                        "analysis.start",
+                        {
+                            "case_id": case_id,
+                            "evidence_id": eid,
+                            "kind": "FILES",
+                            "profile_type": "FULL_ANALYSIS",
+                        },
+                    )
+                )
+                queue = operation("files.roots", {"case_id": case_id, "evidence_id": eid})
+                while queue and queue[0]["node_type"] != "FILE":
+                    queue = operation(
+                        "files.list",
+                        {"case_id": case_id, "evidence_id": eid, "parent_node_id": queue[0]["id"]},
+                    )["items"]
+                assert queue, filename
+                node = next(n for n in queue if n["node_type"] == "FILE")
+                if filename == "ocr.png":
+                    operation("machine.configure", {"ocr_provider": "rapidocr"})
+                    wait_task(
+                        operation(
+                            "machine.run",
+                            {
+                                "case_id": case_id,
+                                "node_id": node["id"],
+                                "kind": "OCR",
+                                "language": "eng",
+                            },
+                        )
+                    )
+                    candidates = operation(
+                        "candidates.list", {"case_id": case_id, "evidence_id": eid}
+                    )["items"]
+                    assert "HELLO" in " ".join(c["text"] for c in candidates)
+                else:
+                    raw = operation(
+                        "raw.read",
+                        {
+                            "case_id": case_id,
+                            "resource_type": "FILE_SYSTEM_NODE",
+                            "resource_id": node["id"],
+                        },
+                    )
+                    assert raw["text_preview"] == "E01 가상 디스크의 실제 내용", raw
+                assert hashlib.sha256(source.read_bytes()).hexdigest() == item["sha256"]
+            print("Packaged indexing, search, E01/VHD/VHDX content and local OCR: PASS")
         finally:
             process.terminate()
             try:

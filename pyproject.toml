@@ -13,6 +13,8 @@ dependencies = [
   "jsonschema>=4.22",
   "rfc3339-validator>=0.1.4",
   "pytsk3>=20260715",
+  "dissect.evidence>=3.13,<4",
+  "dissect.hypervisor>=3.21,<4",
   "tzdata; platform_system == 'Windows'",
 ]
 
@@ -57,6 +59,8 @@ machine-extraction = [
   "rapidocr>=3,<4",
   "onnxruntime>=1.18,<2",
   "faster-whisper>=1.2,<2",
+  # PyAV 19 removed metadata_errors, which faster-whisper 1.2 uses.
+  "av>=11,<19",
 ]
 report-renderer = [
   "reportlab>=4.2",
@@ -127,3 +131,8 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["cryptography.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true

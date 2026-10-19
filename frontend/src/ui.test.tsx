@@ -149,7 +149,7 @@ describe("desktop screens through the bridge", () => {
     render(<App />);
     fireEvent.click(screen.getByTitle("AI 도우미"));
     expect(
-      screen.getByText(/현재 선택을 고정한 뒤 사건 정책을 검사합니다/),
+      screen.getByText(/선택한 자료와 사건 정책을 확인한 후 분석합니다/),
     ).toBeTruthy();
     expect(
       (

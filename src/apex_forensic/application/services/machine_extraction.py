@@ -79,7 +79,7 @@ class MachineExtractionService:
         capability = provider.capabilities()
         self._repository.save_provider_capability(capability)
         rows = provider.analyze_image(Path(path), languages=languages or ["eng"])
-        return self._save_runtime_candidates(
+        return self.store_runtime_candidates(
             case_id=case_id,
             evidence_id=evidence_id,
             source_node_id=source_node_id,
@@ -109,7 +109,7 @@ class MachineExtractionService:
         capability = provider.capabilities()
         self._repository.save_provider_capability(capability)
         rows = provider.analyze_audio(Path(path), language=language)
-        return self._save_runtime_candidates(
+        return self.store_runtime_candidates(
             case_id=case_id,
             evidence_id=evidence_id,
             source_node_id=source_node_id,
@@ -245,7 +245,7 @@ class MachineExtractionService:
                 )
             )
 
-    def _save_runtime_candidates(
+    def store_runtime_candidates(
         self,
         *,
         case_id: str,
@@ -259,6 +259,9 @@ class MachineExtractionService:
         source_revision: int,
         source_path: str,
     ) -> list[MachineExtractedCandidate]:
+        self._require_case(case_id)
+        # Transport integrations resolve and validate the source before invoking
+        # the provider; candidate IDs remain tied to that exact source revision.
         now = self._clock.now()
         candidates: list[MachineExtractedCandidate] = []
         for index, row in enumerate(rows):

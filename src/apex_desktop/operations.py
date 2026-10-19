@@ -3,8 +3,11 @@
 import json
 from pathlib import Path
 from typing import Any, Never
+from uuid import uuid4
 
 from apex_forensic.adapters.report.runtime import RuntimeReportRenderer
+from apex_forensic.application.services.carving import CarvingService
+from apex_forensic.application.services.file_streams import FileStreamService
 from apex_forensic.application.services.image_inspection import ImageInspectionService
 from apex_forensic.config import ServiceBundle
 from apex_forensic.domain.enums import (
@@ -22,11 +25,21 @@ from apex_forensic.jobs.cancellation import CancellationToken
 from apex_forensic.runtime.capabilities import capability_report
 
 from . import ai as desktop_ai
+from . import machine
 from . import models as m
 from .tasks import ProgressCallback, Tasks, encode
 
 MODELS: dict[str, type[m.Input]] = {
     "runtime": m.Empty,
+    "machine.capabilities": m.Empty,
+    "machine.configure": m.MachineSettings,
+    "machine.run": m.MachineRun,
+    "files.streams": m.FileAction,
+    "streams.read": m.StreamRead,
+    "streams.export": m.Stream,
+    "files.recover": m.FileAction,
+    "evidence.carve": m.Carve,
+    "ai.prepare": m.AiAnalyze,
     "cases.list": m.Empty,
     "cases.create": m.CreateCase,
     "evidence.list": m.CaseInput,
@@ -173,6 +186,60 @@ def invoke(
         return s.candidates.review_candidate(
             **{k: v for k, v in p.items() if k != "case_id"}, reviewed_by=actor
         )
+    if operation == "machine.capabilities":
+        return machine.capabilities(exports.parent)
+    if operation == "machine.configure":
+        return machine.save_config(exports.parent, p)
+    if operation in {
+        "files.streams",
+        "streams.read",
+        "streams.export",
+        "files.recover",
+        "machine.run",
+    }:
+        node = s.fs.get_node(p["node_id"])
+        if node.case_id != case_id:
+            mismatch()
+    if operation == "files.streams":
+        return FileStreamService(s.repository, s.images).list(**p)
+    if operation == "streams.read":
+        return FileStreamService(s.repository, s.images).read(**p)
+    if operation == "streams.export":
+        return tasks.start(
+            case_id,
+            "STREAM_EXPORT",
+            lambda b, token, _cb: FileStreamService(b.repository, b.images).export(
+                **p, output_root=exports / "streams" / str(uuid4()), cancellation_token=token
+            ),
+        )
+    if operation == "files.recover":
+        return tasks.start(
+            case_id,
+            "RECOVERY",
+            lambda b, token, _cb: b.images.recover_deleted_file(
+                node_id=p["node_id"],
+                output_root=exports / "recovery" / str(uuid4()),
+                cancellation_token=token,
+            ),
+        )
+    if operation == "evidence.carve":
+        arguments = {k: v for k, v in p.items() if k != "case_id"}
+        arguments["formats"] = tuple(arguments["formats"])
+        return tasks.start(
+            case_id,
+            "CARVING",
+            lambda b, token, _cb: CarvingService(b.images).carve(
+                **arguments, output_root=exports / "carving", cancellation_token=token
+            ),
+        )
+    if operation == "machine.run":
+        return tasks.start(
+            case_id,
+            p["kind"],
+            lambda b, token, _cb: machine.run(b, **p, root=exports.parent, token=token),
+        )
+    if operation == "ai.prepare":
+        return desktop_ai.analyze(s, **p, actor=actor, prepare_only=True)
     if operation == "view":
         return s.views.project(**p)
     if operation == "raw.read":

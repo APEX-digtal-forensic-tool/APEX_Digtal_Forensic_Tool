@@ -14,7 +14,8 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from apex_forensic._time import utc_now
-from apex_forensic.adapters.evidence import RawImageReader
+from apex_forensic.adapters.evidence.factory import evidence_reader
+from apex_forensic.adapters.filesystem.tsk_image import ManagedFileSystem, open_tsk_image
 from apex_forensic.constants import ENGINE_VERSION
 from apex_forensic.domain.enums import (
     EvidenceFormat,
@@ -29,7 +30,7 @@ from apex_forensic.ports.filesystem_provider import (
     ProviderScanIssue,
 )
 
-_DISK_IMAGE_FORMATS = {EvidenceFormat.RAW, EvidenceFormat.DD, EvidenceFormat.IMG}
+_DISK_IMAGE_FORMATS = set(EvidenceFormat) - {EvidenceFormat.DIRECTORY}
 _SUPPORTED_FS_FAMILIES = ("NTFS", "FAT12", "FAT16", "FAT32", "EXFAT", "EXT2", "EXT3", "EXT4")
 
 
@@ -56,7 +57,7 @@ class PyTskFileSystemProvider:
             provider_id=self.provider_id,
             provider_version=self.provider_version,
             capabilities=capabilities if available else (),
-            unsupported_formats=("E01", "VHD", "VHDX"),
+            unsupported_formats=(),
             metadata={
                 "backend": "pytsk3",
                 "backend_available": available,
@@ -65,7 +66,12 @@ class PyTskFileSystemProvider:
                 "reads_file_body": available,
                 "follows_symlinks_by_default": False,
                 "deleted_entries": "CANDIDATE_METADATA",
-                "unallocated_file_carving": "PLANNED",
+                "unallocated_file_carving": "SIGNATURE_CANDIDATES",
+                "container_dependencies": {
+                    "E01": "dissect.evidence",
+                    "VHD": "dissect.hypervisor",
+                    "VHDX": "dissect.hypervisor",
+                },
             },
         )
 
@@ -76,12 +82,14 @@ class PyTskFileSystemProvider:
         return self._dependency_available()
 
     @contextmanager
-    def open_file(self, evidence: Evidence, node: FileSystemNode) -> Iterator[Any]:
+    def open_file(
+        self, evidence: Evidence, node: FileSystemNode, *, allow_deleted: bool = False
+    ) -> Iterator[Any]:
         """Open the unnamed logical data stream of an indexed, allocated file."""
         self._ensure_supported(evidence)
         if (
             node.provider_id != self.provider_id
-            or node.is_deleted
+            or (node.is_deleted and not allow_deleted)
             or node.is_link
             or node.node_type is not FileSystemNodeType.FILE
             or node.evidence_id != evidence.evidence_id
@@ -97,7 +105,7 @@ class PyTskFileSystemProvider:
             raise RawReadError("RAW_SOURCE_CHANGED", "Indexed image volume changed.")
         pytsk3 = self._pytsk3()
         before = evidence.source_path.stat()
-        image = pytsk3.Img_Info(str(evidence.source_path))
+        image = open_tsk_image(pytsk3, evidence)
         filesystem = file = None
         try:
             filesystem = pytsk3.FS_Info(image, offset=volume.byte_offset)
@@ -108,7 +116,7 @@ class PyTskFileSystemProvider:
                 or int(meta.addr) != int(metadata["inode"])
                 or int(meta.type) != int(pytsk3.TSK_FS_META_TYPE_REG)
                 or int(meta.size) != node.file_size
-                or int(meta.flags) & int(pytsk3.TSK_FS_META_FLAG_UNALLOC)
+                or bool(int(meta.flags) & int(pytsk3.TSK_FS_META_FLAG_UNALLOC)) != node.is_deleted
             ):
                 raise RawReadError("RAW_SOURCE_CHANGED", "Indexed image file changed.")
             yield file
@@ -526,15 +534,11 @@ class PyTskFileSystemProvider:
 
     def _open_fs(self, evidence: Evidence, volume: EvidenceVolume) -> Any:
         pytsk3 = self._pytsk3()
-        img = pytsk3.Img_Info(str(evidence.source_path))
-        return pytsk3.FS_Info(img, offset=volume.byte_offset)
+        return ManagedFileSystem(pytsk3, evidence, volume.byte_offset)
 
     def _candidate_volumes(self, evidence: Evidence) -> list[EvidenceVolume]:
         try:
-            with RawImageReader(
-                evidence.source_path,
-                evidence_format=evidence.evidence_type,
-            ) as reader:
+            with evidence_reader(evidence) as reader:
                 volumes = reader.volumes(case_id=evidence.case_id, evidence_id=evidence.evidence_id)
         except Exception as error:
             raise ValidationError(
@@ -620,7 +624,7 @@ class PyTskFileSystemProvider:
             raise UnsupportedCapabilityError(
                 "This evidence format is not supported by the pytsk filesystem provider.",
                 target="evidence_id",
-                required_capability="PYTSK3_RAW_IMAGE",
+                required_capability="PYTSK3_IMAGE",
             )
         self._pytsk3()
 
@@ -666,6 +670,13 @@ class PyTskFileSystemProvider:
         except OSError:
             return extents
         for attr in attrs:
+            info = getattr(attr, "info", None)
+            if (
+                int(getattr(fs_info.info, "ftype", 0)) == 1
+                and info is not None
+                and (int(info.type) != 128 or info.name)
+            ):
+                continue  # Only the unnamed $DATA stream belongs to this file's extents.
             try:
                 runs = list(attr)
             except OSError:

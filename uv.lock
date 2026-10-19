@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -84,6 +84,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },
+    { name = "dissect-evidence" },
+    { name = "dissect-hypervisor" },
     { name = "jsonschema" },
     { name = "pytsk3" },
     { name = "rfc3339-validator" },
@@ -135,6 +137,7 @@ filesystem-image = [
     { name = "pytsk3" },
 ]
 machine-extraction = [
+    { name = "av" },
     { name = "faster-whisper" },
     { name = "onnxruntime" },
     { name = "rapidocr" },
@@ -162,10 +165,13 @@ requires-dist = [
     { name = "aiosqlite", marker = "extra == 'backend'", specifier = ">=0.20" },
     { name = "alembic", marker = "extra == 'backend'", specifier = ">=1.13" },
     { name = "asyncpg", marker = "extra == 'backend'", specifier = ">=0.29" },
+    { name = "av", marker = "extra == 'machine-extraction'", specifier = ">=11,<19" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.9,<2" },
     { name = "bcrypt", marker = "extra == 'backend'", specifier = ">=4.0,<4.1" },
     { name = "cryptography", marker = "extra == 'browser-media'", specifier = ">=42.0" },
     { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "dissect-evidence", specifier = ">=3.13,<4" },
+    { name = "dissect-hypervisor", specifier = ">=3.21,<4" },
     { name = "dissect-util", marker = "extra == 'windows-artifacts'", specifier = ">=3.24" },
     { name = "fastapi", marker = "extra == 'backend'", specifier = ">=0.115" },
     { name = "fastapi", marker = "extra == 'desktop'", specifier = ">=0.115,<1" },
@@ -789,6 +795,42 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
+]
+
+[[package]]
+name = "dissect-cstruct"
+version = "4.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/fe/17aa5abfc62017918e11c8f40d1f936cd9d84a4b72b0a5e99c1c75b26c64/dissect_cstruct-4.7.tar.gz", hash = "sha256:4bf821a381312b9b2fdefea307f7e33548158d39d7d154f1b3007472c51a1fc4", size = 85324, upload-time = "2025-11-20T12:44:41.209Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/37/1c/dc626b1b0e477546c8e80d8cb028442ef4602af276c405f7a5ccc85b0b5a/dissect_cstruct-4.7-py3-none-any.whl", hash = "sha256:0427621ce67baa3106df2dc63a320d0a7f5c2da88ba3faf2ef5886a1a6b458fd", size = 54225, upload-time = "2025-11-20T12:44:39.748Z" },
+]
+
+[[package]]
+name = "dissect-evidence"
+version = "3.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dissect-cstruct" },
+    { name = "dissect-util" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/0e/c65e3a834b036f20720d1c4433cc33687bf988e8721aa3aea7f2469f698b/dissect_evidence-3.13.tar.gz", hash = "sha256:33a24a32b385610dbd0d635428c6b08cffae1d724ba50f14f79b23c59adf2697", size = 50823, upload-time = "2026-02-24T16:48:21.193Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/31/8172bbea01a03beee2cacee67dec6d8da1ee909562b47d2ac197890bf71a/dissect_evidence-3.13-py3-none-any.whl", hash = "sha256:a7aaa0823870a5678e5ee5a5e8ba08ed1cb3c480b789754fb74e8d3b86fa600e", size = 51657, upload-time = "2026-02-24T16:48:19.899Z" },
+]
+
+[[package]]
+name = "dissect-hypervisor"
+version = "3.21"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "dissect-cstruct" },
+    { name = "dissect-util" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0d/9a/c29c8b6e5a7df6664bda6c8b9f42d8b84b2aaa8a598dd12b73aadf6e8091/dissect_hypervisor-3.21.tar.gz", hash = "sha256:5adc89a137c636b420200246f471dc2277a01924ed851a803ca7bb8b764a13c2", size = 75372, upload-time = "2026-02-24T16:52:02.585Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/f2/4632ea424eda34e1a67d70718e3bc8dcbe45c0af16e8dd8e4724c2d41812/dissect_hypervisor-3.21-py3-none-any.whl", hash = "sha256:fd845a3e7bc20efca575d4cfbb49a21ca53e8d89efb8afeec180de8a6b62fd2f", size = 72303, upload-time = "2026-02-24T16:52:01.473Z" },
 ]
 
 [[package]]

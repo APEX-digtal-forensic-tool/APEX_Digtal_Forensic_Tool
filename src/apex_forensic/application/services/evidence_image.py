@@ -12,18 +12,20 @@ from typing import Any, Protocol
 
 from apex_forensic._time import to_json_timestamp, utc_now
 from apex_forensic.adapters.evidence import (
-    EwfEvidenceReader,
     RawImageReader,
-    VirtualDiskEvidenceReader,
 )
+from apex_forensic.adapters.evidence.container import ContainerImageReader
+from apex_forensic.adapters.evidence.factory import evidence_reader
 from apex_forensic.domain.enums import CustodyEventType, EvidenceFormat
 from apex_forensic.domain.errors import (
     NotFoundError,
+    OperationCancelledError,
     StateConflictError,
     UnsupportedCapabilityError,
     ValidationError,
 )
 from apex_forensic.domain.models import Evidence, EvidenceVolume, FileSystemNode
+from apex_forensic.jobs import CancellationToken
 from apex_forensic.ports.evidence_reader import (
     MAX_EVIDENCE_READ_SIZE,
     EvidenceProbeResult,
@@ -62,9 +64,9 @@ class EvidenceImageService:
 
         evidence_format = self._format_for_path(path)
         if evidence_format is EvidenceFormat.E01:
-            return EwfEvidenceReader.probe(path)
+            return ContainerImageReader.probe(path)
         if evidence_format in {EvidenceFormat.VHD, EvidenceFormat.VHDX}:
-            return VirtualDiskEvidenceReader.probe(path)
+            return ContainerImageReader.probe(path)
         return RawImageReader.probe(path)
 
     def enumerate_volumes(self, evidence_id: str) -> list[EvidenceVolume]:
@@ -200,9 +202,16 @@ class EvidenceImageService:
         output_root: Path,
         filename: str | None = None,
         overwrite: bool = False,
+        cancellation_token: CancellationToken | None = None,
+        use_filesystem: bool = True,
     ) -> dict[str, Any]:
         """Recover a selected deleted file node from recorded image extents."""
 
+        def check_cancel() -> None:
+            if cancellation_token and cancellation_token.is_cancelled:
+                raise OperationCancelledError("Deleted file recovery cancelled.")
+
+        check_cancel()
         node = self._repository.get_fs_node(node_id)
         if node is None:
             raise NotFoundError("FS_NODE_NOT_FOUND", f"Filesystem node not found: {node_id}")
@@ -210,6 +219,11 @@ class EvidenceImageService:
             raise ValidationError("Only deleted file nodes can be recovered.", target="node_id")
         if node.file_size is None or node.file_size <= 0:
             raise ValidationError("Deleted file has no recoverable logical size.", target="node_id")
+        if use_filesystem and node.provider_id == "apex.pytsk_filesystem_provider":
+            from apex_forensic.application.services.deleted_content import recover_logical
+
+            return recover_logical(self, node, output_root=output_root, filename=filename,
+                                   overwrite=overwrite, cancellation_token=cancellation_token)
         extents = node.provider_metadata.get("extents")
         if not isinstance(extents, list) or not extents:
             raise ValidationError(
@@ -242,6 +256,7 @@ class EvidenceImageService:
                     # explicitly documented synthetic zero-filled missing ranges.
                     remaining = length
                     while remaining:
+                        check_cancel()
                         zeros = bytes(min(remaining, MAX_EVIDENCE_READ_SIZE))
                         output.write(zeros)
                         hasher.update(zeros)
@@ -252,6 +267,7 @@ class EvidenceImageService:
                     cursor = file_offset
                     consumed = 0
                     while consumed < byte_length:
+                        check_cancel()
                         requested = min(byte_length - consumed, MAX_EVIDENCE_READ_SIZE)
                         data = reader.read_at(byte_offset + consumed, requested)
                         output.write(data)
@@ -269,6 +285,7 @@ class EvidenceImageService:
                     "Deleted file recovery produced no bytes.",
                     target="node_id",
                 )
+            check_cancel()
             self._publish_output(temp_path, output_path, overwrite=overwrite)
             temp_path = None
         except FileExistsError as error:
@@ -413,19 +430,7 @@ class EvidenceImageService:
 
     @staticmethod
     def _reader_for_evidence(evidence: Evidence) -> EvidenceReader:
-        if evidence.evidence_type in {EvidenceFormat.RAW, EvidenceFormat.DD, EvidenceFormat.IMG}:
-            return RawImageReader(evidence.source_path, evidence_format=evidence.evidence_type)
-        if evidence.evidence_type is EvidenceFormat.E01:
-            return EwfEvidenceReader(evidence.source_path)
-        if evidence.evidence_type in {EvidenceFormat.VHD, EvidenceFormat.VHDX}:
-            return VirtualDiskEvidenceReader(
-                evidence.source_path, evidence_format=evidence.evidence_type
-            )
-        raise UnsupportedCapabilityError(
-            "Directory evidence does not expose a disk-image byte reader.",
-            target="evidence_id",
-            required_capability="DISK_IMAGE_READER",
-        )
+        return evidence_reader(evidence)
 
     @staticmethod
     def _format_for_path(path: Path) -> EvidenceFormat:

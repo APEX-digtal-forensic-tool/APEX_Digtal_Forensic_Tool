@@ -1,3 +1,5 @@
+import { ForensicTools } from "./ForensicTools";
+import { MachineSettings } from "./MachineSettings";
 import {
   useCallback,
   useEffect,
@@ -1222,6 +1224,7 @@ export function App() {
         ) : route === "SETTINGS" ? (
           <div className="settings scroll">
             <AccountPanel />
+            <MachineSettings />
             {caseId && <PolicyPanel key={caseId} caseId={caseId} />}
             <div className="card">
               <h3>런타임 기능</h3>
@@ -1574,6 +1577,9 @@ export function App() {
               </div>
             </div>
             {inspector && route === "FILE_SYSTEM" && (
+              <>
+              <ForensicTools caseId={caseId} evidenceId={evidenceId} selected={selected}
+                onTask={() => { setJobsOpen(true); refresh(); }} />
               <FileViewer
                 key={`${caseId}:${evidenceId}:${selected?._resource_type ?? "FILE_SYSTEM_NODE"}:${selected?.id ?? "empty"}`}
                 caseId={caseId}
@@ -1583,6 +1589,7 @@ export function App() {
                 onCollect={collectCitations}
                 onSelect={select}
               />
+              </>
             )}
             {inspector && route !== "FILE_SYSTEM" && (
               <section

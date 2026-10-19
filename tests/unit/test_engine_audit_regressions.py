@@ -211,6 +211,7 @@ def test_recovery_preserves_holes_counts_and_output_hash(
     data.write_bytes(b"abcdefghijkl")
     monkeypatch.setattr(services.images, "_reader_for_evidence", lambda _: RawImageReader(data))
     result = services.images.recover_deleted_file(
+        use_filesystem=False,
         node_id=node.node_id, output_root=tmp_path / "out"
     )
     assert Path(result["output_path"]).read_bytes() == expected
@@ -241,7 +242,7 @@ def test_recovery_rejects_invalid_runs_without_publishing(services, image_case, 
     ]
     services.repository.upsert_fs_node(node)
     with pytest.raises(ValidationError):
-        services.images.recover_deleted_file(node_id=node.node_id, output_root=tmp_path / "out")
+        services.images.recover_deleted_file(use_filesystem=False, node_id=node.node_id, output_root=tmp_path / "out")
     assert not list((tmp_path / "out").iterdir())
 
 
@@ -475,6 +476,7 @@ def test_recovery_streams_large_extent_with_bounded_reads(
     services.repository.upsert_fs_node(node)
     monkeypatch.setattr(services.images, "_reader_for_evidence", lambda _: RawImageReader(source))
     result = services.images.recover_deleted_file(
+        use_filesystem=False,
         node_id=node.node_id, output_root=tmp_path / "out"
     )
     assert Path(result["output_path"]).read_bytes() == payload
@@ -494,5 +496,5 @@ def test_empty_recovery_removes_zero_filled_temporary_output(
     source.write_bytes(b"")
     monkeypatch.setattr(services.images, "_reader_for_evidence", lambda _: RawImageReader(source))
     with pytest.raises(ValidationError):
-        services.images.recover_deleted_file(node_id=node.node_id, output_root=tmp_path / "out")
+        services.images.recover_deleted_file(use_filesystem=False, node_id=node.node_id, output_root=tmp_path / "out")
     assert list((tmp_path / "out").iterdir()) == []
