@@ -64,8 +64,11 @@ def main() -> None:
                     connection.request(method, path, body=body, headers=headers)
                     with connection.getresponse() as response:
                         if response.status != 200:
+                            failure = json.load(response)
+                            code = failure.get("error", {}).get("code", "UNKNOWN")
                             raise OSError(
-                                f"Packaged runtime returned HTTP {response.status} for {path}"
+                                f"Packaged runtime returned HTTP {response.status} "
+                                f"({code}) for {path}"
                             )
                         return json.load(response)
                 finally:

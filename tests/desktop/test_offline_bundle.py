@@ -8,17 +8,63 @@ import shutil
 import subprocess
 import zipfile
 from pathlib import Path
+from threading import Event
 
 import httpx
 import pytest
 from test_forensic_operations import registered
 from test_local_api import TOKEN, call
 from test_local_api import client as api_client
+from test_local_api import wait as wait_task
 
 from apex_desktop import machine
+from apex_forensic.config import build_services
 from apex_forensic.runtime import assets
 
 client = api_client
+
+
+def test_reopening_services_is_read_only_even_with_another_writer(tmp_path):
+    database = tmp_path / "case.db"
+    initial = build_services(database)
+    assert not initial.repository.connection.in_transaction
+    assert initial.repository.list_engine_tool_descriptors()
+    initial.repository.connection.execute("BEGIN IMMEDIATE")
+    try:
+        reader = build_services(database, initialize=False)
+        try:
+            assert not reader.repository.connection.in_transaction
+            assert reader.repository.list_engine_tool_descriptors()
+        finally:
+            reader.close()
+    finally:
+        initial.repository.connection.rollback()
+        initial.close()
+
+
+def test_task_status_remains_readable_during_native_inference(client, tmp_path, monkeypatch):
+    source = tmp_path / "audio.wav"
+    source.write_bytes(b"synthetic audio; provider below does not decode it")
+    cid, eid = registered(client, source)
+    node = call(client, "files.roots", case_id=cid, evidence_id=eid)[0]
+    entered, release = Event(), Event()
+
+    def infer(services, **kwargs):
+        assert not services.repository.connection.in_transaction
+        entered.set()
+        assert release.wait(timeout=15)
+        return {"node_id": node["id"], "candidate_count": 0, "candidate_ids": []}
+
+    monkeypatch.setattr(machine, "run", infer)
+    task = call(client, "machine.run", case_id=cid, node_id=node["id"], kind="STT")
+    try:
+        assert entered.wait(timeout=10)
+        rows = call(client, "tasks.list", case_id=cid)
+        assert next(row for row in rows if row["task_id"] == task["task_id"])["status"] == "RUNNING"
+        assert call(client, "cases.list")
+    finally:
+        release.set()
+    wait_task(client, cid, task)
 
 
 def builder():

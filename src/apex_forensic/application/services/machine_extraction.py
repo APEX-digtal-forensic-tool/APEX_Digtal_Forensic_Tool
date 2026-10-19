@@ -50,12 +50,14 @@ class MachineExtractionService:
         repository: MachineExtractionRepository,
         clock: Clock,
         id_generator: IdGenerator,
+        initialize_capabilities: bool = True,
     ) -> None:
         self._case_repository = case_repository
         self._repository = repository
         self._clock = clock
         self._id_generator = id_generator
-        self._ensure_default_capabilities()
+        if initialize_capabilities:
+            self._ensure_default_capabilities()
 
     def capabilities(self, *, capability_type: str | None = None) -> list[ProviderCapability]:
         """Return OCR/STT provider capabilities; defaults are unavailable contracts."""

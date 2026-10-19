@@ -3406,6 +3406,7 @@ class EngineInterfaceService:
         reports: Any | None = None,
         clock: Clock,
         id_generator: IdGenerator,
+        register_descriptors: bool = True,
     ) -> None:
         self._repository = repository
         self._contexts = contexts
@@ -3414,7 +3415,8 @@ class EngineInterfaceService:
         self._reports = reports
         self._clock = clock
         self._id_generator = id_generator
-        self._register_default_tool_descriptors()
+        if register_descriptors:
+            self._register_default_tool_descriptors()
 
     def version(self) -> EngineInterfaceVersion:
         runtime_ai_available = False
