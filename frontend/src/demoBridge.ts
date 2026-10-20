@@ -271,6 +271,8 @@ export function createDemoBridge(): DesktopBridge {
         const result = page(rows, p);
         return result ? ok(result) : fail("CURSOR_INVALID");
       }
+      // The synthetic preview has no stored search executions.
+      if (op === "search.history") return ok([]);
       if (op === "policy.get")
         return ok({
           case_id: p.case_id,

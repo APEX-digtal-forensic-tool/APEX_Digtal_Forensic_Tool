@@ -330,3 +330,103 @@ it("preserves review reason and shows the conflict after a delayed refresh", asy
     (screen.getByLabelText("검토·결정 사유") as HTMLTextAreaElement).value,
   ).toBe("Preserve my review reason");
 });
+
+function recording(overrides: Record<string, (payload: Row) => unknown> = {}) {
+  const bridge = createDemoBridge();
+  const original = bridge.invoke.bind(bridge);
+  const calls: [string, Row][] = [];
+  bridge.invoke = async (op, payload) => {
+    calls.push([op, payload]);
+    if (overrides[op])
+      return { ok: true, data: overrides[op](payload) } as Reply<Row>;
+    return original(op, payload);
+  };
+  window.apex = bridge;
+  return calls;
+}
+
+async function openRoute(label: string) {
+  render(<App />);
+  await screen.findByText("데모 · 합성 데이터");
+  fireEvent.change(screen.getByLabelText("현재 사건"), {
+    target: { value: core.cases[0].id },
+  });
+  await waitFor(() =>
+    expect(
+      (screen.getByLabelText("현재 증거") as HTMLSelectElement).value,
+    ).toBe(core.evidence[0].id),
+  );
+  fireEvent.click(screen.getByRole("button", { name: label }));
+}
+
+it("lists local cases even when the runtime report fails to load", async () => {
+  const bridge = createDemoBridge();
+  const original = bridge.invoke.bind(bridge);
+  bridge.invoke = async (op, payload) =>
+    op === "runtime"
+      ? { ok: false, error: { code: "VALIDATION_ERROR" } }
+      : original(op, payload);
+  window.apex = bridge;
+  render(<App />);
+  const select = screen.getByLabelText("현재 사건") as HTMLSelectElement;
+  await waitFor(() =>
+    expect([...select.options].map((option) => option.value)).toContain(
+      core.cases[0].id,
+    ),
+  );
+});
+
+it("records a general custody event with the existing custody.add input", async () => {
+  const calls = recording({ "custody.add": () => ({}) });
+  await openRoute("증거 보관 이력");
+  fireEvent.click(await screen.findByText("보관 이력 이벤트 추가"));
+  const dialog = screen.getByRole("dialog");
+  fireEvent.change(within(dialog).getByLabelText("이벤트 유형"), {
+    target: { value: "STORED" },
+  });
+  fireEvent.change(within(dialog).getByLabelText("처리 내용"), {
+    target: { value: "보관실 A 입고" },
+  });
+  fireEvent.change(within(dialog).getByLabelText("사유"), {
+    target: { value: "보관 절차" },
+  });
+  fireEvent.submit(dialog);
+  await waitFor(() =>
+    expect(calls.find(([op]) => op === "custody.add")?.[1]).toEqual({
+      case_id: core.cases[0].id,
+      evidence_id: core.evidence[0].id,
+      event_type: "STORED",
+      action: "보관실 A 입고",
+      reason: "보관 절차",
+    }),
+  );
+});
+
+it("re-searches a history entry through search.query", async () => {
+  const calls = recording({
+    "search.history": () => [
+      {
+        execution_id: "e1",
+        query_text: "readme",
+        query_mode: "PREFIX",
+        options: { original_query_text: "README" },
+        result_count: 1,
+        started_at: "2026-10-20T01:00:00Z",
+      },
+    ],
+  });
+  await openRoute("통합 검색");
+  const details = screen.getByText("검색 이력").closest("details")!;
+  details.open = true;
+  fireEvent(details, new Event("toggle"));
+  fireEvent.click(await within(details).findByText("다시 검색"));
+  await waitFor(() =>
+    expect(calls.find(([op]) => op === "search.query")?.[1]).toMatchObject({
+      query_text: "README",
+      query_mode: "PREFIX",
+    }),
+  );
+  expect((screen.getByLabelText("검색어") as HTMLInputElement).value).toBe(
+    "README",
+  );
+});
