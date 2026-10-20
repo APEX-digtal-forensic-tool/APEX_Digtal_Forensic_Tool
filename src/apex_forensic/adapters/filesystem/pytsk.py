@@ -15,6 +15,10 @@ from uuid import NAMESPACE_URL, uuid5
 
 from apex_forensic._time import utc_now
 from apex_forensic.adapters.evidence.factory import evidence_reader
+from apex_forensic.adapters.evidence.source_identity import (
+    SOURCE_IDENTITY_KEY,
+    assert_source_identity,
+)
 from apex_forensic.adapters.filesystem.tsk_image import ManagedFileSystem, open_tsk_image
 from apex_forensic.constants import ENGINE_VERSION
 from apex_forensic.domain.enums import (
@@ -96,6 +100,11 @@ class PyTskFileSystemProvider:
             or node.case_id != evidence.case_id
         ):
             raise RawReadError("RAW_LOCATOR_UNSUPPORTED", "Not an allocated image file.")
+        assert_source_identity(
+            evidence.source_path,
+            evidence.evidence_type,
+            evidence.metadata.get(SOURCE_IDENTITY_KEY),
+        )
         index, tsk_path = self._split_volume_path(node.original_relative_path)
         metadata = node.provider_metadata
         if index != metadata.get("volume_index") or tsk_path != metadata.get("tsk_path"):
@@ -104,7 +113,6 @@ class PyTskFileSystemProvider:
         if volume is None or volume.byte_offset != metadata.get("volume_byte_offset"):
             raise RawReadError("RAW_SOURCE_CHANGED", "Indexed image volume changed.")
         pytsk3 = self._pytsk3()
-        before = evidence.source_path.stat()
         image = open_tsk_image(pytsk3, evidence)
         filesystem = file = None
         try:
@@ -120,14 +128,20 @@ class PyTskFileSystemProvider:
             ):
                 raise RawReadError("RAW_SOURCE_CHANGED", "Indexed image file changed.")
             yield file
-            after = evidence.source_path.stat()
-            if (before.st_size, before.st_mtime_ns, before.st_ino) != (
-                after.st_size,
-                after.st_mtime_ns,
-                after.st_ino,
-            ):
-                raise RawReadError("RAW_SOURCE_CHANGED", "Image changed while reading.")
+            # TSK can serve cached bytes without calling the reader again. Check
+            # the persisted baseline (including every E01 segment) on scope exit.
+            assert_source_identity(
+                evidence.source_path,
+                evidence.evidence_type,
+                evidence.metadata.get(SOURCE_IDENTITY_KEY),
+            )
         except (OSError, ValueError, OverflowError, KeyError) as error:
+            # Native TSK can translate a reader callback exception into OSError.
+            assert_source_identity(
+                evidence.source_path,
+                evidence.evidence_type,
+                evidence.metadata.get(SOURCE_IDENTITY_KEY),
+            )
             raise RawReadError("RAW_SOURCE_UNAVAILABLE", "Image file could not be read.") from error
         finally:
             file = filesystem = None
@@ -540,6 +554,8 @@ class PyTskFileSystemProvider:
         try:
             with evidence_reader(evidence) as reader:
                 volumes = reader.volumes(case_id=evidence.case_id, evidence_id=evidence.evidence_id)
+        except RawReadError:
+            raise
         except Exception as error:
             raise ValidationError(
                 "Image volumes could not be enumerated for filesystem probing.",

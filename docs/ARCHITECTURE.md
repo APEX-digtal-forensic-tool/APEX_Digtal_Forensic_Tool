@@ -52,6 +52,8 @@ Filesystem provider:
 
 Recovery output은 원본과 분리된 derived root에만 생성된다. deleted recovery는 저장된 data run 범위만(누락 구간은 `ZERO_FILL`과 `missing_ranges`로 기록), slack/raw/unallocated는 bounded range만 처리한다. `CarvingService`는 미할당 영역 또는 이미지 전체에서 PNG/JPEG/PDF/ZIP/GIF 5종의 연속 시그니처 후보를 bounded scan·manifest·`next_offset` 재개로 생성한다. 후보 의미는 `CARVED_CANDIDATES_NOT_OBSERVED_FILES`이며 조각 재조립, 원래 파일명 복원, complete/perfect recovery를 주장하지 않는다.
 
+이미지 등록은 `metadata.source_identity`에 물리 원본의 path/size/mtime/ctime/device/inode를 저장하며 E01은 전체 세그먼트를 포함한다. `GuardedEvidenceReader`가 공통 image factory의 열기·범위 읽기·정상 종료에서 이 기준을 확인하고, TSK 파일 scope도 종료 시 다시 확인하여 캐시 읽기를 포함한다. 변경된 원본은 `RAW_SOURCE_CHANGED`로 거부한다. 작은 읽기마다 전체 이미지를 해싱하지 않으며, 명시적 SHA-256 무결성 검사를 대체하지 않는다. 이전 증거의 안전한 기준 보완과 제한은 [원본 식별 검증](engine/source-identity-2026-10-20.md)을 따른다.
+
 ## 4. Artifact Architecture
 
 모든 analyzer는 capability, version/backend, source kind, raw locator, citation, parse status와 partial/warning을 반환한다. 한 source의 corruption 또는 optional dependency 부재가 다른 analyzer 결과를 rollback하지 않는다.

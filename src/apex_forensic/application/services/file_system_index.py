@@ -21,7 +21,12 @@ from apex_forensic.domain.enums import (
     JobType,
     ProgressUnit,
 )
-from apex_forensic.domain.errors import NotFoundError, StateConflictError, ValidationError
+from apex_forensic.domain.errors import (
+    ApexError,
+    NotFoundError,
+    StateConflictError,
+    ValidationError,
+)
 from apex_forensic.domain.models import (
     CursorPage,
     Evidence,
@@ -198,19 +203,6 @@ class FileSystemIndexService:
             created_at=now,
             updated_at=now,
         )
-        root = self._repository.upsert_fs_node(
-            provider.get_root_node(evidence, index_revision=index_revision)
-        )
-        coverage.discovered_items = 1
-        if root.is_directory_like and root.is_traversed:
-            self._enqueue(
-                job.job_id, root.node_id, priority=10, depth=0, reason="ROOT", state_sequence=0
-            )
-        selected_inserted = self._prepare_selected_scopes(
-            evidence, provider, options, index_revision, job.job_id
-        )
-        coverage.discovered_items += selected_inserted
-        self._repository.upsert_fs_coverage(coverage)
         state = _RunState(
             job=job,
             evidence=evidence,
@@ -222,7 +214,48 @@ class FileSystemIndexService:
             pause_token=pause_token,
             progress_callback=progress_callback,
         )
+        try:
+            root = self._repository.upsert_fs_node(
+                provider.get_root_node(evidence, index_revision=index_revision)
+            )
+            coverage.discovered_items = 1
+            if root.is_directory_like and root.is_traversed:
+                self._enqueue(
+                    job.job_id, root.node_id, priority=10, depth=0, reason="ROOT", state_sequence=0
+                )
+            selected_inserted = self._prepare_selected_scopes(
+                evidence, provider, options, index_revision, job.job_id
+            )
+            coverage.discovered_items += selected_inserted
+            self._repository.upsert_fs_coverage(coverage)
+        except Exception as error:
+            self._fail_initialization(state, error)
+            raise
         return self._run(state)
+
+    def _fail_initialization(self, state: _RunState, error: Exception) -> None:
+        """Persist rejected setup without treating a partial queue as a checkpoint."""
+        failure = (
+            error
+            if isinstance(error, ApexError)
+            else ApexError(
+                "FS_INDEX_INITIALIZATION_FAILED",
+                "error.fs.index_initialization_failed",
+                "Filesystem index initialization failed.",
+                details={"exception_type": type(error).__name__},
+            )
+        )
+        now = self._clock.now()
+        state.job.status = JobStatus.FAILED
+        state.job.finished_at = now
+        state.job.checkpoint_available = False
+        state.job.job_revision += 1
+        state.job.errors.append(failure.to_api_error())
+        state.coverage.status = IndexCoverageStatus.FAILED
+        state.coverage.error_count += 1
+        state.coverage.updated_at = now
+        self._sync_progress(state)
+        self._repository.update_fs_index_job_status(state.job.job_id, JobStatus.FAILED.value)
 
     def resume_index_job(
         self,
@@ -238,6 +271,11 @@ class FileSystemIndexService:
         job = self._get_job(job_id)
         if job.status is JobStatus.SUCCEEDED:
             raise StateConflictError("Completed index jobs cannot be resumed.", target="job_id")
+        if job.status is JobStatus.FAILED and not job.checkpoint_available:
+            raise StateConflictError(
+                "Failed index job has no resumable checkpoint; start a new index job.",
+                target="job_id",
+            )
         metadata = self._get_fs_job(job_id)
         evidence = self._get_evidence_for_case(
             str(metadata["case_id"]), str(metadata["evidence_id"])
@@ -299,8 +337,10 @@ class FileSystemIndexService:
         """Persist a cooperative cancellation request/result for a non-running CLI context."""
 
         job = self._get_job(job_id)
-        if job.status is JobStatus.SUCCEEDED:
-            raise StateConflictError("Completed index jobs cannot be cancelled.", target="job_id")
+        if job.status in {JobStatus.SUCCEEDED, JobStatus.FAILED}:
+            raise StateConflictError(
+                "Completed or failed index jobs cannot be cancelled.", target="job_id"
+            )
         job.status = JobStatus.CANCELLED
         job.cancel_requested_at = self._clock.now()
         job.finished_at = job.cancel_requested_at
@@ -315,8 +355,10 @@ class FileSystemIndexService:
         """Persist a cooperative pause request/result for a non-running CLI context."""
 
         job = self._get_job(job_id)
-        if job.status is JobStatus.SUCCEEDED:
-            raise StateConflictError("Completed index jobs cannot be paused.", target="job_id")
+        if job.status in {JobStatus.SUCCEEDED, JobStatus.FAILED}:
+            raise StateConflictError(
+                "Completed or failed index jobs cannot be paused.", target="job_id"
+            )
         job.status = JobStatus.PAUSED
         job.checkpoint_available = self._repository.count_pending_fs_queue(job_id) > 0
         job.job_revision += 1
