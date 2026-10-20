@@ -39,19 +39,18 @@ Evidence registration은 directory와 ordinary file을 받는다. Directory는 m
 Reader boundary:
 
 - RAW/DD/IMG: built-in random access와 partition enumeration
-- E01/EWF: optional `pyewf`, segmented chain와 embedded-hash metadata
-- VHD: optional `pyvhdilib`
-- VHDX: optional `qemu-img` read-only raw cache conversion; differencing parent resolution은 지원하지 않음
+- E01/VHD/VHDX 기본 경로: `adapters/evidence/factory.py`가 `ContainerImageReader`(`apex.portable_container_reader`)로 연결한다. `dissect.evidence`(EWF, 전체 segment chain 검증)와 `dissect.hypervisor`(VHD/VHDX)로 mount나 전체 이미지 변환 없이 읽기 전용 논리 디스크 스트림을 연다. differencing/parent disk는 `VERIFIED_PARENT_DISK` 미지원으로 거부한다.
+- 기존 optional `pyewf`/`pyvhdilib`/`qemu-img` reader는 capability 보고와 호환용으로 남아 있으며 기본 파일 인덱싱 경로가 아니다.
 - partition parser: MBR, extended partition chain, GPT/CRC warnings, protective MBR, superfloppy, unallocated gaps
 
 Filesystem provider:
 
 - logical directory/file provider는 OS metadata를 읽되 symlink/reparse point를 따라가지 않는다.
-- `PyTskFileSystemProvider`는 RAW/DD/IMG의 NTFS/FAT12/16/32/exFAT/ext2/3/4 범위, deleted entry, extent와 slack metadata를 제공한다.
-- E01/VHD/VHDX reader가 있어도 pytsk provider에 자동 연결되는 것으로 문서화하지 않는다.
+- `PyTskFileSystemProvider`는 RAW/DD/IMG와 지원되는 독립 E01/VHD/VHDX 컨테이너의 NTFS/FAT12/16/32/exFAT/ext2/3/4 범위, deleted entry, extent와 slack metadata를 제공한다. 컨테이너는 `tsk_image.open_tsk_image()`가 위 논리 스트림을 TSK `Img_Info`로 감싸 연결한다.
+- NTFS 이름 있는 데이터 스트림(ADS)은 `FileStreamService`가 TSK `$DATA` 속성 ID로 기본 스트림과 분리해 조회·읽기·내보내기한다.
 - Quick Triage, Selected Scope, Full Analysis, Custom profile, lazy/cursor tree, prioritize, pause/cancel/resume, coverage가 구현되어 있다.
 
-Recovery output은 원본과 분리된 derived root에만 생성된다. deleted recovery는 저장된 data run 범위만, slack/raw/unallocated는 bounded range만 처리하므로 complete carving이나 perfect recovery를 주장하지 않는다.
+Recovery output은 원본과 분리된 derived root에만 생성된다. deleted recovery는 저장된 data run 범위만(누락 구간은 `ZERO_FILL`과 `missing_ranges`로 기록), slack/raw/unallocated는 bounded range만 처리한다. `CarvingService`는 미할당 영역 또는 이미지 전체에서 PNG/JPEG/PDF/ZIP/GIF 5종의 연속 시그니처 후보를 bounded scan·manifest·`next_offset` 재개로 생성한다. 후보 의미는 `CARVED_CANDIDATES_NOT_OBSERVED_FILES`이며 조각 재조립, 원래 파일명 복원, complete/perfect recovery를 주장하지 않는다.
 
 ## 4. Artifact Architecture
 

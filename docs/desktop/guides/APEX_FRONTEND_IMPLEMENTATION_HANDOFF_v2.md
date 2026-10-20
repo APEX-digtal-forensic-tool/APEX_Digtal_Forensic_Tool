@@ -1,5 +1,7 @@
 # APEX Frontend 구현 인수인계서 v2
 
+> **현재 상태 안내:** 이 문서는 작성 당시 기준이다. 현재 로컬 작업 46개, 화면 진입점, 파일 DTO 계약(`filesystem_provider.id`)은 [2026-10-19 상세 검토 후속 수정](../review-followups-2026-10-20.md)과 `src/apex_desktop/operations.py`를 기준으로 한다.
+
 > 기준 저장소: `APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool`
 >
 > 기준 브랜치/커밋: `main == feat/forensic-engine @ dbee798f12031d5f654430fe44ecfd1f8fa2211f`

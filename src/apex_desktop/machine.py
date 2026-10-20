@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,19 +19,85 @@ from apex_forensic.domain.errors import ApexError, OperationCancelledError, Vali
 from apex_forensic.jobs import CancellationToken
 from apex_forensic.runtime.assets import bundled_stt_model
 
+SETTINGS_FILE = "machine-settings.json"
 
-def config(root: Path) -> dict[str, Any]:
-    path = root / "machine-settings.json"
-    raw = os.environ.get("APEX_DESKTOP_MACHINE_CONFIG")
-    if raw is None and path.exists():
-        raw = path.read_text(encoding="utf-8")
+
+def _managed() -> bool:
+    return os.environ.get("APEX_DESKTOP_MACHINE_CONFIG") is not None
+
+
+def load_settings(root: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Return validated settings, or defaults plus a diagnosis when the stored copy is unusable."""
+    from pydantic import ValidationError as ModelError
+
     from .models import MachineSettings
 
-    return MachineSettings.model_validate(json.loads(raw) if raw else {}).model_dump()
+    path = root / SETTINGS_FILE
+    source = "ENVIRONMENT" if _managed() else "FILE"
+    try:
+        raw = os.environ.get("APEX_DESKTOP_MACHINE_CONFIG")
+        if raw is None and path.exists():
+            raw = path.read_bytes().decode("utf-8-sig")
+        value = json.loads(raw) if raw else {}
+        if not isinstance(value, dict):
+            raise TypeError
+        return MachineSettings.model_validate(value).model_dump(), None
+    except UnicodeDecodeError:
+        reason, fields = "ENCODING", []
+    except json.JSONDecodeError:
+        reason, fields = "JSON_SYNTAX", []
+    except TypeError:
+        reason, fields = "NOT_OBJECT", []
+    except ModelError as error:
+        reason = "INVALID_FIELDS"
+        fields = sorted({".".join(map(str, e["loc"])) for e in error.errors() if e["loc"]})
+    except OSError:
+        reason, fields = "UNREADABLE", []
+    return MachineSettings().model_dump(), {
+        "code": "MACHINE_SETTINGS_INVALID",
+        "reason": reason,
+        "source": source,
+        "fields": fields,
+        "resettable": source == "FILE",
+    }
+
+
+def config(root: Path) -> dict[str, Any]:
+    settings, error = load_settings(root)
+    if error is not None:
+        # Running with silent defaults would hide which analyser actually produced candidates.
+        raise ApexError(
+            "MACHINE_SETTINGS_INVALID",
+            "error.machine_settings_invalid",
+            target=error["reason"],
+            details=error,
+        )
+    return settings
+
+
+def _preserve(root: Path, *, only_invalid: bool) -> str | None:
+    """Move the stored settings aside so recovery never discards what was there."""
+    path = root / SETTINGS_FILE
+    if not path.exists():
+        return None
+    invalid = load_settings(root)[1] is not None
+    if only_invalid and not invalid:
+        return None
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    backup = path.with_name(f"machine-settings.{'invalid' if invalid else 'previous'}-{stamp}.json")
+    path.replace(backup)
+    return backup.name
+
+
+def reset_config(root: Path) -> dict[str, Any]:
+    if _managed():
+        raise ApexError("MACHINE_SETTINGS_MANAGED", "error.machine_settings_managed")
+    preserved = _preserve(root, only_invalid=False)
+    return {**capabilities(root), "preserved_settings_file": preserved}
 
 
 def save_config(root: Path, values: dict[str, Any]) -> dict[str, Any]:
-    if os.environ.get("APEX_DESKTOP_MACHINE_CONFIG") is not None:
+    if _managed():
         raise ApexError("MACHINE_SETTINGS_MANAGED", "error.machine_settings_managed")
     model = Path(values["stt_model_path"]) if values.get("stt_model_path") else None
     if model is not None:
@@ -44,11 +111,12 @@ def save_config(root: Path, values: dict[str, Any]) -> dict[str, Any]:
     tessdata = values.get("tessdata_path")
     if tessdata and not Path(tessdata).is_dir():
         raise ValidationError("OCR language models require a directory.", target="tessdata_path")
-    path = root / "machine-settings.json"
+    path = root / SETTINGS_FILE
     temp = path.with_suffix(".tmp")
     temp.write_text(json.dumps(values), encoding="utf-8")
+    preserved = _preserve(root, only_invalid=True)
     temp.replace(path)
-    return capabilities(root)
+    return {**capabilities(root), "preserved_settings_file": preserved}
 
 
 def providers(root: Path) -> tuple[Any, Any]:
@@ -78,12 +146,15 @@ def capabilities(root: Path) -> dict[str, Any]:
     from apex_forensic.adapters.artifacts.media import _ffmpeg_capability, _ffprobe_capability
     from apex_forensic.adapters.decryption.dpapi import DpapiOfflineProvider
 
-    ocr, stt = providers(root)
+    settings, settings_error = load_settings(root)
+    ocr, stt = providers(root) if settings_error is None else (None, None)
     return {
-        "settings": config(root),
-        "managed": os.environ.get("APEX_DESKTOP_MACHINE_CONFIG") is not None,
-        "ocr": ocr.capabilities().to_schema_dict(),
-        "stt": stt.capabilities().to_schema_dict(),
+        "settings": settings,
+        "settings_error": settings_error,
+        "managed": _managed(),
+        # Not evaluated against defaults: the stored choice is unknown until it is repaired.
+        "ocr": ocr.capabilities().to_schema_dict() if ocr else None,
+        "stt": stt.capabilities().to_schema_dict() if stt else None,
         "bundled_stt": {
             "available": bundled_stt_model() is not None,
             "name": "Whisper base · 다국어 (한국어·영어 포함)",

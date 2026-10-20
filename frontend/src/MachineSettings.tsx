@@ -2,6 +2,14 @@ import { useEffect, useState } from "react";
 import { gateway, unwrap, type Row } from "./gateway";
 import { ErrorState, Fields, Loading } from "./ui";
 
+const settingsErrorReasons: Record<string, string> = {
+  JSON_SYNTAX: "JSON 문법 오류",
+  ENCODING: "UTF-8이 아닌 인코딩",
+  NOT_OBJECT: "설정 형식이 객체가 아님",
+  INVALID_FIELDS: "허용되지 않는 필드 또는 값",
+  UNREADABLE: "파일을 읽을 수 없음",
+};
+
 export function MachineSettings() {
   const [data, setData] = useState<Row | null>(null);
   const [settings, setSettings] = useState<Row>({});
@@ -36,6 +44,19 @@ export function MachineSettings() {
         }));
     } catch (e) {
       setError(e);
+    }
+  }
+  async function reset() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await gateway.call("machine.reset");
+      setData(result);
+      setSettings(result.settings);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
     }
   }
   async function save() {
@@ -98,6 +119,34 @@ export function MachineSettings() {
           </ul>
           {data.managed && (
             <p>환경변수로 관리되는 설정입니다. 실행 환경에서 변경해주세요.</p>
+          )}
+          {data.settings_error && (
+            <div role="alert" className="settings-error">
+              <p>
+                저장된 분석기 설정을 읽지 못했습니다:{" "}
+                {settingsErrorReasons[data.settings_error.reason] ??
+                  data.settings_error.reason}
+                {data.settings_error.fields?.length
+                  ? ` (${data.settings_error.fields.join(", ")})`
+                  : ""}
+                . 설정을 복구하기 전까지 OCR·STT 실행은 거부됩니다.
+              </p>
+              {data.settings_error.resettable ? (
+                <button disabled={busy} onClick={() => void reset()}>
+                  손상된 설정 보존 후 기본값으로 복구
+                </button>
+              ) : (
+                <p>
+                  실행 환경의 APEX_DESKTOP_MACHINE_CONFIG 값을 수정해주세요.
+                </p>
+              )}
+            </div>
+          )}
+          {data.preserved_settings_file && (
+            <p role="status">
+              이전 설정 파일을 {data.preserved_settings_file} 이름으로
+              보존했습니다. 사건·증거 데이터는 변경되지 않았습니다.
+            </p>
           )}
           <fieldset disabled={busy || data.managed}>
             <legend>분석기와 모델</legend>

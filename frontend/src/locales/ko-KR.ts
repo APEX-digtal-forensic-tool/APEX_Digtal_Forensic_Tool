@@ -7,6 +7,8 @@ export const errorMessages: Record<string, string> = {
     "음성 모델 구성이 올바르지 않습니다. Faster Whisper는 model.bin·config.json·tokenizer.json·vocabulary 파일이 있는 전체 폴더를, whisper.cpp는 모델 파일을 선택하세요.",
   STT_LANGUAGE_UNSUPPORTED:
     "이 모델은 영어 전용입니다. 한국어 음성을 인식하려면 다국어 모델을 선택해주세요.",
+  MACHINE_SETTINGS_INVALID:
+    "저장된 분석기 설정을 읽지 못해 OCR·STT를 실행하지 않았습니다. 설정 화면에서 손상된 설정을 보존한 뒤 기본값으로 복구해주세요.",
   MACHINE_SETTINGS_MANAGED:
     "환경변수로 관리되는 분석기 설정입니다. 실행 환경의 APEX_DESKTOP_MACHINE_CONFIG를 변경해주세요.",
   AI_TEXT_EXTRACTION_REQUIRED:

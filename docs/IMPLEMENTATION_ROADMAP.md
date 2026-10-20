@@ -50,7 +50,7 @@ Directory manifest hash는 설계되지 않았으며 미완료 Core defect가 �
 - deleted entry/extent/slack metadata
 - bounded raw/unallocated/slack export와 deleted-file data-run recovery
 
-Generic unallocated carving과 complete recovery는 제외한다.
+Bounded 연속 시그니처 카빙(PNG/JPEG/PDF/ZIP/GIF, `evidence.carve`)은 구현됐다. 조각 재조립과 complete recovery는 계속 제외한다.
 
 ### Phase 3 — Windows Artifacts
 
@@ -241,7 +241,7 @@ Core completion gate와 별도인 product work:
 
 - Korean morphological analyzer
 - live acquisition
-- complete deleted/unallocated recovery
+- complete deleted/unallocated recovery와 fragmented carving 재조립
 - all messenger/browser/Windows versions
 - automatic KakaoTalk key extraction
 - legal admissibility guarantee

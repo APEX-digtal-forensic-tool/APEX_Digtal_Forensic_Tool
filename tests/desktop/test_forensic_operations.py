@@ -13,6 +13,16 @@ from test_local_api import client as api_client
 from apex_desktop import machine
 
 client = api_client
+FRONTEND_FIXTURES = Path(__file__).parents[2] / "frontend/src/__fixtures__"
+
+
+def shape(value):
+    """Key structure of a JSON value, ignoring run-specific ids, timestamps and sizes."""
+    if isinstance(value, dict):
+        return {key: shape(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [shape(item) for item in value[:1]]
+    return type(value).__name__
 
 
 def registered(client, path):
@@ -54,6 +64,11 @@ def test_ads_task_and_case_boundaries(client, tmp_path):
             )["items"]
         ]
     node = next(n for n in queue if n["original_name"] == "document.txt")
+    # The renderer tests feed this committed DTO to ForensicTools; keep it in sync with HTTP.
+    fixture_dto = json.loads((FRONTEND_FIXTURES / "ntfs-file.json").read_text(encoding="utf8"))
+    assert shape(node) == shape(fixture_dto)
+    assert node["filesystem_provider"] == fixture_dto["filesystem_provider"]
+    assert "provider_id" not in node
     args = {"case_id": cid, "node_id": node["id"]}
     streams = call(client, "files.streams", **args)["streams"]
     hidden = next(s for s in streams if s["name"] == "hidden")
