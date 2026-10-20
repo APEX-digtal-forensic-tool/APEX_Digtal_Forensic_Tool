@@ -34,6 +34,7 @@ def load_settings(root: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
 
     path = root / SETTINGS_FILE
     source = "ENVIRONMENT" if _managed() else "FILE"
+    fields: list[str] = []
     try:
         raw = os.environ.get("APEX_DESKTOP_MACHINE_CONFIG")
         if raw is None and path.exists():
@@ -43,16 +44,16 @@ def load_settings(root: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
             raise TypeError
         return MachineSettings.model_validate(value).model_dump(), None
     except UnicodeDecodeError:
-        reason, fields = "ENCODING", []
+        reason = "ENCODING"
     except json.JSONDecodeError:
-        reason, fields = "JSON_SYNTAX", []
+        reason = "JSON_SYNTAX"
     except TypeError:
-        reason, fields = "NOT_OBJECT", []
+        reason = "NOT_OBJECT"
     except ModelError as error:
         reason = "INVALID_FIELDS"
         fields = sorted({".".join(map(str, e["loc"])) for e in error.errors() if e["loc"]})
     except OSError:
-        reason, fields = "UNREADABLE", []
+        reason = "UNREADABLE"
     return MachineSettings().model_dump(), {
         "code": "MACHINE_SETTINGS_INVALID",
         "reason": reason,
