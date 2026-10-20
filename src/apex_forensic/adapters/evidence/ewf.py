@@ -332,7 +332,10 @@ class EwfEvidenceReader:
                 & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
             ):
                 raise ValidationError("EWF segment links are not followed.", target="path")
-            discovered[int(candidate_match.group("num"))] = candidate
+            segment_index = int(candidate_match.group("num"))
+            if segment_index in discovered:
+                raise ValidationError("Duplicate EWF segment number.", target="path")
+            discovered[segment_index] = candidate
         if 1 not in discovered:
             raise ValidationError("EWF first segment is missing.", target="path")
         max_segment = max(discovered)

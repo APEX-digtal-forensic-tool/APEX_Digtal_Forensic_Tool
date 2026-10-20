@@ -4,7 +4,7 @@
 
 This document assigns one primary owner to each forensic behavior. A module may call another through a port or service, but it must not duplicate that module's validation, persistence, capability, or audit policy.
 
-The implemented package root is `src/apex_forensic`. Product-shell concerns such as HTTP routing, GUI widgets, identity, RBAC, tenancy, billing, and an MCP server are outside this repository unless a future adapter is added explicitly.
+The Core package root is `src/apex_forensic`. Product transports are separate packages in this repository: `src/apex_desktop` owns the authenticated loopback API, `src/apex_backend` owns account/session and confirmation APIs, `src/apex_mcp` owns the MCP server, and `frontend` owns the Electron workbench. These packages do not move forensic logic into the transport layer; this division does not imply that every planned product feature is implemented.
 
 ## 2. Layer Boundaries
 
@@ -159,7 +159,7 @@ Approval is required before final export. Rendering success and report approval 
 
 Product ownership remains separate: Frontend owns Desktop UX, screen rendering, and localized resource bundles; Backend owns authenticated product sessions, identity, RBAC, tenancy, billing, and approval-identity policy; the MCP/AI product layer owns MCP transport/tool registration, provider selection, prompts, and agent loops. Core owns forensic facts/candidates, provenance, bounded operations, and report-file rendering contracts.
 
-There is no implemented REST server and no MCP SDK/server. REST paths in `API_INTERFACE.md` are planned product integration contracts. A future MCP adapter would be a thin transport over the Engine Interface and would not own forensic logic.
+The implemented transports include the Desktop FastAPI operation allowlist, the account/confirmation FastAPI server, and the MCP stdio/Streamable HTTP server. Planned REST paths in `API_INTERFACE.md` are not a claim that those exact routes exist. Desktop local case access and remote authenticated sessions remain separate; MCP uses its own authorization boundary over the Engine Interface.
 
 ## 12. Runtime Capability Ownership
 

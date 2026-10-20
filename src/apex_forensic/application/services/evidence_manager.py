@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -12,6 +13,11 @@ from apex_forensic.adapters.evidence import (
     RawImageReader,
 )
 from apex_forensic.adapters.evidence.container import ContainerImageReader
+from apex_forensic.adapters.evidence.source_identity import (
+    SOURCE_IDENTITY_KEY,
+    assert_source_identity,
+    capture_source_identity,
+)
 from apex_forensic.constants import DEFAULT_HASH_CHUNK_SIZE, ENGINE_VERSION, SCHEMA_VERSION
 from apex_forensic.domain.enums import (
     CustodyEventType,
@@ -86,6 +92,11 @@ class EvidenceManager:
         normalized = self._normalize_source_path(source_path)
         stat_result = normalized.stat()
         evidence_type = self._detect_evidence_format(normalized)
+        source_identity = (
+            capture_source_identity(normalized, evidence_type)
+            if evidence_type is not EvidenceFormat.DIRECTORY
+            else None
+        )
         reader_id, reader_version, capabilities, reader_metadata = self._reader_metadata(
             normalized, evidence_type
         )
@@ -121,6 +132,9 @@ class EvidenceManager:
                 created_at=completed_at,
             )
 
+        if source_identity is not None:
+            assert_source_identity(normalized, evidence_type, source_identity)
+            reader_metadata[SOURCE_IDENTITY_KEY] = source_identity
         now = self._clock.now()
         evidence = Evidence(
             evidence_id=self._id_generator.new_id(),
@@ -128,7 +142,11 @@ class EvidenceManager:
             display_name=display_name or normalized.name or str(normalized),
             source_path=normalized,
             evidence_type=evidence_type,
-            size_bytes=stat_result.st_size,
+            size_bytes=(
+                source_identity["sources"][0]["size"]
+                if source_identity is not None
+                else stat_result.st_size
+            ),
             status=EvidenceStatus.REGISTERED,
             read_only=True,
             fingerprint=fingerprint,
@@ -207,6 +225,13 @@ class EvidenceManager:
             job.status = JobStatus.RUNNING
             job.started_at = self._clock.now()
             self._evidence_repository.update_job(job)
+            legacy_identity = None
+            if algorithm is HashAlgorithm.SHA256 and SOURCE_IDENTITY_KEY not in evidence.metadata:
+                # Hashing invalid containers remains a diagnostic operation.
+                with contextlib.suppress(ApexError):
+                    legacy_identity = capture_source_identity(
+                        evidence.source_path, evidence.evidence_type
+                    )
             computation = self._hash_provider.compute_file(
                 evidence.source_path,
                 [algorithm],
@@ -214,6 +239,30 @@ class EvidenceManager:
                 progress_callback=update_progress,
                 cancellation_token=cancellation_token,
             )
+            fingerprint = evidence.fingerprint
+            if (
+                legacy_identity is not None
+                and len(legacy_identity["sources"]) == 1
+                and fingerprint is not None
+                and fingerprint.algorithm is HashAlgorithm.SHA256
+                and computation.digests.get(HashAlgorithm.SHA256) == fingerprint.value
+                and computation.file_size == fingerprint.size_bytes
+            ):
+                assert_source_identity(
+                    evidence.source_path, evidence.evidence_type, legacy_identity
+                )
+                evidence.metadata[SOURCE_IDENTITY_KEY] = legacy_identity
+            elif algorithm is HashAlgorithm.SHA256 and SOURCE_IDENTITY_KEY not in evidence.metadata:
+                job.warnings.append(
+                    {
+                        "code": "RAW_SOURCE_CHANGED",
+                        "message_key": "error.raw_source_changed",
+                        "developer_message": "Hash calculated, but legacy image identity could "
+                        "not be established from the original registration fingerprint.",
+                        "source_id": evidence_id,
+                        "details": {"reason": "SOURCE_IDENTITY_REQUIRED"},
+                    }
+                )
             record = HashRecord(
                 hash_id=self._id_generator.new_id(),
                 evidence_id=evidence_id,
