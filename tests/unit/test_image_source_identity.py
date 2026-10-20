@@ -21,7 +21,7 @@ from apex_forensic.application.services.carving import CarvingService
 from apex_forensic.application.services.file_streams import FileStreamService
 from apex_forensic.config import build_services
 from apex_forensic.domain.enums import EvidenceFormat, HashAlgorithm
-from apex_forensic.domain.errors import RawReadError
+from apex_forensic.domain.errors import RawReadError, StateConflictError, ValidationError
 
 
 def change_bytes(path, original, replacement):
@@ -297,3 +297,92 @@ def test_duplicate_ewf_segment_numbers_are_not_silently_ignored(tmp_path):
     duplicate.write_bytes(b"duplicate")
     with pytest.raises(RawReadError):
         capture_source_identity(first, EvidenceFormat.E01)
+
+
+@pytest.mark.parametrize("condition", ["changed", "missing", "legacy"])
+def test_rejected_image_index_persists_failed_job_after_reopen(
+    services, tmp_path, condition, schema_validator
+):
+    image = tmp_path / "rejected.img"
+    write_content_image(image, {"document.txt": b"original-image-marker"})
+    case = services.cases.create_case(name="Index initialization rejection")
+    evidence = services.evidence.register_evidence(case_id=case.case_id, source_path=image)
+    if condition == "changed":
+        change_bytes(image, b"original-image-marker", b"modified-image-marker")
+    elif condition == "missing":
+        image.unlink()
+    else:
+        del evidence.metadata[SOURCE_IDENTITY_KEY]
+        services.repository.update_evidence(evidence)
+    with pytest.raises(RawReadError) as rejected:
+        services.fs.index_evidence(case_id=case.case_id, evidence_id=evidence.evidence_id)
+    assert rejected.value.code == "RAW_SOURCE_CHANGED"
+
+    reopened = build_services(tmp_path / "apex.db", initialize=False)
+    try:
+        rows = reopened.repository.list_fs_index_jobs_for_evidence(evidence.evidence_id)
+        assert len(rows) == 1
+        job_id = rows[0]["job_id"]
+        status = reopened.fs.index_status(job_id)
+        job, coverage = status["job"], status["coverage"]
+        assert job["status"] == status["index_job"]["status"] == coverage["status"] == "FAILED"
+        assert job["finished_at"] is not None
+        assert job["checkpoint_available"] is False
+        assert job["errors"] == [rejected.value.to_api_error()]
+        assert job["progress"]["error_count"] == coverage["error_count"] == 1
+        assert coverage["discovered_items"] == 0
+        schema_validator.validate_job(job)
+        with pytest.raises(StateConflictError, match="no resumable checkpoint"):
+            reopened.fs.resume_index_job(job_id)
+        assert reopened.fs.index_status(job_id)["job"] == job
+        if condition == "legacy":
+            # Validating the original bytes allows a fresh job, never a fabricated resume.
+            reopened.evidence.calculate_hash(
+                evidence_id=evidence.evidence_id, algorithm=HashAlgorithm.SHA256
+            )
+            new_job, _ = reopened.fs.index_evidence(
+                case_id=case.case_id, evidence_id=evidence.evidence_id
+            )
+            assert new_job.job_id != job_id and new_job.status == "PARTIAL"
+    finally:
+        reopened.close()
+
+
+@pytest.mark.parametrize("stage", ["root", "selected_scope"])
+def test_index_setup_failure_cannot_resume_an_incomplete_queue(
+    services, image_case, monkeypatch, stage
+):
+    from apex_forensic.adapters.filesystem.pytsk import PyTskFileSystemProvider
+
+    case, evidence, _, _ = image_case
+    error = RuntimeError("provider failed") if stage == "root" else ValidationError("bad scope")
+
+    def fail(*args, **kwargs):
+        raise error
+
+    if stage == "root":
+        monkeypatch.setattr(PyTskFileSystemProvider, "get_root_node", fail)
+    else:
+        monkeypatch.setattr(services.fs, "_prepare_selected_scopes", fail)
+    with pytest.raises(type(error)) as rejected:
+        services.fs.index_evidence(case_id=case.case_id, evidence_id=evidence.evidence_id)
+    assert rejected.value is error
+    rows = services.repository.list_fs_index_jobs_for_evidence(evidence.evidence_id)
+    failed = [row for row in rows if row["status"] == "FAILED"]
+    assert len(failed) == 1
+    status = services.fs.index_status(failed[0]["job_id"])
+    assert status["coverage"]["status"] == "FAILED"
+    assert status["coverage"]["discovered_items"] == (0 if stage == "root" else 1)
+    assert status["job"]["checkpoint_available"] is False
+    assert status["job"]["errors"][0]["code"] == (
+        "FS_INDEX_INITIALIZATION_FAILED" if stage == "root" else "VALIDATION_ERROR"
+    )
+    if stage == "selected_scope":
+        assert services.repository.count_pending_fs_queue(failed[0]["job_id"]) > 0
+    with pytest.raises(StateConflictError, match="no resumable checkpoint"):
+        services.fs.resume_index_job(failed[0]["job_id"])
+    # Re-labelling a failed setup as paused/cancelled must not enable a partial queue.
+    for action in (services.fs.pause_index_job, services.fs.cancel_index_job):
+        with pytest.raises(StateConflictError):
+            action(failed[0]["job_id"])
+    assert services.fs.index_status(failed[0]["job_id"])["job"] == status["job"]
