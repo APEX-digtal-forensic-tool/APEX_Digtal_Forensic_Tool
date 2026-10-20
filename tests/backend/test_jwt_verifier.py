@@ -269,3 +269,64 @@ async def test_network_error_returns_none(keypair: Any) -> None:
         result = await verifier.verify_token(token)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Malformed JWKS documents fail closed (AUTH-01)
+# ---------------------------------------------------------------------------
+
+
+def _served(body: Any) -> Any:
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json = MagicMock(return_value=body)
+    client = AsyncMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    client.get = AsyncMock(return_value=response)
+    return patch("apex_backend.auth.jwt_verifier.httpx.AsyncClient", return_value=client)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        None,
+        "keys",
+        {},
+        {"keys": None},
+        {"keys": {"kid": "x"}},
+        {"keys": [None]},
+        {"keys": [[], "x", 7]},
+        {"keys": [{"kid": 7, "n": "AQAB", "e": "AQAB"}]},
+        {"keys": [{"kid": "broken"}]},
+    ],
+)
+async def test_malformed_jwks_must_fail_closed_without_exception(keypair: Any, body: Any) -> None:
+    private_key, kid, _pub_pem, _jwks_body = keypair
+    verifier = JwtTokenVerifier(jwks_uri="http://test/.well-known/jwks.json")
+    token = _make_access_token(private_key, kid)
+    with _served(body):
+        assert await verifier.verify_token(token) is None
+
+
+@pytest.mark.asyncio
+async def test_malformed_jwks_keeps_cached_keys(keypair: Any) -> None:
+    private_key, kid, _pub_pem, jwks_body = keypair
+    verifier = _make_verifier(jwks_body)
+    verifier._fetched_at = 0.0  # stale: the next call refetches
+    token = _make_access_token(private_key, kid)
+    with _served([]):
+        assert await verifier.verify_token(token) is not None
+    assert kid in verifier._keys
+
+
+@pytest.mark.asyncio
+async def test_bad_entries_are_skipped_beside_a_valid_key(keypair: Any) -> None:
+    private_key, kid, _pub_pem, jwks_body = keypair
+    verifier = JwtTokenVerifier(jwks_uri="http://test/.well-known/jwks.json")
+    token = _make_access_token(private_key, kid)
+    with _served({"keys": [None, {"kid": "broken"}, *jwks_body["keys"]]}):
+        assert await verifier.verify_token(token) is not None
+    assert set(verifier._keys) == {kid}

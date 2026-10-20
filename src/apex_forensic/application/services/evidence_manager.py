@@ -12,6 +12,7 @@ from apex_forensic.adapters.evidence import (
     RawImageReader,
 )
 from apex_forensic.adapters.evidence.container import ContainerImageReader
+from apex_forensic.adapters.evidence.identity import IDENTITY_KEY, source_identity
 from apex_forensic.constants import DEFAULT_HASH_CHUNK_SIZE, ENGINE_VERSION, SCHEMA_VERSION
 from apex_forensic.domain.enums import (
     CustodyEventType,
@@ -90,7 +91,9 @@ class EvidenceManager:
             normalized, evidence_type
         )
         fingerprint = None
+        identity: dict[str, Any] = {}
         if evidence_type is not EvidenceFormat.DIRECTORY:
+            baseline = source_identity(normalized, evidence_type)
             if evidence_type in {EvidenceFormat.RAW, EvidenceFormat.DD, EvidenceFormat.IMG}:
                 with RawImageReader(normalized, evidence_format=evidence_type) as reader:
                     source_fingerprint = reader.source_fingerprint
@@ -112,6 +115,11 @@ class EvidenceManager:
                 computation_digest = computation.digests[HashAlgorithm.SHA256]
                 computation_size = computation.file_size
                 completed_at = computation.completed_at
+            if source_identity(normalized, evidence_type) != baseline:
+                raise ValidationError(
+                    "Evidence changed while it was being registered.", target="source_path"
+                )
+            identity = {IDENTITY_KEY: baseline}
             fingerprint = EvidenceFingerprint(
                 algorithm=HashAlgorithm.SHA256,
                 value=computation_digest,
@@ -141,6 +149,7 @@ class EvidenceManager:
                 "capabilities": capabilities,
                 "source_path_policy": "NO_SYMLINK_FOLLOW",
                 **reader_metadata,
+                **identity,
             },
         )
         self._evidence_repository.save_evidence(evidence)

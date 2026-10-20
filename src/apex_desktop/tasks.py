@@ -54,6 +54,8 @@ class TaskRecord(TypedDict):
     error: dict[str, Any] | None
     actions: list[str]
     result: NotRequired[Any]
+    # Set while the outcome lives only in memory because tasks.json could not be written.
+    receipt_error: NotRequired[dict[str, Any] | None]
 
 
 ProgressCallback = Callable[[Job], None]
@@ -125,7 +127,7 @@ class Tasks:
 
         receipts = []
         for record in self.records.values():
-            receipt = {k: v for k, v in record.items() if k != "result"}
+            receipt = {k: v for k, v in record.items() if k not in {"result", "receipt_error"}}
             result = record.get("result")
             if record["kind"] in {
                 "RECOVERY",
@@ -177,9 +179,18 @@ class Tasks:
         except OSError as exc:
             _logger.error("Failed to persist task journal to %s: %s", self.journal, exc)
             raise
+        for record in self.records.values():
+            record.pop("receipt_error", None)
+
+    def _retry_unsaved(self) -> None:
+        """Persist outcomes whose receipt write failed earlier; caller holds the lock."""
+        if any(r.get("receipt_error") for r in self.records.values()):
+            with contextlib.suppress(OSError):
+                self._save()
 
     def list(self, case_id: str) -> list[TaskRecord]:
         with self.lock:
+            self._retry_unsaved()
             return [r.copy() for r in self.records.values() if r["case_id"] == case_id][-100:]
 
     def start(
@@ -260,7 +271,17 @@ class Tasks:
                 with self.lock:
                     record["actions"] = []
                     self.tokens.pop(task_id, None)
-                    self._save()
+                    try:
+                        self._save()
+                    except Exception:
+                        # The work itself finished; report that only its receipt is missing
+                        # instead of looking complete now and INTERRUPTED after a restart.
+                        _logger.exception("Task %s finished but its receipt was not saved", task_id)
+                        record["receipt_error"] = {
+                            "code": "TASK_RECEIPT_NOT_SAVED",
+                            "message_key": "error.task_receipt_not_saved",
+                            "retryable": True,
+                        }
 
         try:
             self.pool.submit(worker)

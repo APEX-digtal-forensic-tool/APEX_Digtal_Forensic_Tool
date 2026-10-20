@@ -330,3 +330,20 @@ it("preserves review reason and shows the conflict after a delayed refresh", asy
     (screen.getByLabelText("검토·결정 사유") as HTMLTextAreaElement).value,
   ).toBe("Preserve my review reason");
 });
+
+it("lists local cases even when the runtime report fails to load", async () => {
+  const bridge = createDemoBridge();
+  const original = bridge.invoke.bind(bridge);
+  bridge.invoke = async (op, payload) =>
+    op === "runtime"
+      ? { ok: false, error: { code: "VALIDATION_ERROR" } }
+      : original(op, payload);
+  window.apex = bridge;
+  render(<App />);
+  const select = screen.getByLabelText("현재 사건") as HTMLSelectElement;
+  await waitFor(() =>
+    expect([...select.options].map((option) => option.value)).toContain(
+      core.cases[0].id,
+    ),
+  );
+});

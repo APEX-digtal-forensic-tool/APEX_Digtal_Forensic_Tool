@@ -4,6 +4,7 @@ import { ErrorState, Fields, Loading } from "./ui";
 
 const settingsErrorReasons: Record<string, string> = {
   JSON_SYNTAX: "JSON 문법 오류",
+  EMPTY: "설정 파일이 비어 있음 (잘린 파일)",
   ENCODING: "UTF-8이 아닌 인코딩",
   NOT_OBJECT: "설정 형식이 객체가 아님",
   INVALID_FIELDS: "허용되지 않는 필드 또는 값",

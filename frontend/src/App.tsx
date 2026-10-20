@@ -36,6 +36,7 @@ import { gateway, GatewayError, unwrap, type Row } from "./gateway";
 import { ImageInspector } from "./ImageInspector";
 import { VideoInspector } from "./VideoInspector";
 import { AiAssistant } from "./AiAssistant";
+import { errorMessages } from "./locales/ko-KR";
 import type { CaseRecord } from "./contracts/generated/case";
 import type { GuiContext } from "./contracts/generated/gui-session-context";
 import {
@@ -212,13 +213,15 @@ export function App() {
   const refresh = () => setRevision((r) => r + 1);
   const bootstrap = useCallback(async () => {
     try {
-      const [r, c] = await Promise.all([
+      // Load cases independently so a runtime diagnostic never hides local cases.
+      const [r, c] = await Promise.allSettled([
         gateway.call("runtime"),
         gateway.call<CaseRecord[]>("cases.list"),
       ]);
-      setRuntime(r);
-      setCases(c);
-      setStartupError(null);
+      if (r.status === "fulfilled") setRuntime(r.value);
+      if (c.status === "fulfilled") setCases(c.value);
+      const failed = [r, c].find((x) => x.status === "rejected");
+      setStartupError(failed ? (failed as PromiseRejectedResult).reason : null);
     } catch (err) {
       setStartupError(err);
     }
@@ -2102,6 +2105,9 @@ export function App() {
                 {t.error && (
                   <ErrorState error={new GatewayError(t.error.code)} />
                 )}
+                {t.receipt_error && (
+                  <ErrorState error={new GatewayError(t.receipt_error.code)} />
+                )}
                 <ResultState data={t.job} />
                 {t.actions?.includes("CANCEL") && (
                   <button
@@ -2142,6 +2148,9 @@ export function App() {
               <X size={18} />
             </button>
           </header>
+          {runtime?.ai?.configuration_error && (
+            <p role="alert">{errorMessages.AI_CONFIGURATION_INVALID}</p>
+          )}
           <AiAssistant
             caseId={caseId}
             selected={selected ? resource(selected) : null}

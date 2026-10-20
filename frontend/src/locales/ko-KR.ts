@@ -7,6 +7,10 @@ export const errorMessages: Record<string, string> = {
     "음성 모델 구성이 올바르지 않습니다. Faster Whisper는 model.bin·config.json·tokenizer.json·vocabulary 파일이 있는 전체 폴더를, whisper.cpp는 모델 파일을 선택하세요.",
   STT_LANGUAGE_UNSUPPORTED:
     "이 모델은 영어 전용입니다. 한국어 음성을 인식하려면 다국어 모델을 선택해주세요.",
+  TASK_RECEIPT_NOT_SAVED:
+    "작업은 끝났지만 작업 기록(tasks.json)을 저장하지 못했습니다. 디스크 공간과 권한을 확인해주세요. 작업 목록을 새로 고치면 저장을 다시 시도합니다. 결과 파일은 삭제되지 않았습니다.",
+  AI_CONFIGURATION_INVALID:
+    "AI 제공자 설정(APEX_DESKTOP_AI_CONFIG)을 읽지 못했습니다. 로컬 분석은 계속 사용할 수 있으며, AI 요청은 설정을 고친 뒤 다시 시도해주세요.",
   MACHINE_SETTINGS_INVALID:
     "저장된 분석기 설정을 읽지 못해 OCR·STT를 실행하지 않았습니다. 설정 화면에서 손상된 설정을 보존한 뒤 기본값으로 복구해주세요.",
   MACHINE_SETTINGS_MANAGED:

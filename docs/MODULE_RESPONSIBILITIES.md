@@ -4,7 +4,7 @@
 
 This document assigns one primary owner to each forensic behavior. A module may call another through a port or service, but it must not duplicate that module's validation, persistence, capability, or audit policy.
 
-The implemented package root is `src/apex_forensic`. Product-shell concerns such as HTTP routing, GUI widgets, identity, RBAC, tenancy, billing, and an MCP server are outside this repository unless a future adapter is added explicitly.
+The forensic Core package root is `src/apex_forensic`. Product-shell concerns live in separate packages of the same repository and stay outside Core: `src/apex_backend` (authentication FastAPI: login, refresh, logout, JWKS, confirmation grants), `src/apex_desktop` (loopback FastAPI operation allowlist for the desktop app), `src/apex_mcp` (MCP transport and permission boundary) and `frontend/` (Electron + React). Core never imports them; they call Core through `ServiceBundle`/Engine Interface services. Billing is not implemented.
 
 ## 2. Layer Boundaries
 
@@ -159,7 +159,7 @@ Approval is required before final export. Rendering success and report approval 
 
 Product ownership remains separate: Frontend owns Desktop UX, screen rendering, and localized resource bundles; Backend owns authenticated product sessions, identity, RBAC, tenancy, billing, and approval-identity policy; the MCP/AI product layer owns MCP transport/tool registration, provider selection, prompts, and agent loops. Core owns forensic facts/candidates, provenance, bounded operations, and report-file rendering contracts.
 
-There is no implemented REST server and no MCP SDK/server. REST paths in `API_INTERFACE.md` are planned product integration contracts. A future MCP adapter would be a thin transport over the Engine Interface and would not own forensic logic.
+Implemented transports: the authentication server (`src/apex_backend`), the desktop loopback API (`src/apex_desktop`, `POST /v1/operations/{operation}`, see `docs/desktop/README.md`) and the MCP server (`src/apex_mcp`). Each is a thin transport over the Engine Interface and owns no forensic logic. REST paths in `API_INTERFACE.md` remain the product integration contract; not every listed path is served by these runtimes.
 
 ## 12. Runtime Capability Ownership
 

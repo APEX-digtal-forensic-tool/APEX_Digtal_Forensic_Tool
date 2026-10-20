@@ -540,6 +540,8 @@ class PyTskFileSystemProvider:
         try:
             with evidence_reader(evidence) as reader:
                 volumes = reader.volumes(case_id=evidence.case_id, evidence_id=evidence.evidence_id)
+        except RawReadError:
+            raise
         except Exception as error:
             raise ValidationError(
                 "Image volumes could not be enumerated for filesystem probing.",

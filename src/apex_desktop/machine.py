@@ -2,6 +2,8 @@
 
 import json
 import os
+import tempfile
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,8 @@ from apex_forensic.jobs import CancellationToken
 from apex_forensic.runtime.assets import bundled_stt_model
 
 SETTINGS_FILE = "machine-settings.json"
+# Sync operations run in a threadpool; serialise read-backup-replace of the settings file.
+_SETTINGS_LOCK = threading.Lock()
 
 
 def _managed() -> bool:
@@ -39,10 +43,15 @@ def load_settings(root: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
         raw = os.environ.get("APEX_DESKTOP_MACHINE_CONFIG")
         if raw is None and path.exists():
             raw = path.read_bytes().decode("utf-8-sig")
+            if not raw.strip():
+                # A missing file means "never configured"; an existing empty one was truncated.
+                raise EOFError
         value = json.loads(raw) if raw else {}
         if not isinstance(value, dict):
             raise TypeError
         return MachineSettings.model_validate(value).model_dump(), None
+    except EOFError:
+        reason = "EMPTY"
     except UnicodeDecodeError:
         reason = "ENCODING"
     except json.JSONDecodeError:
@@ -93,7 +102,8 @@ def _preserve(root: Path, *, only_invalid: bool) -> str | None:
 def reset_config(root: Path) -> dict[str, Any]:
     if _managed():
         raise ApexError("MACHINE_SETTINGS_MANAGED", "error.machine_settings_managed")
-    preserved = _preserve(root, only_invalid=False)
+    with _SETTINGS_LOCK:
+        preserved = _preserve(root, only_invalid=False)
     return {**capabilities(root), "preserved_settings_file": preserved}
 
 
@@ -113,10 +123,17 @@ def save_config(root: Path, values: dict[str, Any]) -> dict[str, Any]:
     if tessdata and not Path(tessdata).is_dir():
         raise ValidationError("OCR language models require a directory.", target="tessdata_path")
     path = root / SETTINGS_FILE
-    temp = path.with_suffix(".tmp")
-    temp.write_text(json.dumps(values), encoding="utf-8")
-    preserved = _preserve(root, only_invalid=True)
-    temp.replace(path)
+    # A per-request temporary name: concurrent saves must never consume each other's file.
+    handle, name = tempfile.mkstemp(prefix=".machine-settings.", suffix=".tmp", dir=root)
+    temp = Path(name)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as output:
+            json.dump(values, output)
+        with _SETTINGS_LOCK:  # last completed save wins
+            preserved = _preserve(root, only_invalid=True)
+            temp.replace(path)
+    finally:
+        temp.unlink(missing_ok=True)
     return {**capabilities(root), "preserved_settings_file": preserved}
 
 

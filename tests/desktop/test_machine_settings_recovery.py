@@ -33,6 +33,9 @@ def unmanaged(monkeypatch):
         ),
         ('{"ocr_provider": "자동"}'.encode("utf-16"), "ENCODING", []),
         (b"[]", "NOT_OBJECT", []),
+        (b"", "EMPTY", []),
+        (b"\xef\xbb\xbf", "EMPTY", []),
+        (b"  \n", "EMPTY", []),
     ],
 )
 def test_invalid_settings_are_diagnosed_and_reset_preserves_them(
@@ -113,3 +116,44 @@ def test_managed_invalid_settings_are_not_reset_from_the_ui(client, monkeypatch)
     response = client.post("/v1/operations/machine.reset", json={})
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "MACHINE_SETTINGS_MANAGED"
+
+
+def test_missing_settings_control_uses_defaults(client, tmp_path):
+    assert not (tmp_path / "data/machine-settings.json").exists()
+    capabilities = call(client, "machine.capabilities")
+    assert capabilities["settings"] == DEFAULTS
+    assert capabilities["settings_error"] is None
+
+
+def test_concurrent_settings_saves_must_not_share_temporary_file(tmp_path, monkeypatch):
+    import threading
+
+    from apex_desktop import machine
+
+    monkeypatch.setattr(machine, "capabilities", lambda root: {})
+    real_mkstemp = machine.tempfile.mkstemp
+    barrier = threading.Barrier(2)
+
+    def overlapping(*args, **kwargs):
+        result = real_mkstemp(*args, **kwargs)
+        barrier.wait(timeout=5)  # both requests have created their temp file
+        return result
+
+    monkeypatch.setattr(machine.tempfile, "mkstemp", overlapping)
+    errors = []
+
+    def save(provider):
+        try:
+            machine.save_config(tmp_path, {**DEFAULTS, "ocr_provider": provider})
+        except Exception as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=save, args=(p,)) for p in ("rapidocr", "tesseract")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    stored = json.loads((tmp_path / "machine-settings.json").read_text())
+    assert stored["ocr_provider"] in {"rapidocr", "tesseract"}
+    assert list(tmp_path.glob("*.tmp")) == []

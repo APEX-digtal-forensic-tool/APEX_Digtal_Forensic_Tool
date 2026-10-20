@@ -146,19 +146,35 @@ class JwtTokenVerifier:
                 )
             return
 
+        raw_keys = body.get("keys") if isinstance(body, dict) else None
+        if not isinstance(raw_keys, list):
+            # A malformed document is treated like a failed fetch: keep the current cache.
+            _logger.warning(
+                "JWKS from %s is not an object with a keys list; keeping %d cached key(s)",
+                self._jwks_uri,
+                len(self._keys),
+            )
+            return
+
         new_keys: dict[str, str] = {}
-        for jwk in body.get("keys", []):
+        for jwk in raw_keys:
+            kid = jwk.get("kid") if isinstance(jwk, dict) else None
+            if not isinstance(kid, str) or not kid or len(kid) > _KID_MAX_LEN:
+                _logger.warning(
+                    "Skipping JWK without a usable kid from %s (%s)",
+                    self._jwks_uri,
+                    type(jwk).__name__,
+                )
+                continue
             try:
-                pem = _jwk_to_pem(jwk)
-                new_keys[jwk["kid"]] = pem
+                new_keys[kid] = _jwk_to_pem(jwk)
             except Exception:
                 _logger.warning(
                     "Failed to parse JWK kid=%r from %s; skipping",
-                    jwk.get("kid"),
+                    kid,
                     self._jwks_uri,
                     exc_info=True,
                 )
-                continue
 
         self._keys = new_keys
         self._fetched_at = time.monotonic()
