@@ -34,6 +34,7 @@ MODELS: dict[str, type[m.Input]] = {
     "runtime": m.Empty,
     "machine.capabilities": m.Empty,
     "machine.configure": m.MachineSettings,
+    "machine.reset": m.Empty,
     "machine.run": m.MachineRun,
     "files.streams": m.FileAction,
     "streams.read": m.StreamRead,
@@ -192,6 +193,8 @@ def invoke(
         return machine.capabilities(exports.parent)
     if operation == "machine.configure":
         return machine.save_config(exports.parent, p)
+    if operation == "machine.reset":
+        return machine.reset_config(exports.parent)
     if operation in {
         "files.streams",
         "streams.read",

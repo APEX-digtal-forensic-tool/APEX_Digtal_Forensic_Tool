@@ -9,6 +9,7 @@ import {
   Section,
 } from "../ui";
 import { ImageInspector } from "../ImageInspector";
+import { VideoInspector } from "../VideoInspector";
 import { Splitter } from "./Splitter";
 
 type Format = "preview" | "text" | "hex" | "metadata";
@@ -45,6 +46,12 @@ export function FileViewer({
   const isImage =
     !directory &&
     /\.(png|jpe?g|gif|tiff?|bmp|webp)$/i.test(selected?.original_name ?? "");
+  const isVideo =
+    !directory &&
+    (selected?.artifact_type === "MEDIA_VIDEO" ||
+      /\.(mp4|m4v|mov|3gp|3g2|avi|mkv|webm)$/i.test(
+        selected?.original_name ?? "",
+      ));
   const kind =
     format === "metadata" || directory
       ? "metadata"
@@ -190,6 +197,14 @@ export function FileViewer({
         </div>
         {selected && isImage && (
           <ImageInspector
+            caseId={caseId}
+            resourceType={resourceType}
+            resourceId={resourceId}
+          />
+        )}
+        {selected && isVideo && (
+          <VideoInspector
+            key={sourceKey}
             caseId={caseId}
             resourceType={resourceType}
             resourceId={resourceId}

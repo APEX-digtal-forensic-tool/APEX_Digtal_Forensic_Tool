@@ -36,6 +36,7 @@ const operations = new Set([
   "ai.prepare",
   "machine.capabilities",
   "machine.configure",
+  "machine.reset",
   "machine.run",
   "files.streams",
   "streams.read",

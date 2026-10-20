@@ -93,7 +93,7 @@ Recovery operations:
 - deleted file data-run recovery
 - file slack export
 
-출력은 configured derived root 안에 생성되고 custody audit가 추가된다. Stored run/extent로 읽을 수 있는 범위만 처리하므로 complete deleted-file carving이나 perfect recovery가 아니다. Generic unallocated file carving은 planned boundary다.
+출력은 configured derived root 안에 생성되고 custody audit가 추가된다. Stored run/extent로 읽을 수 있는 범위만 처리하므로 complete deleted-file carving이나 perfect recovery가 아니다. 일반 파일 카빙은 `CarvingService`(`evidence.carve`)로 구현되어 있다: `UNALLOCATED` 또는 `IMAGE` 범위에서 PNG/JPEG/PDF/ZIP/GIF 연속 시그니처 후보를 탐색량·파일 크기·결과 수 한도 안에서 찾고, manifest와 `scanned_bytes`/`candidate_read_bytes`/`coverage_complete`/`next_offset`을 기록한다. 조각난 파일 재조립, 원래 파일명 복원, 형식별 손상 복구는 여전히 범위 밖이다.
 
 ## 6. Windows Artifacts
 
@@ -317,7 +317,7 @@ Evidence registration/hash verification/recovery/export action은 append-only cu
 - all-format/all-version forensic support
 - Korean morphological search
 - YARA나 arbitrary body full-text
-- complete unallocated carving/perfect deleted recovery
+- fragmented-file reassembly, complete unallocated carving coverage, perfect deleted recovery (bounded 5종 연속 시그니처 카빙은 구현됨)
 - production-native PST/OST, Discord LevelDB, Telegram tdesktop
 - automatic KakaoTalk key extraction, Android/iOS KakaoTalk
 - live-user credential extraction과 unsupported Chromium app-bound key

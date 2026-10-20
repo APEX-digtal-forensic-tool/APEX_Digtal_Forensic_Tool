@@ -1,5 +1,7 @@
 """Generate labeled, synthetic UI fixtures through the real Core services."""
 
+import base64
+import gzip
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,7 +13,7 @@ from apex_forensic.runtime.capabilities import capability_report
 
 def main():
     with TemporaryDirectory() as tmp:
-        root = Path(tmp) / "교육용-증거"
+        root = Path(tmp).resolve() / "교육용-증거"
         root.mkdir()
         (root / "문서").mkdir()
         for name, content in {
@@ -63,10 +65,43 @@ def main():
                     "session_id": "demo-session",
                 },
             }
-            target = Path(__file__).resolve().parents[1] / "frontend/src/__fixtures__/core.json"
+            target = FIXTURES / "core.json"
             target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf8")
         finally:
             services.close()
+    write_ntfs_fixture()
+
+
+REPO = Path(__file__).resolve().parents[1]
+FIXTURES = REPO / "frontend/src/__fixtures__"
+
+
+def ntfs_document_node(services, image: Path) -> dict:
+    """Index the synthetic NTFS image and return the serialized `/document.txt` DTO."""
+    case = services.cases.create_case(name="교육용 NTFS 사건")
+    evidence = services.evidence.register_evidence(case_id=case.case_id, source_path=image)
+    services.fs.index_evidence(
+        case_id=case.case_id,
+        evidence_id=evidence.evidence_id,
+        profile_type=AnalysisProfileType.FULL_ANALYSIS,
+    )
+    nodes = services.repository.list_fs_nodes_for_evidence(evidence.evidence_id)
+    return next(n for n in nodes if n.original_name == "document.txt").to_schema_dict()
+
+
+def write_ntfs_fixture():
+    entries = json.loads((REPO / "tests/fixtures/container-images.json").read_text())
+    with TemporaryDirectory() as tmp:
+        image = Path(tmp).resolve() / "streams.img"
+        image.write_bytes(gzip.decompress(base64.b64decode(entries["streams.img"]["gzip_base64"])))
+        services = build_services(Path(tmp) / "case.db")
+        try:
+            node = ntfs_document_node(services, image)
+        finally:
+            services.close()
+    (FIXTURES / "ntfs-file.json").write_text(
+        json.dumps(node, ensure_ascii=False, indent=2) + "\n", encoding="utf8"
+    )
 
 
 if __name__ == "__main__":

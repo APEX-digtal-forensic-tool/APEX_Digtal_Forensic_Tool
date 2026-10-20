@@ -12,6 +12,7 @@ import {
 import { ForensicTools } from "./ForensicTools";
 import { AiAssistant } from "./AiAssistant";
 import { gateway } from "./gateway";
+import ntfsFile from "./__fixtures__/ntfs-file.json";
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () {
@@ -61,6 +62,45 @@ it("does not carry a carving resume offset into another evidence", () => {
   }
 });
 
+it("enables ADS lookup for the real serialized NTFS file DTO only", () => {
+  expect((ntfsFile as Record<string, unknown>).provider_id).toBeUndefined();
+  const view = render(
+    <ForensicTools
+      caseId={ntfsFile.case_id}
+      evidenceId={ntfsFile.evidence_id}
+      onTask={vi.fn()}
+      selected={ntfsFile}
+    />,
+  );
+  fireEvent.click(screen.getByText("복구·카빙·OCR·ADS"));
+  fireEvent.click(screen.getByText("NTFS 데이터 스트림 (ADS)"));
+  expect(screen.getByText("데이터 스트림 조회").hasAttribute("disabled")).toBe(
+    false,
+  );
+  for (const selected of [
+    { ...ntfsFile, id: "dir", node_type: "DIRECTORY" },
+    { ...ntfsFile, id: "deleted", is_deleted: true },
+    {
+      ...ntfsFile,
+      id: "logical",
+      filesystem_provider: { id: "apex.logical_directory_provider" },
+    },
+  ]) {
+    view.rerender(
+      <ForensicTools
+        caseId={ntfsFile.case_id}
+        evidenceId={ntfsFile.evidence_id}
+        onTask={vi.fn()}
+        selected={selected}
+      />,
+    );
+    fireEvent.click(screen.getByText("복구·카빙·OCR·ADS"));
+    expect(
+      screen.getByText("데이터 스트림 조회").hasAttribute("disabled"),
+    ).toBe(true);
+  }
+});
+
 it("keeps stream selection and offset fixed until the requested read completes", async () => {
   let finish!: (value: any) => void;
   vi.spyOn(gateway, "call").mockImplementation(async (op) =>
@@ -75,11 +115,7 @@ it("keeps stream selection and offset fixed until the requested read completes",
       caseId="case"
       evidenceId="evidence"
       onTask={vi.fn()}
-      selected={{
-        id: "node",
-        node_type: "FILE",
-        provider_id: "apex.pytsk_filesystem_provider",
-      }}
+      selected={{ ...ntfsFile, id: "node" }}
     />,
   );
   fireEvent.click(screen.getByText("복구·카빙·OCR·ADS"));
@@ -122,11 +158,7 @@ it("sends the selected ADS id and offset and registers export tasks", async () =
       caseId="case"
       evidenceId="evidence"
       onTask={onTask}
-      selected={{
-        id: "node",
-        node_type: "FILE",
-        provider_id: "apex.pytsk_filesystem_provider",
-      }}
+      selected={{ ...ntfsFile, id: "node" }}
     />,
   );
   fireEvent.click(screen.getByText("복구·카빙·OCR·ADS"));

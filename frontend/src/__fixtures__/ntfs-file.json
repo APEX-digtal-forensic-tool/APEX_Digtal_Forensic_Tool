@@ -1,0 +1,97 @@
+{
+  "id": "364c97b6-3e77-5fcf-ab1d-b0f68a02df20",
+  "case_id": "a7733686-63d4-4cc5-9d1a-1057bea0bc8a",
+  "evidence_id": "7c4c2c35-d074-4d52-9f79-78a746ec642a",
+  "filesystem_provider": {
+    "id": "apex.pytsk_filesystem_provider",
+    "version": "0.1.0"
+  },
+  "parent_node_id": "d11eac29-d503-5168-905f-e09767921532",
+  "original_name": "document.txt",
+  "original_relative_path": "volume-0/document.txt",
+  "display_path": "/volume-0/document.txt",
+  "comparison_path": "/volume-0/document.txt",
+  "node_type": "FILE",
+  "file_size": 16,
+  "extension": "txt",
+  "mime_candidate": "text/plain",
+  "mime_confidence": "LOW",
+  "fs_metadata": {
+    "file_attributes": 5,
+    "gid": 0,
+    "inode": "64",
+    "metadata_confidence": "OBSERVED",
+    "mode": 511,
+    "name_flags": 1,
+    "nlink": 1,
+    "uid": 48
+  },
+  "platform": "DISK_IMAGE",
+  "timestamp_meanings": {
+    "accessed": "filesystem_accessed",
+    "changed": "filesystem_metadata_changed",
+    "created": "filesystem_created",
+    "modified": "filesystem_modified"
+  },
+  "raw_timestamps": {
+    "atime": 1792375107,
+    "crtime": 1792375107,
+    "ctime": 1792375107,
+    "mtime": 1792375107
+  },
+  "utc_timestamps": {
+    "accessed": "2026-10-19T01:58:27.000000Z",
+    "changed": "2026-10-19T01:58:27.000000Z",
+    "created": "2026-10-19T01:58:27.000000Z",
+    "modified": "2026-10-19T01:58:27.000000Z"
+  },
+  "timestamp_sources": {
+    "accessed": "PYTSK_FS_META",
+    "changed": "PYTSK_FS_META",
+    "created": "PYTSK_FS_META",
+    "modified": "PYTSK_FS_META"
+  },
+  "is_deleted": false,
+  "is_readable": true,
+  "is_link": false,
+  "is_traversed": false,
+  "raw_locator": {
+    "evidence_id": "7c4c2c35-d074-4d52-9f79-78a746ec642a",
+    "extents": [],
+    "inode": "64",
+    "locator_type": "IMAGE_FILE_SYSTEM_OBJECT",
+    "provider_id": "apex.pytsk_filesystem_provider",
+    "provider_version": "0.1.0",
+    "reader_id": "apex.raw_image_reader",
+    "tsk_path": "/document.txt",
+    "volume_byte_offset": 0,
+    "volume_id": "f51acd75-bf92-52e4-bb88-2f74bcd096bf",
+    "volume_index": 0
+  },
+  "provider_metadata": {
+    "allocated": true,
+    "allocated_size": 0,
+    "backend": "pytsk3",
+    "deleted": false,
+    "deleted_metadata_confidence": "NOT_DELETED",
+    "entry_sort_key": "document.txt:64",
+    "extents": [],
+    "file_reference": "64",
+    "inode": "64",
+    "reads_file_body": true,
+    "slack": {
+      "available": false,
+      "reason": "NOT_REGULAR_FILE"
+    },
+    "source_kind": "IMAGE_FILE_SYSTEM_OBJECT",
+    "timestamp_warnings": [],
+    "tsk_path": "/document.txt",
+    "volume_byte_offset": 0,
+    "volume_id": "f51acd75-bf92-52e4-bb88-2f74bcd096bf",
+    "volume_index": 0
+  },
+  "is_partial": false,
+  "index_revision": 1,
+  "created_at": "2026-10-20T00:22:49.596768Z",
+  "updated_at": "2026-10-20T00:22:49.596768Z"
+}

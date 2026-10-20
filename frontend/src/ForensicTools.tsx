@@ -27,7 +27,8 @@ export function ForensicTools({
   const revision = useRef(0);
   const dialog = useRef<HTMLDialogElement>(null);
   const file = selected?.node_type === "FILE";
-  const imageFile = selected?.provider_id === "apex.pytsk_filesystem_provider";
+  const imageFile =
+    selected?.filesystem_provider?.id === "apex.pytsk_filesystem_provider";
   useEffect(() => {
     setCarveOffset("0");
   }, [caseId, evidenceId]);
