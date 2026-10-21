@@ -583,12 +583,14 @@ def test_report_snapshot_provenance_survives_desktop_edit(client, tmp_path):
             report_id=report["report_id"], created_by="audit", title="Snapshot report",
             executive_summary="Original", evidence_ids=[eid],
             context_snapshot_ids=[snapshot.context_snapshot_id],
+            citations=snapshot.citations,
             ai_assistance_request_ids=[request.assistance_request_id],
             analyzer_versions={"fixture": "1"}, limitations=["Synthetic evidence"],
             sections=[{
                 "section_type": "KEY_FINDINGS", "title": "Finding", "order": 1,
                 "content": "Original", "context_snapshot_ids": [snapshot.context_snapshot_id],
                 "source_resource_ids": [node.node_id],
+                "citations": snapshot.citations,
             }],
         )
     finally:
@@ -599,10 +601,12 @@ def test_report_snapshot_provenance_survives_desktop_edit(client, tmp_path):
         "context_snapshot_ids": source.context_snapshot_ids,
         "ai_assistance_request_ids": source.ai_assistance_request_ids,
         "analyzer_versions": source.analyzer_versions, "limitations": source.limitations,
+        "citations": source.sections[0].citations,
         "sections": [{
             "section_type": "KEY_FINDINGS", "title": "Finding", "order": 1,
             "content": "Edited", "context_snapshot_ids": source.context_snapshot_ids,
             "source_resource_ids": [node.node_id],
+            "citations": source.sections[0].citations,
         }],
     }
     edited = call(client, "reports.version", **payload)
@@ -610,6 +614,8 @@ def test_report_snapshot_provenance_survives_desktop_edit(client, tmp_path):
     assert edited["source_revisions"][0]["context_fingerprint"] == snapshot.context_fingerprint
     assert edited["ai_assistance_request_ids"] == source.ai_assistance_request_ids
     assert edited["analyzer_versions"] == source.analyzer_versions
+    assert source.citation_ids  # An empty fixture would hide citation-index loss.
+    assert edited["citation_ids"] == source.citation_ids
     assert edited["previous_version_id"] == source.report_version_id
     detail = call(client, "reports.get", case_id=cid, report_id=report["report_id"])
     assert detail["versions"][0]["executive_summary"] == "Original"

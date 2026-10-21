@@ -241,6 +241,11 @@ it("uses the selected evidence only for a first version", async () => {
 });
 
 it("preserves report-wide provenance when editing a snapshot-backed version", async () => {
+  const oldCitation = {
+    id: "old-citation",
+    source_kind: "FILE",
+    source_id: "file-a",
+  };
   const provenance = {
     context_snapshot_ids: ["snapshot-a"],
     search_execution_ids: ["search-a"],
@@ -250,11 +255,19 @@ it("preserves report-wide provenance when editing a snapshot-backed version", as
     analyzer_versions: { filesystem: "1.0" },
   };
   const { call, onSaved } = await saveFrom({
-    base: { ...enriched, ...provenance },
+    base: {
+      ...enriched,
+      ...provenance,
+      sections: enriched.sections.map((s: Row) => ({
+        ...s,
+        citations: [oldCitation],
+      })),
+    },
   });
   fireEvent.submit(screen.getByRole("dialog"));
   await waitFor(() => expect(onSaved).toHaveBeenCalled());
   expect(call.mock.calls[0][1]).toMatchObject(provenance);
+  expect((call.mock.calls[0][1] as Row).citations).toContainEqual(oldCitation);
 });
 
 it("resubmits legacy section-only snapshots for Core case and revision validation", async () => {

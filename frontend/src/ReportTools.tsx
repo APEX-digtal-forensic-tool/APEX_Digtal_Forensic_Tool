@@ -323,7 +323,14 @@ export function ReportVersionDialog({
                 : evidenceId
                   ? [evidenceId]
                   : [],
-              citations,
+              // Core builds report-wide citation IDs from this collection.
+              citations: [
+                ...new Map(
+                  [...sections.flatMap((s) => s.citations), ...citations].map(
+                    (citation) => [JSON.stringify(citation), citation],
+                  ),
+                ).values(),
+              ],
               // Older desktop versions retained section references but dropped
               // report-wide context. Core revalidates all recovered IDs and
               // regenerates source revisions; stored versions stay immutable.
