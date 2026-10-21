@@ -1,5 +1,6 @@
 """Per-launch authenticated loopback API independent of cloud account login."""
 
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,6 +24,9 @@ from .tasks import Tasks, encode, public_error
 def create_app(data_dir: Path, token: str, *, host: str = "127.0.0.1") -> FastAPI:
     if len(token) < 32:
         raise ValueError("A strong per-launch desktop token is required.")
+    authority = f"[{host}]" if ":" in host else host
+    host_pattern = re.compile(rf"{re.escape(authority)}(?::([0-9]{{1,5}}))?")
+    expected_authorization = f"Bearer {token}".encode()
     data_dir = data_dir.resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     database = data_dir / "apex.db"
@@ -50,9 +54,20 @@ def create_app(data_dir: Path, token: str, *, host: str = "127.0.0.1") -> FastAP
 
     @app.middleware("http")
     async def local_boundary(request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if request.url.hostname != host or request.headers.get("origin") is not None:
+        # Validate the actual Host header: URL construction can fall back to the
+        # listening address when a malformed authority is supplied.
+        hosts = request.headers.getlist("host")
+        host_match = host_pattern.fullmatch(hosts[0]) if len(hosts) == 1 else None
+        if (
+            host_match is None
+            or (host_match[1] is not None and not 1 <= int(host_match[1]) <= 65535)
+            or request.headers.get("origin") is not None
+        ):
             return JSONResponse({"ok": False, "error": {"code": "LOCAL_ORIGIN_DENIED"}}, 403)
-        if not compare_digest(request.headers.get("authorization", ""), f"Bearer {token}"):
+        authorizations = request.headers.getlist("authorization")
+        if len(authorizations) != 1 or not compare_digest(
+            authorizations[0].encode(), expected_authorization
+        ):
             return JSONResponse({"ok": False, "error": {"code": "LOCAL_SESSION_REQUIRED"}}, 401)
         body = bytearray()
         async for chunk in request.stream():
