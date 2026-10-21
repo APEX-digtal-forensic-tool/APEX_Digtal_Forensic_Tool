@@ -142,3 +142,100 @@ it("lists search history and re-searches with the analyst's original text", asyn
   fireEvent.click(await within(details).findByText("다시 검색"));
   expect(onSearch).toHaveBeenCalledWith("README", "PREFIX");
 });
+
+// Review on PR #31: resaving must not downgrade section state or narrow evidence.
+const enriched: Row = {
+  ...base,
+  evidence_ids: [base.evidence_ids[0], "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"],
+  sections: [
+    {
+      ...base.sections[0],
+      content_kind: "TABLE_DATA",
+      structured_data: { rows: [["a.txt", "2026-10-20"]] },
+      source_kind: "AI_DRAFT",
+      source_resource_ids: ["resource-1"],
+      is_partial: true,
+      stale_reasons: ["SOURCE_REVISION_CHANGED"],
+      coverage: { status: "SNAPSHOT_DERIVED" },
+      warnings: [
+        { code: "REPORT_SECTION_PARTIAL" },
+        { code: "REPORT_SECTION_STALE" },
+      ],
+    },
+  ],
+};
+
+async function saveFrom(
+  props: Partial<React.ComponentProps<typeof ReportVersionDialog>>,
+) {
+  const call = vi.spyOn(gateway, "call").mockResolvedValue({});
+  const onSaved = vi.fn(async () => {});
+  render(
+    <ReportVersionDialog
+      caseId={base.case_id}
+      reportId={base.report_id}
+      evidenceId="ffffffff-ffff-4fff-8fff-ffffffffffff"
+      base={enriched}
+      reportTitle={base.title}
+      citations={[]}
+      onClose={vi.fn()}
+      onSaved={onSaved}
+      {...props}
+    />,
+  );
+  return { call, onSaved };
+}
+
+it("keeps table data, AI origin, partial/stale state and warnings of edited sections", async () => {
+  const { call, onSaved } = await saveFrom({});
+  expect(screen.getByText(/유지되는 상태:/).textContent).toContain("AI_DRAFT");
+  fireEvent.change(screen.getByLabelText("섹션 1 내용"), {
+    target: { value: "분석자가 고친 내용" },
+  });
+  fireEvent.submit(screen.getByRole("dialog"));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  const section = (call.mock.calls[0][1] as Row).sections[0];
+  const source = enriched.sections[0];
+  for (const key of [
+    "content_kind",
+    "structured_data",
+    "source_kind",
+    "source_resource_ids",
+    "is_partial",
+    "stale_reasons",
+    "coverage",
+    "warnings",
+  ])
+    expect(section[key]).toEqual(source[key]);
+  expect(section.content).toBe("분석자가 고친 내용");
+});
+
+it("keeps the report's evidence scope instead of the on-screen evidence", async () => {
+  const { call, onSaved } = await saveFrom({});
+  fireEvent.submit(screen.getByRole("dialog"));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  expect((call.mock.calls[0][1] as Row).evidence_ids).toEqual(
+    enriched.evidence_ids,
+  );
+});
+
+it("uses the selected evidence only for a first version", async () => {
+  const { call, onSaved } = await saveFrom({ base: undefined });
+  fireEvent.change(screen.getByLabelText("섹션 1 내용"), {
+    target: { value: "첫 버전" },
+  });
+  fireEvent.change(screen.getByLabelText("요약"), {
+    target: { value: "요약" },
+  });
+  fireEvent.change(screen.getByLabelText("분석의 한계 (줄마다 하나)"), {
+    target: { value: "합성" },
+  });
+  fireEvent.submit(screen.getByRole("dialog"));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  const payload = call.mock.calls[0][1] as Row;
+  expect(payload.evidence_ids).toEqual([
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  ]);
+  // A new section has nothing to preserve and lets Core apply its defaults.
+  expect(payload.sections[0]).not.toHaveProperty("source_kind");
+});

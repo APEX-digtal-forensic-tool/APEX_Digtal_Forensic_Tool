@@ -176,16 +176,50 @@ type DraftSection = {
   title: string;
   content: string;
   citations: Row[];
+  // Fields the analyst does not edit here but must not lose: table data, AI/analyst
+  // origin, partial/stale state and warnings, coverage and source references.
+  preserved: Row;
 };
 
+/** Section fields carried over unchanged so a new version keeps the source's meaning. */
+export const PRESERVED_SECTION_FIELDS = [
+  "content_kind",
+  "structured_data",
+  "source_kind",
+  "source_resource_ids",
+  "context_snapshot_ids",
+  "is_partial",
+  "stale_reasons",
+  "coverage",
+  "warnings",
+] as const;
+
 let draftKey = 0;
-const draft = (s: Partial<DraftSection> = {}): DraftSection => ({
+const draft = (s: Row = {}): DraftSection => ({
   key: `draft-${++draftKey}`,
   section_type: s.section_type ?? "KEY_FINDINGS",
   title: s.title ?? "주요 발견 사항",
   content: s.content ?? "",
   citations: s.citations ?? [],
+  preserved: Object.fromEntries(
+    PRESERVED_SECTION_FIELDS.filter((key) => s[key] !== undefined).map(
+      (key) => [key, s[key]],
+    ),
+  ),
 });
+
+function sectionNotes(preserved: Row): string[] {
+  return [
+    preserved.source_kind && preserved.source_kind !== "ANALYST_DRAFT"
+      ? `출처 ${preserved.source_kind}`
+      : "",
+    preserved.content_kind && preserved.content_kind !== "PLAIN_TEXT"
+      ? `형식 ${preserved.content_kind}`
+      : "",
+    preserved.is_partial ? "부분 분석" : "",
+    preserved.stale_reasons?.length ? "오래된 결과 경고" : "",
+  ].filter(Boolean);
+}
 
 /** New report version with any number of ordered, typed sections. */
 export function ReportVersionDialog({
@@ -253,13 +287,20 @@ export function ReportVersionDialog({
               report_id: reportId,
               title,
               executive_summary: summary,
-              evidence_ids: evidenceId ? [evidenceId] : [],
+              // A new version keeps the report's evidence scope; only a first
+              // version falls back to the evidence selected on screen.
+              evidence_ids: base?.evidence_ids?.length
+                ? base.evidence_ids
+                : evidenceId
+                  ? [evidenceId]
+                  : [],
               citations,
               limitations: limitations
                 .split("\n")
                 .map((l: string) => l.trim())
                 .filter(Boolean),
               sections: sections.map((s, i) => ({
+                ...s.preserved,
                 section_type: s.section_type,
                 title: s.title,
                 content: s.content,
@@ -344,6 +385,11 @@ export function ReportVersionDialog({
               {s.citations.length > 0 && (
                 <small className="muted">
                   인용 {s.citations.length}개 유지
+                </small>
+              )}
+              {sectionNotes(s.preserved).length > 0 && (
+                <small className="muted">
+                  유지되는 상태: {sectionNotes(s.preserved).join(" · ")}
                 </small>
               )}
               <div className="button-row">
