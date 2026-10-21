@@ -1550,7 +1550,9 @@ class AiAssistanceService:
                     target=target,
                     details={"source_kind": source_kind},
                 )
-            if not _snapshot_contains(snapshot, resource_type, source_id):
+            if not _snapshot_contains(
+                snapshot, resource_type, source_id
+            ) and not _snapshot_cites(snapshot, source_kind, source_id):
                 raise AiAssistanceError(
                     "AI_CITATION_SCOPE_MISMATCH",
                     "Citation source is outside the context snapshot.",
@@ -2072,6 +2074,17 @@ def _snapshot_contains(
     if resource_type in {"REGISTRY", "EVENT_LOG", "PREFETCH", "BROWSER", "MEDIA"}:
         return resource_id in snapshot.included_resource_ids.get("ARTIFACT", [])
     return False
+
+
+def _snapshot_cites(snapshot: AnalysisContextSnapshot, source_kind: str, source_id: str) -> bool:
+    """Accept a source the Core itself cited for an included resource (e.g. an artifact's file)."""
+
+    return any(
+        str(item.get("source_kind", "")) == source_kind
+        and str(item.get("source_id", "")) == source_id
+        for item in snapshot.citations
+        if isinstance(item, Mapping)
+    )
 
 
 def _snapshot_revision(
