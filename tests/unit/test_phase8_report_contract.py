@@ -188,6 +188,34 @@ def _review_and_approve(services: Any, version: Any):
     )
 
 
+@pytest.mark.parametrize("scope", ["missing", "undeclared", "other_case"])
+def test_section_snapshot_must_belong_to_report_context(tmp_path: Path, scope: str) -> None:
+    services = build_services(tmp_path / "apex.db")
+    try:
+        base = _base_fixture(services, tmp_path)
+        payload = _version_payload(base)
+        if scope == "missing":
+            snapshot_id = "00000000-0000-4000-8000-000000000000"
+        elif scope == "other_case":
+            other_path = tmp_path / "other"
+            other_path.mkdir()
+            other = _base_fixture(services, other_path)
+            snapshot_id = other["snapshot"].context_snapshot_id
+        else:
+            snapshot_id = base["snapshot"].context_snapshot_id
+            payload["context_snapshot_ids"] = []
+        payload["sections"][0]["context_snapshot_ids"] = [snapshot_id]
+        with pytest.raises(ReportError) as error:
+            services.reports.create_version_from_analyst_draft(
+                report_id=base["report"].report_id, created_by="analyst", **payload
+            )
+        assert error.value.code == "REPORT_CITATION_SCOPE_MISMATCH"
+        assert error.value.target == "section.context_snapshot_ids"
+        assert services.reports.list_versions(base["report"].report_id) == []
+    finally:
+        services.close()
+
+
 def test_report_version_review_approval_and_repository_reopen(tmp_path: Path) -> None:
     services = build_services(tmp_path / "apex.db")
     try:

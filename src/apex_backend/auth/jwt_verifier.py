@@ -15,7 +15,7 @@ from jose import JWTError
 from jose import jwt as jose_jwt
 from mcp.server.auth.provider import AccessToken
 
-from apex_backend.auth.jwt_utils import ALGORITHM, AUDIENCE, ISSUER
+from apex_backend.auth.jwt_utils import ALGORITHM, AUDIENCE, ISSUER, validate_token_claims
 
 _logger = logging.getLogger(__name__)
 
@@ -81,11 +81,10 @@ class JwtTokenVerifier:
                 algorithms=[ALGORITHM],
                 audience=self._audience,
                 issuer=self._issuer,
+                options={"require_aud": True, "require_exp": True},
             )
-        except JWTError:
-            return None
-
-        if claims.get("token_type") != "access":
+            validate_token_claims(claims, token_type="access")
+        except (JWTError, TypeError, ValueError, OverflowError):
             return None
 
         scopes_raw = claims.get("scopes", [])

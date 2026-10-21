@@ -323,7 +323,30 @@ export function ReportVersionDialog({
                 : evidenceId
                   ? [evidenceId]
                   : [],
-              citations,
+              // Core builds report-wide citation IDs from this collection.
+              citations: [
+                ...new Map(
+                  [...sections.flatMap((s) => s.citations), ...citations].map(
+                    (citation) => [JSON.stringify(citation), citation],
+                  ),
+                ).values(),
+              ],
+              // Older desktop versions retained section references but dropped
+              // report-wide context. Core revalidates all recovered IDs and
+              // regenerates source revisions; stored versions stay immutable.
+              context_snapshot_ids: [
+                ...new Set([
+                  ...(base?.context_snapshot_ids ?? []),
+                  ...sections.flatMap(
+                    (s) => s.preserved.context_snapshot_ids ?? [],
+                  ),
+                ]),
+              ],
+              search_execution_ids: base?.search_execution_ids ?? [],
+              timeline_revisions: base?.timeline_revisions ?? [],
+              ai_assistance_request_ids: base?.ai_assistance_request_ids ?? [],
+              ai_result_ids: base?.ai_result_ids ?? [],
+              analyzer_versions: base?.analyzer_versions ?? {},
               limitations: limitations
                 .split("\n")
                 .map((l: string) => l.trim())

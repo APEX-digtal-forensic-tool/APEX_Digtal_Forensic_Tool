@@ -112,17 +112,59 @@ def issue_refresh_token(
 
 def decode_refresh_token(token: str, public_key_pem: str) -> dict[str, Any]:
     """Decode and validate a refresh token. Raises JWTError on failure."""
-    claims: dict[str, Any] = jwt.decode(
-        token,
-        public_key_pem,
-        algorithms=[ALGORITHM],
-        audience=AUDIENCE,
-        issuer=ISSUER,
-        options={"require_aud": True},
-    )
-    if claims.get("token_type") != "refresh":
-        raise JWTError("Not a refresh token.")
+    try:
+        claims: dict[str, Any] = jwt.decode(
+            token,
+            public_key_pem,
+            algorithms=[ALGORITHM],
+            audience=AUDIENCE,
+            issuer=ISSUER,
+            options={"require_aud": True, "require_exp": True},
+        )
+        validate_token_claims(claims, token_type="refresh")
+    except (TypeError, ValueError, OverflowError) as exc:
+        # python-jose may leak conversion errors for null/compound NumericDates.
+        raise JWTError("Invalid refresh token claims.") from exc
     return claims
+
+
+def validate_token_claims(claims: dict[str, Any], *, token_type: str) -> None:
+    """Validate issuer contract before auth/MCP consumers use typed claims.
+
+    Signature, issuer, audience and time validity are checked by jwt.decode.
+    This also requires expiry and session identity; python-jose otherwise accepts
+    missing claims and does not type-check our custom authorization fields.
+    """
+    if claims.get("token_type") != token_type:
+        raise JWTError("Unexpected token type.")
+    for field in ("sub", "session_id", "jti"):
+        value = claims.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise JWTError(f"Invalid {field} claim.")
+    for field in ("iat", "exp"):
+        if type(claims.get(field)) is not int:
+            raise JWTError(f"Invalid {field} claim.")
+    if token_type != "access":
+        return
+    tenant = claims.get("tenant_id")
+    if not isinstance(tenant, str) or not tenant.strip():
+        raise JWTError("Invalid tenant_id claim.")
+    for field in ("scopes", "roles", "allowed_case_ids"):
+        values = claims.get(field)
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value.strip() for value in values
+        ):
+            raise JWTError(f"Invalid {field} claim.")
+    # Legacy tokens may omit case_roles; the authorization gate denies role-gated
+    # tools for those tokens. Malformed maps must never reach that gate.
+    if "case_roles" in claims:
+        roles = claims["case_roles"]
+        if not isinstance(roles, dict) or any(
+            not isinstance(case, str) or not case.strip()
+            or not isinstance(role, str) or not role.strip()
+            for case, role in roles.items()
+        ):
+            raise JWTError("Invalid case_roles claim.")
 
 
 __all__ = [

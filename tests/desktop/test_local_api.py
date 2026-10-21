@@ -539,6 +539,12 @@ def test_report_copy_preserves_rich_sections_scope_and_export(client, tmp_path, 
         "stale_confirmed": True,
     }
     if scope == "MULTI":
+        unconfirmed = client.post(
+            "/v1/operations/reports.export", json={**export_payload, "stale_confirmed": False}
+        )
+        assert unconfirmed.status_code == 409
+        assert unconfirmed.json()["error"]["target"] == "stale_confirmed"
+        assert not list((tmp_path / "data/exports").rglob("preserved.html"))
         call(client, "reports.export", **export_payload)
         exported = next((tmp_path / "data/exports").rglob("preserved.html"))
         assert "edited finding" in exported.read_text(encoding="utf-8")
@@ -549,3 +555,77 @@ def test_report_copy_preserves_rich_sections_scope_and_export(client, tmp_path, 
     data = call(client, "reports.get", case_id=cid, report_id=report["report_id"])
     assert data["versions"][0]["sections"][0]["content"] == "original note"
     assert set(data["versions"][0]["evidence_ids"]) == set(evidence_ids)
+
+
+def test_report_snapshot_provenance_survives_desktop_edit(client, tmp_path):
+    from apex_forensic.config import build_services
+
+    cid, eid = fixture_case(client, tmp_path)
+    report = call(client, "reports.create", case_id=cid, title="Snapshot report")
+    with_services = build_services(tmp_path / "data/apex.db")
+    try:
+        node = next(
+            item for item in with_services.repository.list_fs_nodes_for_evidence(eid)
+            if item.node_type.value == "FILE"
+        )
+        context = with_services.contexts.create(
+            session_id="audit", case_id=cid, selected_file_node_ids=[node.node_id]
+        )
+        snapshot = with_services.contexts.build_from_session(
+            context.session_context_id, purpose="REPORT_DRAFT", scopes=["filesystem"]
+        )
+        request = with_services.ai.create_request_from_context_snapshot(
+            case_id=cid, context_snapshot_id=snapshot.context_snapshot_id,
+            purpose="REPORT_INPUT", requested_operations=["SUMMARIZE_SCOPE"],
+            requested_scopes=["filesystem"],
+        )
+        source = with_services.reports.create_version_from_analyst_draft(
+            report_id=report["report_id"], created_by="audit", title="Snapshot report",
+            executive_summary="Original", evidence_ids=[eid],
+            context_snapshot_ids=[snapshot.context_snapshot_id],
+            citations=snapshot.citations,
+            ai_assistance_request_ids=[request.assistance_request_id],
+            analyzer_versions={"fixture": "1"}, limitations=["Synthetic evidence"],
+            sections=[{
+                "section_type": "KEY_FINDINGS", "title": "Finding", "order": 1,
+                "content": "Original", "context_snapshot_ids": [snapshot.context_snapshot_id],
+                "source_resource_ids": [node.node_id],
+                "citations": snapshot.citations,
+            }],
+        )
+    finally:
+        with_services.close()
+    payload = {
+        "case_id": cid, "report_id": report["report_id"], "title": source.title,
+        "executive_summary": "Edited", "evidence_ids": source.evidence_ids,
+        "context_snapshot_ids": source.context_snapshot_ids,
+        "ai_assistance_request_ids": source.ai_assistance_request_ids,
+        "analyzer_versions": source.analyzer_versions, "limitations": source.limitations,
+        "citations": source.sections[0].citations,
+        "sections": [{
+            "section_type": "KEY_FINDINGS", "title": "Finding", "order": 1,
+            "content": "Edited", "context_snapshot_ids": source.context_snapshot_ids,
+            "source_resource_ids": [node.node_id],
+            "citations": source.sections[0].citations,
+        }],
+    }
+    edited = call(client, "reports.version", **payload)
+    assert edited["context_snapshot_ids"] == source.context_snapshot_ids
+    assert edited["source_revisions"][0]["context_fingerprint"] == snapshot.context_fingerprint
+    assert edited["ai_assistance_request_ids"] == source.ai_assistance_request_ids
+    assert edited["analyzer_versions"] == source.analyzer_versions
+    assert source.citation_ids  # An empty fixture would hide citation-index loss.
+    assert edited["citation_ids"] == source.citation_ids
+    assert edited["previous_version_id"] == source.report_version_id
+    detail = call(client, "reports.get", case_id=cid, report_id=report["report_id"])
+    assert detail["versions"][0]["executive_summary"] == "Original"
+    assert detail["versions"][1]["source_revisions"] == detail["versions"][0]["source_revisions"]
+
+    # Newly exposed provenance fields still pass Core's case authorization checks.
+    other = call(client, "cases.create", name="Other case")["id"]
+    other_report = call(client, "reports.create", case_id=other, title="Other report")
+    denied = client.post("/v1/operations/reports.version", json={
+        **payload, "case_id": other, "report_id": other_report["report_id"], "evidence_ids": [],
+    })
+    assert denied.status_code == 409
+    assert denied.json()["error"]["code"] == "REPORT_REFERENCE_CASE_MISMATCH"

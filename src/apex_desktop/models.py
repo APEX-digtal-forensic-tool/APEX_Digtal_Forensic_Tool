@@ -188,6 +188,12 @@ class ReportVersion(ReportGet):
     limitations: list[str] = Field(default_factory=list, max_length=100)
     evidence_ids: list[str] = Field(default_factory=list, max_length=100)
     citations: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    context_snapshot_ids: list[str] = Field(default_factory=list, max_length=1000)
+    search_execution_ids: list[str] = Field(default_factory=list, max_length=10000)
+    timeline_revisions: list[int] = Field(default_factory=list, max_length=10000)
+    ai_assistance_request_ids: list[str] = Field(default_factory=list, max_length=10000)
+    ai_result_ids: list[str] = Field(default_factory=list, max_length=10000)
+    analyzer_versions: dict[str, Any] = Field(default_factory=dict)
 
 
 class ReportAction(CaseInput):

@@ -1786,6 +1786,15 @@ class ReportService:
             "context_snapshot_ids",
             max_items=MAX_CONTEXT_SNAPSHOT_COUNT,
         )
+        # Every section reference must resolve through the report's case-checked
+        # context. Silently ignoring unknown IDs loses provenance and stale state.
+        declared_snapshot_ids = {item.context_snapshot_id for item in snapshots}
+        if not set(context_snapshot_ids).issubset(declared_snapshot_ids):
+            raise ReportError(
+                "REPORT_CITATION_SCOPE_MISMATCH",
+                "Section snapshots must belong to the declared report context.",
+                target="section.context_snapshot_ids",
+            )
         section_snapshots = [
             snapshot
             for snapshot in snapshots
