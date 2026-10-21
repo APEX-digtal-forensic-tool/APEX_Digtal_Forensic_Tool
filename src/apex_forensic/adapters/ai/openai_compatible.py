@@ -143,6 +143,24 @@ class OpenAICompatibleProvider:
             cancellation_requested=cancellation_requested,
         )
         payload = _require_mapping(content, target="summary_response")
+        if request.scope_context_ids:
+            payload.setdefault("scope_context_id", request.scope_context_ids[0])
+        if not payload.get("citations") and request.citations:
+            # Structural-only requests carry no evidence text for the model to quote, so the
+            # model returns no citations; bind the snapshot's own local citations instead.
+            payload["citations"] = request.citations
+            payload["referenced_resource_ids"] = []
+            warnings = payload.setdefault("warnings", [])
+            if isinstance(warnings, list):
+                warnings.append(
+                    {
+                        "code": "AI_LOCAL_CITATIONS_ATTACHED",
+                        "developer_message": (
+                            "Provider returned no citations; snapshot citations identify the "
+                            "selected sources, not evidence text read by the model."
+                        ),
+                    }
+                )
         return self._with_metadata(payload)
 
     def generate_report_draft(
@@ -217,7 +235,14 @@ class OpenAICompatibleProvider:
         content = _assistant_content(response)
         parsed = _parse_json_content(content)
         if isinstance(parsed, dict):
-            warnings = parsed.setdefault("warnings", [])
+            warnings = parsed.get("warnings")
+            warnings = [
+                item
+                if isinstance(item, dict)
+                else {"code": "AI_PROVIDER_WARNING", "developer_message": str(item)[:2000]}
+                for item in (warnings if isinstance(warnings, list) else [])
+            ]
+            parsed["warnings"] = warnings
             if isinstance(warnings, list):
                 warnings.append(
                     {
@@ -512,11 +537,33 @@ def _parse_json_content(content: str) -> Any:
     try:
         return json.loads(content)
     except json.JSONDecodeError as error:
+        unwrapped = _unwrap_json_text(content)
+        if unwrapped is not None:
+            try:
+                return json.loads(unwrapped)
+            except json.JSONDecodeError:
+                pass
         raise AiAssistanceError(
             "AI_PROVIDER_INVALID_RESPONSE",
             "AI provider content is not valid JSON.",
             target="provider_response",
         ) from error
+
+
+def _unwrap_json_text(content: str) -> str | None:
+    """Recover one JSON object from markdown fences or surrounding prose."""
+
+    text = content.strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        closing = text.rfind("```")
+        if first_newline != -1 and closing > first_newline:
+            text = text[first_newline + 1 : closing].strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    return text[start : end + 1]
 
 
 def _require_mapping(value: Any, *, target: str) -> dict[str, Any]:

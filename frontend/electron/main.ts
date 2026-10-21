@@ -106,7 +106,10 @@ async function local(operation: string, payload: Record<string, unknown>) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(operation === "runtime" ? 60000 : 120000),
+    // Reasoning models can take minutes for one governed AI request.
+    signal: AbortSignal.timeout(
+      operation === "runtime" ? 60000 : operation === "ai.analyze" ? 300000 : 120000,
+    ),
     redirect: "error",
   });
   return response.json();
