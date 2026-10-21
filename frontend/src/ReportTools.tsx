@@ -99,29 +99,58 @@ export function SearchHistory({
   zone: string;
   onSearch: (text: string, mode: string) => void;
 }) {
-  const [history, setHistory] = useState<Row[] | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  useEffect(() => {
-    setHistory(null);
-    setError(null);
-  }, [caseId]);
-  async function load() {
-    setError(null);
-    try {
-      setHistory(await gateway.call("search.history", { case_id: caseId }));
-    } catch (e) {
-      setError(e);
-    }
-  }
+  const [open, setOpen] = useState(false);
   return (
     <details
       className="search-history-panel"
-      onToggle={(e) => {
-        if ((e.currentTarget as HTMLDetailsElement).open) void load();
-      }}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary>검색 이력</summary>
-      {error != null && <ErrorState error={error} retry={load} />}
+      {open && (
+        <SearchHistoryEntries
+          key={caseId}
+          caseId={caseId}
+          zone={zone}
+          onSearch={onSearch}
+        />
+      )}
+    </details>
+  );
+}
+
+function SearchHistoryEntries({
+  caseId,
+  zone,
+  onSearch,
+}: {
+  caseId: string;
+  zone: string;
+  onSearch: (text: string, mode: string) => void;
+}) {
+  const [history, setHistory] = useState<Row[] | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setHistory(null);
+    setError(null);
+    gateway.call<Row[]>("search.history", { case_id: caseId }).then(
+      (rows) => {
+        if (live) setHistory(rows);
+      },
+      (err) => {
+        if (live) setError(err);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [caseId, attempt]);
+  return (
+    <>
+      {error != null && (
+        <ErrorState error={error} retry={() => setAttempt((n) => n + 1)} />
+      )}
       {history == null ? (
         !error && <Loading />
       ) : !history.length ? (
@@ -142,7 +171,7 @@ export function SearchHistory({
           })}
         </ul>
       )}
-    </details>
+    </>
   );
 }
 
@@ -289,8 +318,8 @@ export function ReportVersionDialog({
               executive_summary: summary,
               // A new version keeps the report's evidence scope; only a first
               // version falls back to the evidence selected on screen.
-              evidence_ids: base?.evidence_ids?.length
-                ? base.evidence_ids
+              evidence_ids: base
+                ? (base.evidence_ids ?? [])
                 : evidenceId
                   ? [evidenceId]
                   : [],

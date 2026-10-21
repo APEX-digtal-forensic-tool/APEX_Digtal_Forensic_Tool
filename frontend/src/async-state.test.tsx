@@ -430,3 +430,94 @@ it("re-searches a history entry through search.query", async () => {
     "README",
   );
 });
+
+it("shows receipt failure and retries persistence without starting another task", async () => {
+  const bridge = createDemoBridge();
+  const original = bridge.invoke.bind(bridge);
+  const operations: string[] = [];
+  let failed = true;
+  bridge.invoke = async (op, payload) => {
+    operations.push(op);
+    if (op === "tasks.list") {
+      if (payload.retry_receipts) failed = false;
+      return {
+        ok: true,
+        data: [
+          {
+            task_id: "receipt-task",
+            case_id: payload.case_id,
+            kind: "STREAM_EXPORT",
+            status: "SUCCEEDED",
+            actions: [],
+            error: null,
+            job: null,
+            result: { output_path: "derived.bin" },
+            ...(failed
+              ? { receipt_error: { code: "TASK_RECEIPT_NOT_SAVED" } }
+              : {}),
+          },
+        ],
+      };
+    }
+    return original(op, payload);
+  };
+  window.apex = bridge;
+  await openFiles();
+  fireEvent.click(screen.getByRole("button", { name: "작업 0" }));
+  const warning = await screen.findByText(/작업 결과는 유지되어 있지만/);
+  expect(
+    within(warning.closest("aside") as HTMLElement).getByText("완료"),
+  ).toBeTruthy();
+  fireEvent.click(
+    within(warning.closest('[role="alert"]') as HTMLElement).getByText(
+      "다시 시도",
+    ),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText(/작업 결과는 유지되어 있지만/)).toBeNull(),
+  );
+  expect(operations).not.toContain("analysis.start");
+  expect(operations).not.toContain("streams.export");
+});
+
+it("shows optional AI configuration errors while the local file workbench remains usable", async () => {
+  const bridge = createDemoBridge();
+  const original = bridge.invoke.bind(bridge);
+  let invalid = true;
+  bridge.invoke = async (op, payload) => {
+    const reply = await original(op, payload);
+    if (op === "runtime" && reply.ok)
+      return {
+        ok: true,
+        data: {
+          ...reply.data,
+          ai: {
+            ...reply.data.ai,
+            configuration_error: invalid
+              ? { code: "AI_CONFIGURATION_INVALID" }
+              : null,
+          },
+        },
+      };
+    return reply;
+  };
+  window.apex = bridge;
+  await openFiles();
+  expect(
+    await within(await screen.findByRole("table")).findByText("README.txt"),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByTitle("AI 도우미"));
+  const warning = await screen.findByText(/AI 연결 설정이 올바르지 않습니다/);
+  invalid = false;
+  fireEvent.click(
+    within(warning.closest('[role="alert"]') as HTMLElement).getByText(
+      "다시 시도",
+    ),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText(/AI 연결 설정이 올바르지 않습니다/)).toBeNull(),
+  );
+  expect(
+    within(screen.getByRole("table")).getByText("README.txt"),
+  ).toBeTruthy();
+});

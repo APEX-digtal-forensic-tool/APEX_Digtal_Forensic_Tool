@@ -26,6 +26,9 @@ def unmanaged(monkeypatch):
     "content,reason,fields",
     [
         (b"{broken", "JSON_SYNTAX", []),
+        (b"", "EMPTY", []),
+        (b"\xef\xbb\xbf", "EMPTY", []),
+        (b" \n\t", "EMPTY", []),
         (
             b'{"stt_provider": 7, "unexpected": true}',
             "INVALID_FIELDS",

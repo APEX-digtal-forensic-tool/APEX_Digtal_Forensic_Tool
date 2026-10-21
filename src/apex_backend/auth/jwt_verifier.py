@@ -146,11 +146,21 @@ class JwtTokenVerifier:
                 )
             return
 
+        if not isinstance(body, dict) or not isinstance(body.get("keys"), list):
+            _logger.warning("Malformed JWKS document from %s; retaining cache", self._jwks_uri)
+            return
         new_keys: dict[str, str] = {}
-        for jwk in body.get("keys", []):
+        for jwk in body["keys"]:
+            if not isinstance(jwk, dict):
+                _logger.warning("Non-object JWK from %s; skipping", self._jwks_uri)
+                continue
+            kid = jwk.get("kid")
+            if not isinstance(kid, str) or not kid or len(kid) > _KID_MAX_LEN:
+                _logger.warning("Invalid JWK key identifier from %s; skipping", self._jwks_uri)
+                continue
             try:
                 pem = _jwk_to_pem(jwk)
-                new_keys[jwk["kid"]] = pem
+                new_keys[kid] = pem
             except Exception:
                 _logger.warning(
                     "Failed to parse JWK kid=%r from %s; skipping",

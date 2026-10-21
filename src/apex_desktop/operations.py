@@ -63,7 +63,7 @@ MODELS: dict[str, type[m.Input]] = {
     "context.get": m.ContextGet,
     "context.update": m.ContextUpdate,
     "analysis.start": m.Analysis,
-    "tasks.list": m.CaseInput,
+    "tasks.list": m.TaskList,
     "tasks.cancel": m.TaskAction,
     "custody.list": m.EvidenceInput,
     "custody.add": m.CustodyAdd,
@@ -322,7 +322,7 @@ def invoke(
 
         return tasks.start(case_id, kind, run)
     if operation == "tasks.list":
-        return tasks.list(case_id)
+        return tasks.list(case_id, retry_receipts=p["retry_receipts"])
     if operation == "tasks.cancel":
         return tasks.cancel(case_id, p["task_id"])
     if operation == "custody.list":

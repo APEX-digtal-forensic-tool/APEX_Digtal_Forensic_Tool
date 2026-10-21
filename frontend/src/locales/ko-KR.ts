@@ -1,4 +1,8 @@
 export const errorMessages: Record<string, string> = {
+  TASK_RECEIPT_NOT_SAVED:
+    "작업 결과는 유지되어 있지만 작업 이력을 디스크에 저장하지 못했습니다. 앱을 종료하면 이전 상태로 표시될 수 있습니다. 저장 공간과 권한을 확인한 뒤 기록 저장을 다시 시도해주세요. 분석은 재실행하지 않습니다.",
+  AI_CONFIGURATION_INVALID:
+    "AI 연결 설정이 올바르지 않습니다. 실행 환경의 APEX_DESKTOP_AI_CONFIG를 확인해주세요. 로컬 분석은 계속 사용할 수 있습니다.",
   VIDEO_LIMIT_EXCEEDED:
     "영상 프레임 해상도 한도를 초과했습니다. 최대 8K UHD에 해당하는 33,177,600픽셀까지 지원합니다.",
   VIDEO_FRAME_FAILED:

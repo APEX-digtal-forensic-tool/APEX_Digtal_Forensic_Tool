@@ -240,3 +240,33 @@ def test_content_never_replays_a_structural_result_for_same_snapshot(
     )
     assert len(provider) == 2
     assert result["execution"]["replayed"] is False
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "{broken",
+        "[]",
+        "null",
+        '{"base_url": []}',
+        '{"provider_id":"test","base_url":17,"model_id":"test","api_key_env":"TEST"}',
+    ],
+)
+def test_invalid_optional_config_is_diagnosed_without_sending_data(
+    services, selection, provider, monkeypatch, raw
+):
+    from apex_desktop.ai import runtime
+    from apex_forensic.domain.errors import ValidationError
+
+    monkeypatch.setenv("APEX_DESKTOP_AI_CONFIG", raw)
+    state = runtime(services)
+    assert state["configuration_error"] == {
+        "code": "AI_CONFIGURATION_INVALID",
+        "source": "APEX_DESKTOP_AI_CONFIG",
+    }
+    assert "RUNTIME_LLM_PROVIDER" not in state["engine_capabilities"]
+    with pytest.raises(ValidationError, match="Invalid desktop AI configuration"):
+        analyze(services, **selection)
+    assert provider == []
+    monkeypatch.delenv("APEX_DESKTOP_AI_CONFIG")
+    assert runtime(services)["configuration_error"] is None

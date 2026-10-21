@@ -2,8 +2,10 @@
 
 import json
 import os
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from apex_forensic.adapters.filesystem.content import EvidenceFileContent
@@ -20,6 +22,7 @@ from apex_forensic.jobs import CancellationToken
 from apex_forensic.runtime.assets import bundled_stt_model
 
 SETTINGS_FILE = "machine-settings.json"
+_SETTINGS_LOCK = RLock()
 
 
 def _managed() -> bool:
@@ -28,6 +31,11 @@ def _managed() -> bool:
 
 def load_settings(root: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Return validated settings, or defaults plus a diagnosis when the stored copy is unusable."""
+    with _SETTINGS_LOCK:
+        return _load_settings(root)
+
+
+def _load_settings(root: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
     from pydantic import ValidationError as ModelError
 
     from .models import MachineSettings
@@ -39,7 +47,15 @@ def load_settings(root: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
         raw = os.environ.get("APEX_DESKTOP_MACHINE_CONFIG")
         if raw is None and path.exists():
             raw = path.read_bytes().decode("utf-8-sig")
-        value = json.loads(raw) if raw else {}
+        if raw is not None and not raw.strip():
+            return MachineSettings().model_dump(), {
+                "code": "MACHINE_SETTINGS_INVALID",
+                "reason": "EMPTY",
+                "source": source,
+                "fields": [],
+                "resettable": source == "FILE",
+            }
+        value = json.loads(raw) if raw is not None else {}
         if not isinstance(value, dict):
             raise TypeError
         return MachineSettings.model_validate(value).model_dump(), None
@@ -77,7 +93,7 @@ def config(root: Path) -> dict[str, Any]:
 
 
 def _preserve(root: Path, *, only_invalid: bool) -> str | None:
-    """Move the stored settings aside so recovery never discards what was there."""
+    """Preserve settings without removing the invalid source before a save succeeds."""
     path = root / SETTINGS_FILE
     if not path.exists():
         return None
@@ -86,15 +102,22 @@ def _preserve(root: Path, *, only_invalid: bool) -> str | None:
         return None
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     backup = path.with_name(f"machine-settings.{'invalid' if invalid else 'previous'}-{stamp}.json")
-    path.replace(backup)
+    if only_invalid:
+        # A failed subsequent replace must still leave an invalid active file;
+        # otherwise the next request would silently run with defaults.
+        with backup.open("xb") as stream:
+            stream.write(path.read_bytes())
+    else:
+        path.replace(backup)
     return backup.name
 
 
 def reset_config(root: Path) -> dict[str, Any]:
     if _managed():
         raise ApexError("MACHINE_SETTINGS_MANAGED", "error.machine_settings_managed")
-    preserved = _preserve(root, only_invalid=False)
-    return {**capabilities(root), "preserved_settings_file": preserved}
+    with _SETTINGS_LOCK:
+        preserved = _preserve(root, only_invalid=False)
+        return {**capabilities(root), "preserved_settings_file": preserved}
 
 
 def save_config(root: Path, values: dict[str, Any]) -> dict[str, Any]:
@@ -113,11 +136,29 @@ def save_config(root: Path, values: dict[str, Any]) -> dict[str, Any]:
     if tessdata and not Path(tessdata).is_dir():
         raise ValidationError("OCR language models require a directory.", target="tessdata_path")
     path = root / SETTINGS_FILE
-    temp = path.with_suffix(".tmp")
-    temp.write_text(json.dumps(values), encoding="utf-8")
-    preserved = _preserve(root, only_invalid=True)
-    temp.replace(path)
-    return {**capabilities(root), "preserved_settings_file": preserved}
+    # Each request owns its temporary file. Close it before replace on Windows.
+    temp: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=root,
+            prefix="machine-settings-",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temp = Path(stream.name)
+            stream.write(json.dumps(values))
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Serialize preservation, publication and the response snapshot with reset.
+        with _SETTINGS_LOCK:
+            preserved = _preserve(root, only_invalid=True)
+            temp.replace(path)
+            return {**capabilities(root), "preserved_settings_file": preserved}
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
 
 
 def providers(root: Path) -> tuple[Any, Any]:
@@ -144,6 +185,11 @@ def providers(root: Path) -> tuple[Any, Any]:
 
 
 def capabilities(root: Path) -> dict[str, Any]:
+    with _SETTINGS_LOCK:
+        return _capabilities(root)
+
+
+def _capabilities(root: Path) -> dict[str, Any]:
     from apex_forensic.adapters.artifacts.media import _ffmpeg_capability, _ffprobe_capability
     from apex_forensic.adapters.decryption.dpapi import DpapiOfflineProvider
 
