@@ -2175,6 +2175,23 @@ export function App() {
                 {t.error && (
                   <ErrorState error={new GatewayError(t.error.code)} />
                 )}
+                {t.receipt_error && (
+                  <ErrorState
+                    error={new GatewayError(t.receipt_error.code)}
+                    retry={async () => {
+                      const owner = caseId;
+                      try {
+                        const next = await gateway.call<Row[]>("tasks.list", {
+                          case_id: owner,
+                          retry_receipts: true,
+                        });
+                        if (caseRef.current === owner) setTasks(next);
+                      } catch (err) {
+                        if (caseRef.current === owner) setError(err);
+                      }
+                    }}
+                  />
+                )}
                 <ResultState data={t.job} />
                 {t.actions?.includes("CANCEL") && (
                   <button
@@ -2215,6 +2232,12 @@ export function App() {
               <X size={18} />
             </button>
           </header>
+          {runtime?.ai?.configuration_error && (
+            <ErrorState
+              error={new GatewayError(runtime.ai.configuration_error.code)}
+              retry={() => void bootstrap()}
+            />
+          )}
           <AiAssistant
             caseId={caseId}
             selected={selected ? resource(selected) : null}

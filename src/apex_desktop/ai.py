@@ -30,7 +30,7 @@ def provider_config() -> OpenAICompatibleConfig | None:
         return None
     try:
         config = AiProviderRuntimeConfig(**json.loads(raw)).validate()
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, AttributeError, ValidationError) as error:
         raise ValidationError("Invalid desktop AI configuration.") from error
     return OpenAICompatibleConfig(
         provider_id=config.provider_id,
@@ -45,8 +45,17 @@ def provider_config() -> OpenAICompatibleConfig | None:
 
 
 def runtime(services: ServiceBundle) -> dict[str, Any]:
-    config = provider_config()
     result = services.ai.capabilities()
+    result["configuration_error"] = None
+    try:
+        config = provider_config()
+    except ValidationError:
+        # Optional AI setup must not prevent the local workbench from starting.
+        result["configuration_error"] = {
+            "code": "AI_CONFIGURATION_INVALID",
+            "source": "APEX_DESKTOP_AI_CONFIG",
+        }
+        return result
     if config is not None:
         result["runtime_capability"] = (
             OpenAICompatibleProvider(config).capabilities().to_schema_dict()

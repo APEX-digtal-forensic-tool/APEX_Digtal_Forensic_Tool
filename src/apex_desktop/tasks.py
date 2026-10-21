@@ -54,6 +54,7 @@ class TaskRecord(TypedDict):
     error: dict[str, Any] | None
     actions: list[str]
     result: NotRequired[Any]
+    receipt_error: NotRequired[dict[str, Any]]
 
 
 ProgressCallback = Callable[[Job], None]
@@ -125,7 +126,7 @@ class Tasks:
 
         receipts = []
         for record in self.records.values():
-            receipt = {k: v for k, v in record.items() if k != "result"}
+            receipt = {k: v for k, v in record.items() if k not in {"result", "receipt_error"}}
             result = record.get("result")
             if record["kind"] in {
                 "RECOVERY",
@@ -177,9 +178,18 @@ class Tasks:
         except OSError as exc:
             _logger.error("Failed to persist task journal to %s: %s", self.journal, exc)
             raise
+        for record in self.records.values():
+            record.pop("receipt_error", None)
 
-    def list(self, case_id: str) -> list[TaskRecord]:
+    def list(self, case_id: str, *, retry_receipts: bool = False) -> list[TaskRecord]:
         with self.lock:
+            # A user-requested retry writes receipts once; it never re-runs work.
+            # Ordinary UI polling remains read-only even if the disk stays full.
+            if retry_receipts and any(
+                r["case_id"] == case_id and r.get("receipt_error") for r in self.records.values()
+            ):
+                with contextlib.suppress(OSError):
+                    self._save()
             return [r.copy() for r in self.records.values() if r["case_id"] == case_id][-100:]
 
     def start(
@@ -260,7 +270,16 @@ class Tasks:
                 with self.lock:
                     record["actions"] = []
                     self.tokens.pop(task_id, None)
-                    self._save()
+                    try:
+                        self._save()
+                    except OSError:
+                        # Preserve the actual analysis outcome and expose the separate
+                        # risk that restart will see the last successfully saved receipt.
+                        record["receipt_error"] = {
+                            "code": "TASK_RECEIPT_NOT_SAVED",
+                            "message_key": "error.task_receipt_not_saved",
+                            "retryable": True,
+                        }
 
         try:
             self.pool.submit(worker)
@@ -290,3 +309,7 @@ class Tasks:
         for token in list(self.tokens.values()):
             token.cancel()
         self.pool.shutdown(wait=True, cancel_futures=False)
+        with self.lock:
+            if any(r.get("receipt_error") for r in self.records.values()):
+                with contextlib.suppress(OSError):
+                    self._save()

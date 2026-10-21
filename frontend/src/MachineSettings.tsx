@@ -3,6 +3,7 @@ import { gateway, unwrap, type Row } from "./gateway";
 import { ErrorState, Fields, Loading } from "./ui";
 
 const settingsErrorReasons: Record<string, string> = {
+  EMPTY: "설정 내용이 비어 있음",
   JSON_SYNTAX: "JSON 문법 오류",
   ENCODING: "UTF-8이 아닌 인코딩",
   NOT_OBJECT: "설정 형식이 객체가 아님",

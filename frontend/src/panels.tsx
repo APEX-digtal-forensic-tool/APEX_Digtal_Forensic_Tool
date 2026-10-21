@@ -440,6 +440,13 @@ export function Reports({
     [error, setError] = useState<unknown>(null),
     [busy, setBusy] = useState(false);
   const [exportResult, setExportResult] = useState<Row | null>(null);
+  const [versionDraft, setVersionDraft] = useState<{
+    reportId: string;
+    evidenceId: string;
+    base: Row | undefined;
+    reportTitle: string;
+    citations: Row[];
+  } | null>(null);
   const [reportCursor, setReportCursor] = useState<string | null>(null);
   // Keep the current version and review dialog mounted during a refresh, but
   // never show the previous report's details under a new selection.
@@ -550,7 +557,20 @@ export function Reports({
                 <span className="muted small">보고서</span>
                 <h2>{data?.report?.title}</h2>
               </div>
-              <button onClick={() => setDialog("version")}>
+              <button
+                disabled={!data || busy || error != null}
+                onClick={() => {
+                  if (!data || busy || error != null) return;
+                  setVersionDraft({
+                    reportId: selected,
+                    evidenceId,
+                    base: version,
+                    reportTitle: data.report.title,
+                    citations: [...citations],
+                  });
+                  setDialog("version");
+                }}
+              >
                 <Plus size={14} /> 새 버전 작성
               </button>
             </div>
@@ -678,14 +698,10 @@ export function Reports({
           }}
         />
       )}
-      {dialog === "version" && selected && (
+      {dialog === "version" && versionDraft && (
         <ReportVersionDialog
           caseId={caseId}
-          reportId={selected}
-          evidenceId={evidenceId}
-          base={version}
-          reportTitle={data?.report?.title}
-          citations={citations}
+          {...versionDraft}
           onClose={() => setDialog(null)}
           onSaved={async () => {
             setVersionId("");

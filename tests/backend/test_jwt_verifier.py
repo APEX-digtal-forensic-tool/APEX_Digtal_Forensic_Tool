@@ -26,10 +26,14 @@ from apex_backend.auth.keys import load_private_key, public_key_to_jwk
 @pytest.fixture
 def keypair():
     private_key, kid = load_private_key()
-    pub_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    pub_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     jwk = public_key_to_jwk(private_key.public_key(), kid)
     jwks_body = {"keys": [jwk]}
     return private_key, kid, pub_pem, jwks_body
@@ -269,3 +273,59 @@ async def test_network_error_returns_none(keypair: Any) -> None:
         result = await verifier.verify_token(token)
 
     assert result is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        None,
+        [],
+        17,
+        {},
+        {"keys": None},
+        {"keys": {}},
+        {"keys": [None, [], "bad", {}, {"kid": []}, {"kid": "x", "n": None, "e": "AQAB"}]},
+    ],
+)
+async def test_malformed_jwks_rejects_without_raising(keypair, monkeypatch, body):
+    import httpx
+
+    from apex_backend.auth import jwt_verifier
+
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=body))
+    monkeypatch.setattr(
+        jwt_verifier.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=transport, trust_env=False, **kwargs),
+    )
+    private_key, kid, _, _ = keypair
+    verifier = JwtTokenVerifier("https://example.invalid/jwks")
+    assert await verifier.verify_token(_make_access_token(private_key, kid)) is None
+
+
+@pytest.mark.asyncio
+async def test_jwks_mixed_entries_empty_set_and_malformed_refresh(keypair, monkeypatch):
+    import httpx
+
+    from apex_backend.auth import jwt_verifier
+
+    private_key, kid, _, jwks = keypair
+    body = {"keys": [None, {"kid": []}, *jwks["keys"], "invalid"]}
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=body))
+    monkeypatch.setattr(
+        jwt_verifier.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=transport, trust_env=False, **kwargs),
+    )
+    verifier = JwtTokenVerifier("https://example.invalid/jwks")
+    token = _make_access_token(private_key, kid)
+    assert await verifier.verify_token(token) is not None
+    body = []
+    await verifier._fetch_jwks()
+    assert await verifier.verify_token(token) is not None  # existing cache fallback policy
+    body = {"keys": []}
+    await verifier._fetch_jwks()
+    assert await verifier.verify_token(token) is None  # an authoritative empty set revokes keys

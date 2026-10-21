@@ -406,8 +406,12 @@ def test_image_scope_changed_source_links_and_bounds(client, tmp_path, monkeypat
         client,
         args["case_id"],
         call(
-            client, "analysis.start", case_id=args["case_id"],
-            evidence_id=artifact["evidence_id"], kind="FILES", profile_type="FULL_ANALYSIS",
+            client,
+            "analysis.start",
+            case_id=args["case_id"],
+            evidence_id=artifact["evidence_id"],
+            kind="FILES",
+            profile_type="FULL_ANALYSIS",
         ),
     )
     node_args = {
@@ -434,3 +438,114 @@ def test_zip_import_explains_extraction_before_creating_task(client, tmp_path):
     assert response.json()["error"]["code"] == "ARCHIVE_REQUIRES_EXTRACTION"
     assert call(client, "evidence.list", case_id=cid) == []
     assert call(client, "tasks.list", case_id=cid) == []
+
+
+def test_invalid_ai_runtime_keeps_local_api_usable(client, monkeypatch):
+    monkeypatch.setenv("APEX_DESKTOP_AI_CONFIG", "{broken")
+    state = call(client, "runtime")
+    assert state["ai"]["configuration_error"]["code"] == "AI_CONFIGURATION_INVALID"
+    case = call(client, "cases.create", name="AI 없이 로컬 분석")
+    assert any(row["id"] == case["id"] for row in call(client, "cases.list"))
+    assert call(client, "tasks.list", case_id=case["id"], retry_receipts=True) == []
+
+
+@pytest.mark.parametrize("scope", ["EMPTY", "MULTI"])
+def test_report_copy_preserves_rich_sections_scope_and_export(client, tmp_path, scope):
+    """Exercise the editor's save payload through the actual API and Core report service."""
+    cid, eid = fixture_case(client, tmp_path)
+    second = tmp_path / "second.txt"
+    second.write_text("second evidence", encoding="utf-8")
+    other = wait(
+        client, cid, call(client, "evidence.register", case_id=cid, source_path=str(second))
+    )
+    evidence_ids = [] if scope == "EMPTY" else [eid, other["result"]["id"]]
+    report = call(client, "reports.create", case_id=cid, title="보존 검증")
+    fields = {
+        "content_kind": "TABLE_DATA",
+        "structured_data": {"rows": [["sample", "value"]]},
+        "source_kind": "AI_DRAFT",
+        "source_resource_ids": [],
+        "is_partial": True,
+        "stale_reasons": ["SOURCE_REVISION_CHANGED"],
+        "coverage": {"status": "SNAPSHOT_DERIVED"},
+        "warnings": [{"code": "REPORT_SECTION_PARTIAL"}],
+    }
+    payload = {
+        "case_id": cid,
+        "report_id": report["report_id"],
+        "title": "보존 검증",
+        "executive_summary": "합성 검증",
+        "limitations": ["합성 자료"],
+        "evidence_ids": evidence_ids,
+    }
+    first = call(
+        client,
+        "reports.version",
+        **payload,
+        sections=[
+            {
+                "section_type": "KEY_FINDINGS",
+                "title": "결과",
+                "order": 1,
+                "content": "original note",
+                **fields,
+            }
+        ],
+    )
+    # The frontend intentionally copies only editable and preserved fields, never old IDs.
+    copied = {key: first["sections"][0][key] for key in fields}
+    second_version = call(
+        client,
+        "reports.version",
+        **payload,
+        sections=[
+            {
+                "section_type": "KEY_FINDINGS",
+                "title": "결과",
+                "order": 1,
+                "content": "edited finding",
+                **copied,
+            }
+        ],
+    )
+    assert set(second_version["evidence_ids"]) == set(evidence_ids)
+    for key, value in copied.items():
+        assert second_version["sections"][0][key] == value
+    vid = second_version["report_version_id"]
+    for action in ["submit", "accept_section", "complete", "approve"]:
+        data = call(client, "reports.get", case_id=cid, report_id=report["report_id"])
+        current = next(v for v in data["versions"] if v["report_version_id"] == vid)
+        action_payload = {
+            "case_id": cid,
+            "report_version_id": vid,
+            "action": action,
+            "reason": "합성 검증",
+            "section_id": current["sections"][0]["section_id"],
+            "expected_review_revision": current["review_state"]["review_revision"],
+        }
+        if scope == "EMPTY" and action == "approve":
+            # Preserving an empty draft scope must not bypass the custody approval gate.
+            response = client.post("/v1/operations/reports.action", json=action_payload)
+            assert response.status_code == 409
+            assert response.json()["error"]["code"] == "REPORT_APPROVAL_REVIEW_INCOMPLETE"
+            assert response.json()["error"]["target"] == "custody_snapshot_id"
+        else:
+            call(client, "reports.action", **action_payload)
+    export_payload = {
+        "case_id": cid,
+        "report_version_id": vid,
+        "format": "HTML",
+        "filename": "preserved.html",
+        "stale_confirmed": True,
+    }
+    if scope == "MULTI":
+        call(client, "reports.export", **export_payload)
+        exported = next((tmp_path / "data/exports").rglob("preserved.html"))
+        assert "edited finding" in exported.read_text(encoding="utf-8")
+    else:
+        response = client.post("/v1/operations/reports.export", json=export_payload)
+        assert response.status_code == 409
+        assert not list((tmp_path / "data/exports").rglob("preserved.html"))
+    data = call(client, "reports.get", case_id=cid, report_id=report["report_id"])
+    assert data["versions"][0]["sections"][0]["content"] == "original note"
+    assert set(data["versions"][0]["evidence_ids"]) == set(evidence_ids)
