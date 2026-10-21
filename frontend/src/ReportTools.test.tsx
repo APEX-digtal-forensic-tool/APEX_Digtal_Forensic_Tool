@@ -239,3 +239,38 @@ it("uses the selected evidence only for a first version", async () => {
   // A new section has nothing to preserve and lets Core apply its defaults.
   expect(payload.sections[0]).not.toHaveProperty("source_kind");
 });
+
+it("preserves report-wide provenance when editing a snapshot-backed version", async () => {
+  const provenance = {
+    context_snapshot_ids: ["snapshot-a"],
+    search_execution_ids: ["search-a"],
+    timeline_revisions: [3],
+    ai_assistance_request_ids: ["request-a"],
+    ai_result_ids: ["result-a"],
+    analyzer_versions: { filesystem: "1.0" },
+  };
+  const { call, onSaved } = await saveFrom({
+    base: { ...enriched, ...provenance },
+  });
+  fireEvent.submit(screen.getByRole("dialog"));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  expect(call.mock.calls[0][1]).toMatchObject(provenance);
+});
+
+it("resubmits legacy section-only snapshots for Core case and revision validation", async () => {
+  const { call, onSaved } = await saveFrom({
+    base: {
+      ...base,
+      context_snapshot_ids: [],
+      sections: base.sections.map((s: Row) => ({
+        ...s,
+        context_snapshot_ids: ["snapshot-a"],
+      })),
+    },
+  });
+  fireEvent.submit(screen.getByRole("dialog"));
+  await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  expect((call.mock.calls[0][1] as Row).context_snapshot_ids).toEqual([
+    "snapshot-a",
+  ]);
+});

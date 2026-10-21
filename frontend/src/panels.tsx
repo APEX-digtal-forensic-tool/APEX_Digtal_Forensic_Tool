@@ -761,6 +761,17 @@ export function Reports({
               required: true,
               max: 200,
             },
+            ...(version.stale_state?.is_stale
+              ? [
+                  {
+                    key: "stale_confirmed",
+                    label:
+                      "출처가 최신 상태가 아님을 확인했으며 이 승인 버전을 내보냅니다.",
+                    type: "checkbox",
+                    required: true,
+                  },
+                ]
+              : []),
           ]}
           onClose={() => setDialog(null)}
           onSubmit={async (f) => {
@@ -768,6 +779,7 @@ export function Reports({
               case_id: caseId,
               report_version_id: version.report_version_id,
               ...f,
+              stale_confirmed: f.stale_confirmed === "on",
             });
             setExportResult(r);
             onNotice(
