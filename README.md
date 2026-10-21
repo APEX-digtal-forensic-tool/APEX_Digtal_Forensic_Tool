@@ -1,8 +1,29 @@
 # APEX Digital Forensic Tool
 
-APEX는 **Python·Native 하이브리드 분석 엔진**, **한국어 사용자 환경**, **Built-in MCP 기반 AI 분석 보조 기능**을 결합하는 것을 목표로 하는 디지털 포렌식 분석 플랫폼입니다.
+APEX는 **Electron + React + TypeScript 데스크톱 앱**, **Python·Native 하이브리드 분석 엔진**, **한국어 UI**, **MCP 및 선택적 AI 분석 보조 기능**을 제공하는 디지털 포렌식 분석 플랫폼입니다. 로그인 없이 로컬 사건을 생성하고 증거를 분석할 수 있습니다.
 
-기존 디지털 포렌식 도구는 강력한 분석 기능을 제공하지만 높은 비용, 복잡한 사용 환경, 영어 중심의 인터페이스, 대용량 데이터 처리 지연, 전문 지식 요구 등의 한계가 있습니다.
+## 다운로드 — v0.1.2 Preview
+
+**[APEX v0.1.2 다운로드 및 릴리스 노트](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/tag/v0.1.2)**
+
+| 운영체제 | 설치 파일 | 앱 압축 파일 |
+|---|---|---|
+| Windows x64 | [APEX-0.1.2-Windows-x64.exe](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/download/v0.1.2/APEX-0.1.2-Windows-x64.exe) | — |
+| macOS Apple Silicon | [APEX-0.1.2-macOS-arm64.dmg](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/download/v0.1.2/APEX-0.1.2-macOS-arm64.dmg) | [arm64.zip](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/download/v0.1.2/APEX-0.1.2-macOS-arm64.zip) |
+| macOS Intel | [APEX-0.1.2-macOS-x64.dmg](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/download/v0.1.2/APEX-0.1.2-macOS-x64.dmg) | [x64.zip](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/download/v0.1.2/APEX-0.1.2-macOS-x64.zip) |
+
+- 설치 파일에는 Electron 앱과 로컬 Python 분석 런타임이 포함되어 **별도 Python·Node.js 설치가 필요하지 않습니다**. GitHub의 `Source code` 압축 파일은 개발용 소스입니다.
+- 파일 무결성은 [SHA256SUMS.txt](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/download/v0.1.2/SHA256SUMS.txt), 빌드 소스와 CI 출처는 [build-provenance.json](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/download/v0.1.2/build-provenance.json)에서 확인할 수 있습니다.
+- **배포 인증서 서명·Apple 공증을 받지 않은 프리뷰**입니다. SmartScreen/Gatekeeper의 확인 또는 실행 제한이 나타날 수 있습니다. 체크섬은 코드 서명을 대신하지 않습니다.
+- 자동 업데이트는 제공하지 않습니다. 새 버전의 설치 파일로 직접 업데이트하세요.
+
+앱 실행 후 **사건 만들기 → 증거 파일/폴더 등록 → 분석 실행 → 파일·아티팩트 조회 → 보고서 검토·내보내기** 순으로 사용할 수 있습니다. 검색·타임라인은 해당 분석 작업을 실행한 뒤 조회합니다. 외부 AI는 제공자 설정과 사건 정책의 허용이 필요한 선택 기능입니다.
+
+개발 실행과 빌드 방법은 [데스크톱 안내](./docs/desktop/README.md), 기본 도구·모델 구성은 [로컬 실행 구성](./docs/desktop/offline-runtime-2026-10-19.md)을 참고하세요. 인증 백엔드와 MCP 서버는 설치 앱과 별도로 실행합니다.
+
+---
+
+APEX는 한국어 환경에서 증거 탐색부터 분석 결과 검토와 보고서 작성까지 이어지는 작업을 지원하고, 로컬 분석과 근거 기반 AI 보조 기능을 연결하는 것을 목표로 합니다.
 
 APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석의 접근성과 자동화를 개선하는 것을 목표로 합니다.
 
@@ -10,12 +31,9 @@ APEX는 다음 프로젝트의 장점을 참고하여 디지털 포렌식 분석
 - Autopsy의 Case·Artifact 중심 Workflow와 사용자 친화적 UI
 - MCP 기반 AI Agent 연동 구조
 
-APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 기반으로 구현하지 않습니다. 주 개발 언어는 Python이며, 성능에 민감한 영역은 Native Adapter로 분리하는 독립적인 구조를 사용합니다.
+APEX는 독립적인 Python 분석 엔진과 Electron·TypeScript 앱을 사용합니다. 성능에 민감한 영역과 외부 분석 라이브러리는 Native Adapter로 분리합니다.
 
-> 현재 프로젝트의 Forensic Core Engine은 **Phase 1~8 기반 기능, Core Runtime 확장, Release Hardening 및 Windows Host Semantic Verification까지 완료한 Goal-scope Feature Complete Candidate** 상태입니다.
-> 기존 Case·Evidence·Hash·SQLite·Chain of Custody, Progressive Indexing, Windows Artifact, Search·Timeline, Browser·Media, Context, AI Assistance Contract 및 Report Contract에 더해 RAW·DD·IMG·E01·VHD·VHDX Reader, MBR·GPT·Extended Partition, `pytsk3` 기반 Image File System, 삭제 파일·Unallocated·Slack 처리, Registry Transaction Replay 및 Binary Deleted-cell Carving, Prefetch MAM, Windows Event Message Rendering, Offline DPAPI·Chromium AES-GCM·Firefox NSS, Browser Cache·삭제 Candidate, Communication Analyzer, HTML·Optional PDF Renderer, 실제 Thumbnail 및 제한된 Video Frame Sampling을 구현했습니다.
->
-> Release Hardening Gate는 `pytest`, Ruff, mypy, Design/Schema Validation, Runtime Semantic Verification, Doctor, Recovery/Fault Injection, Bandit Finding Disposition, Benchmark, CLI/한글·Unicode, Evidence Read-only Invariant를 함께 검증합니다. Windows Host에서는 합성 Fixture를 사용한 DPAPI·Chromium Local State/AES-GCM 및 Firefox NSS 복호화, Windows Event Message Rendering, HTML·PDF Rendering을 실제 Runtime으로 검증했습니다. 최종 Windows Gate는 `PASSED_WITH_LIMITATIONS`이며 `failed_checks=[]`를 확인했지만, Optional Dependency·Ajv Strict Validation·일부 Provider Runtime 및 Windows Desktop Packaging이 남아 있어 전체 제품 Release Ready를 의미하지는 않습니다. KakaoTalk Windows 2.0.8.990은 명시적 Offline Root 탐색, PE Version 검증, 외부 Key 기반 AES-128-CBC 복호화, SQLite/`chatLogs` 검증과 추출까지 `IMPLEMENTED_UNVERIFIED`이며, 자동 Key 획득과 실제 KakaoTalk Fixture 검증은 `BLOCKED_EXTERNAL_FIXTURE`입니다. X-Ways·Autopsy 대비 성능 우위는 주장하지 않습니다.
+> **2026-10-21 기준:** 코어 엔진과 데스크톱·로컬 API를 연결한 **v0.1.2 Preview**를 배포했습니다. Windows x64·macOS arm64/x64의 테스트, 런타임 기동 검사와 설치 파일 생성 CI가 통과했습니다. 실제 증거 정확성·성능 및 설치 후 전체 사용자 시나리오 검증은 계속 진행합니다. X-Ways·Autopsy 등 기존 도구 대비 성능 우위는 아직 주장하지 않습니다.
 
 ---
 
@@ -23,21 +41,58 @@ APEX는 Autopsy의 Java 코드나 NetBeans 기반 애플리케이션 구조를 �
 
 | 영역 | 현재 상태 | 설명 |
 |---|---|---|
-| Forensic Core Engine | **Goal-scope Feature Complete Candidate** | Phase 1~8, Advanced Core Runtime, Release Hardening 구현 완료 |
-| Windows Host Semantic Verification | **PASSED_WITH_LIMITATIONS** | DPAPI·Chromium AES-GCM·Firefox NSS·Event Message·Report Renderer 검증, `failed_checks=[]` |
+| Desktop / Frontend | **v0.1.2 Preview 배포** | 한국어 Electron·React·TypeScript 앱. 사건·증거·파일·아티팩트·검색·타임라인·후보 검토·보관 이력·보고서·AI 화면 연결 |
+| 로컬 API | **엔진 연결 및 회귀 검증** | 실행별 토큰을 사용하는 loopback FastAPI. 비로그인 로컬 분석, 비동기 작업·취소·기록 복구, 사건 범위와 입력 검증 |
+| Forensic Core Engine | **Phase 1~8 및 확장 기능 구현·연동** | RAW/DD/IMG/E01/VHD/VHDX 내부 파일 읽기, Windows 아티팩트, 검색·타임라인, 삭제 파일 복구·ADS·연속 시그니처 카빙, 원본 보호, 보고서 출처·승인·내보내기 |
+| 로컬 OCR / STT / 미디어 | **기본 실행기·모델 포함** | RapidOCR·한국어 모델, Faster Whisper·다국어 base 모델. Windows에는 FFmpeg/ffprobe 포함. 실제 정확도와 호스트별 지원 범위는 별도 검증 |
+| Desktop AI | **OpenAI 호환 제공자 연결** | Kimi K3 실제 호출 기록. 구조 요약과 검토한 본문 발췌 분석을 구분하고, 데스크톱 전송 전 사건 AI 정책을 검사 |
+| MCP / LLM Runtime | **서버·52개 도구 및 실제 AI 사이클 검증** | stdio·인증된 Streamable HTTP, Context/View/AI/Report 계약, locked wheel/sdist와 Windows/Linux CI. 별도 서버 실행 필요. 아래 AI 정책 적용 차이 참고 |
+| 인증 백엔드 | **Identity / Approval 구현·연동** | JWT RS256·JWKS·세션·사건별 RBAC·DB confirmation grant. 서버 별도 실행. 앱의 자동 토큰 갱신·서버 로그아웃 연결 및 Billing은 후속 범위 |
+| 배포 / CI | **Windows x64·macOS arm64/x64 성공** | 런타임 빌드·기동 확인, 설치 파일·체크섬·빌드 출처 공개. 서명·공증·자동 업데이트는 미제공 |
 | KakaoTalk Windows 2.0.8.990 | **IMPLEMENTED_UNVERIFIED** | Offline Discovery·PE Version 검증·외부 Key 복호화·`chatLogs` 추출 구현, 자동 Key 획득과 실제 Fixture는 외부 근거 부족으로 차단 |
-| Runtime/Dependency Packaging | **MCP 완료 / Native 진행 예정** | MCP wheel/sdist, hash lock, clean install과 Ubuntu/Windows CI matrix 구성 완료. E01·VHD·VHDX·OCR/STT 등 Optional Native Runtime과 Windows Desktop bundle 검증은 별도 필요 |
-| MCP / LLM Runtime | **M8 Packaging·Windows CI 완료** | Core 외부 `apex_mcp`에 MCP 2.x stdio 및 authenticated Streamable HTTP와 52개 Context/View/AI/Report Tool을 구현. Descriptor/transport가 없는 Domain Tool은 미노출로 고정하고, MCP SDK `2.1.1`·uvicorn `0.52.4` lock, `apex-mcp` console, clean wheel install, Inspector strict, stdio EOF/한글 경로/secret 비노출, MCP-only release gate를 검증. Ubuntu Inspector와 Windows Python 3.11/3.12 hosted CI가 [run #1](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/actions/runs/33482524240)에서 통과. 영속 Identity/Approval backend 구현 완료 (JWT RS256·JWKS·RBAC·DB confirmation grant, Phase 1~11·13~15). Billing backend는 별도 통합 대상 |
-| Frontend / Backend | **Identity/Approval 완료 · GUI·Billing 별도 담당** | Session/Identity·Approval Backend 구현 완료. GUI, Billing, Desktop 통합은 별도 담당 |
 
-> **Core Engine 기능 개발 완료 Candidate와 APEX 전체 제품 완성은 같은 의미가 아닙니다.**
-> 현재 남은 주요 작업은 실제 Evidence 정확성·성능 검증, Native Optional Dependency Packaging, Windows Desktop 통합, 외부 전문가 검토와 별도 AI·Frontend·Billing 통합입니다.
+### v0.1.2 주요 변경
+
+- 아티팩트 분석에서 Core가 생성한 원본 파일 인용을 범위 밖으로 잘못 거부하던 `AI_CITATION_SCOPE_MISMATCH` 수정.
+- 제공자 응답의 Markdown 코드 블록·앞뒤 문장을 처리하여 JSON을 복구하고 문자열 경고를 구조화된 경고로 정규화.
+- 구조 요약의 인용 누락 시 로컬 스냅샷 인용을 연결하고 `AI_LOCAL_CITATIONS_ATTACHED` 경고 표시. 모델이 원문을 읽었다는 뜻은 아닙니다.
+- 데스크톱 AI 분석 요청 제한 시간을 300초로 확대.
+- 실제 MCP AI 사이클 검사 도구와 Windows 개발 GUI 실행 도구 추가.
+
+앞선 통합 점검에서는 원본 변경 감지, 작업·설정 저장, 보고서 출처 보존, JWT 필수 클레임, 로컬 API의 잘못된 Host·인증 헤더 처리를 보완했습니다. 상세 근거는 [병합 후 교차 검증](./docs/desktop/postmerge-crosscheck-2026-10-21.md)과 [로컬 API 재점검](./docs/desktop/pr33-merged-recheck-2026-10-21.md)에 있습니다.
+
+### AI 설정 및 현재 적용 범위
+
+AI API 키는 설치 파일과 저장소에 포함하지 않습니다. 앱을 완전히 종료하고 환경변수를 설정한 터미널에서 설치된 앱을 실행하세요. 아래 설정은 릴리스에서 실제 호출을 확인한 제공자의 예시입니다.
+
+```powershell
+$env:APEX_DESKTOP_AI_CONFIG = '{"provider_id":"moonshot-kimi","base_url":"https://api.moonshot.ai/v1","model_id":"kimi-k3","api_key_env":"APEX_AI_API_KEY","temperature":1.0,"max_output":16384,"timeout":240}'
+$env:APEX_AI_API_KEY = '<본인의 API 키>'
+```
+
+- Kimi K3는 `temperature=1`을 사용합니다. 다른 OpenAI 호환 제공자는 해당 모델의 주소·이름·허용 설정으로 변경하세요.
+- 데스크톱은 사건의 AI·외부 전송 정책이 최종 허용한 경우에만 전송합니다. 앱이 기본 차단 정책을 자동으로 변경하지 않습니다.
+- **구조 정보 요약**은 안전하게 추출한 개수·상태 등의 구조 정보만 사용합니다. 실제 내용 해석은 **증거 본문 발췌 분석**에서 사용자가 준비된 발췌문을 검토·동의한 뒤 수행합니다. 구조 정보만으로는 키워드가 0건일 수 있습니다.
+- **v0.1.2 MCP의 `ai.request.execute`는 데스크톱과 달리 사건 AI 데이터 정책의 전송 평가가 연결되지 않았습니다.** 비밀 필드 가림만으로 같은 정책 보호가 적용된다고 판단하면 안 됩니다. MCP의 외부 AI 전송 평가 연결은 남은 개선 항목입니다.
+- 소스 개발 환경의 AI GUI 실행은 [`tools/run_gui_ai.ps1`](./tools/run_gui_ai.ps1), 합성 자료 기반 MCP 사이클 확인은 [`tools/verify_mcp_ai_cycle.py`](./tools/verify_mcp_ai_cycle.py)를 참고하세요. 이 도구의 실제 제공자 호출에는 API 키가 필요합니다.
+
+### 검증 기록과 남은 작업
+
+| 대상 | 확인된 결과 / 근거 |
+|---|---|
+| v0.1.2 배포 소스 | [`b12d7a6`](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/commit/b12d7a61a0f674d18d93daa038e129ee651ad8d1), [PR #35](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/pull/35)로 main에 병합 |
+| Windows / macOS 배포 CI | [실행 39569569908](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/actions/runs/39569569908) 성공 — 테스트·타입/린트·런타임 확인·설치 파일 생성 |
+| MCP / 백엔드 / 보안 / 패키지 CI | [실행 39569569893](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/actions/runs/39569569893) 성공 |
+| 실제 AI 호출 | [v0.1.2 릴리스 기록](https://github.com/APEX-digtal-forensic-tool/APEX_Digtal_Forensic_Tool/releases/tag/v0.1.2) 기준 Kimi K3 MCP stdio 요약·키워드 및 데스크톱 GUI 구조 요약 확인 |
+| 이전 전체 재점검 (`08ab281`, 2026-10-21) | Python 900 passed / 5 skipped, 프론트 101 passed, 별도 재현 10 passed. v0.1.2 변경 전의 기록이며 현재 릴리스 전체 시험 수로 대체하지 않음 |
+
+남은 작업은 MCP의 AI 전송 정책 연결, 실제 증거·대용량 이미지의 정확성/성능 비교, 실제 한국어 OCR/STT 정답 자료와 선택 읽기 백엔드 검증, 설치 후 전체 사용자 시나리오, 외부 전문가 검토, 배포 서명·공증·자동 업데이트입니다. 차등 VHD/VHDX의 부모 체인, 암호화 볼륨 전반, 조각난 파일 자동 재조립은 현재 지원 범위에 포함되지 않습니다. 테스트·CI 성공은 모든 증거와 환경에서의 정확성 또는 정식 배포 준비 완료를 의미하지 않습니다.
 
 ---
 
 ## 프로젝트 한 줄 소개
 
-> APEX는 Python·Native 하이브리드 엔진과 한국어 UI, Built-in MCP를 기반으로 Progressive Indexing, AI Keyword 추천, Timezone 자동화, 근거 중심 분석, Report 및 Chain of Custody 자동화를 제공하는 것을 목표로 하는 디지털 포렌식 플랫폼입니다.
+> APEX는 한국어 데스크톱 앱과 Python·Native 분석 엔진으로 사건·증거 분석, 검색·타임라인, 보고서·보관 이력을 관리하고, MCP와 선택적 AI로 분석을 보조하는 디지털 포렌식 플랫폼입니다.
 
 ---
 
@@ -65,17 +120,15 @@ APEX는 한국어 사용자를 우선 고려합니다.
 - Case별 Locale 및 Timezone 설정
 - UTC와 Case Timezone 동시 표시
 
-UI 문자열은 Resource Key 기반으로 관리합니다.
-
-Forensic Engine은 언어에 종속되지 않는 오류 코드와 구조화된 결과를 반환하고, Frontend가 해당 코드에 맞는 한국어 메시지를 표시합니다.
+Forensic Engine은 언어에 종속되지 않는 오류 코드·메시지 키와 구조화된 결과를 반환하고, Frontend가 한국어 화면과 오류 메시지로 표시합니다.
 
 ---
 
-### 2. Built-in MCP 기반 AI Forensic Assistant
+### 2. MCP 및 AI Forensic Assistant
 
-APEX Desktop Distribution에는 MCP 기반 AI 기능이 기본 포함될 수 있습니다.
+데스크톱 AI 도우미와 별도 MCP 서버는 같은 코어의 Context·Citation·AI 결과 검증 계약을 사용합니다. 설치 파일에는 데스크톱 앱과 로컬 분석 런타임이 포함되며, MCP 서버 프로세스와 인증 백엔드는 별도로 실행합니다.
 
-다만 Forensic Engine 내부에는 다음 항목을 포함하지 않습니다.
+코어 도메인·분석 계약과 구분하여 관리하는 항목:
 
 - MCP SDK
 - LLM SDK
@@ -84,16 +137,7 @@ APEX Desktop Distribution에는 MCP 기반 AI 기능이 기본 포함될 수 있
 - API Key
 - 특정 AI Provider 의존성
 
-```text
-APEX Desktop Distribution
-├── Frontend GUI
-├── Backend / Session Context
-├── Forensic Core Engine
-└── Built-in MCP Adapter
-    └── AI / LLM Provider
-```
-
-사용자 관점에서는 AI 기능이 APEX에 기본 포함되지만, 개발 구조에서는 Engine, MCP, AI Provider를 독립적으로 개발하고 교체할 수 있도록 설계합니다.
+OpenAI 호환 HTTP 호출과 응답 정규화는 `src/apex_forensic/adapters/ai/openai_compatible.py`의 선택적 Adapter에 구현되어 있습니다. 실제 키는 실행 환경에서 공급하며, 설정되지 않으면 외부 AI를 실행하지 않습니다. 데스크톱과 MCP의 전송 정책 적용 차이는 위의 **AI 설정 및 현재 적용 범위**를 따릅니다.
 
 AI는 포렌식 엔진을 대체하지 않습니다.
 
@@ -192,32 +236,15 @@ Chain of Custody는 Report 문장만 생성하는 것이 아니라 별도의 App
 
 ## 전체 시스템 구조
 
-```text
-                           사용자
-                              │
-                              ▼
-                    한국어 기반 Forensic GUI
-                              │
-                              ▼
-                   Backend / Application Layer
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-              ▼                               ▼
-      Forensic Core Engine             Session Context
-              │                               │
-              ├── Progressive Indexing        │
-              ├── Analysis Result DB          │
-              ├── Timeline / Search           │
-              ├── Chain of Custody            │
-              └── Context Snapshot            │
-                              │               │
-                              └───────┬───────┘
-                                      ▼
-                              Built-in MCP Adapter
-                                      │
-                                      ▼
-                               AI / LLM Provider
+```mermaid
+flowchart TD
+    Desktop["Electron · React 데스크톱"] --> Local["로컬 FastAPI"]
+    Desktop --> Auth["별도 인증 백엔드"]
+    Local --> Core["Forensic Core · Context"]
+    MCP["별도 MCP 서버"] --> Core
+    Core --> DB["SQLite · 분석 결과 · 감사 기록"]
+    Local -->|"사건 정책 검사 · 검토한 입력"| AI["선택적 AI 제공자"]
+    MCP -->|"AI 전송 정책 연결 필요"| AI
 ```
 
 GUI와 MCP Adapter는 서로 다른 분석 로직을 구현하지 않습니다.
@@ -256,9 +283,8 @@ Native Analysis Adapter Layer
 현재 적용하거나 선택적으로 연결하는 Native·Optional Runtime 기술:
 
 - `pytsk3` 기반 Disk Image File System Provider
-- E01·EWF 처리를 위한 `libewf-python`
-- VHD 처리를 위한 `libvhdi-python`
-- VHDX 처리를 위한 외부 `qemu-img`
+- E01·VHD·VHDX의 기본 읽기 전용 컨테이너 경로인 `dissect.evidence`·`dissect.hypervisor`
+- 별도 선택 읽기 경로인 E01 `libewf-python`, VHD `libvhdi-python`, VHDX `qemu-img`
 - SQLite FTS5 Search Index
 - Python `hashlib`가 사용하는 Native Hash 구현
 - `cryptography` 기반 Browser AES-GCM·KakaoTalk AES Contract 처리
@@ -266,7 +292,7 @@ Native Analysis Adapter Layer
 - Firefox `nss3` Runtime 기반 Offline NSS Decryption
 - Pillow 기반 Image Parsing·Raster Thumbnail
 - FFmpeg·ffprobe 기반 Media Metadata·제한된 Frame Sampling
-- Optional RapidOCR·ONNX Runtime 및 faster-whisper 기반 Machine Extraction
+- RapidOCR·ONNX Runtime 및 faster-whisper 기반 Machine Extraction — 설치 앱에 기본 실행기·모델 포함
 - Windows Event Message Rendering을 위한 `pywin32`
 - HTML Renderer 및 Optional ReportLab PDF Renderer
 
@@ -496,6 +522,8 @@ Timezone 후보 출처:
 
 ## 현재 구현 범위
 
+아래 Phase는 코어 기능과 계약의 개발 단위를 설명합니다. 데스크톱·로컬 API·MCP·인증·외부 AI Adapter의 현재 제품 연결 상태는 상단 상태표를 기준으로 하며, 코어 계층의 책임 밖이라는 이유로 제품 전체의 미구현 기능으로 해석하지 않습니다.
+
 ### Phase 1 — Core Foundation
 
 - Case 및 Evidence 관리
@@ -648,8 +676,7 @@ Machine Extraction 구현 범위:
 WAL·Freelist 삭제 Candidate, Private-mode Candidate, Pillow Raster Thumbnail 및 제한된
 FFmpeg Frame Sampling, 합성 입력 기반 Offline DPAPI, Firefox NSS Adapter 및 HTML/PDF Renderer를
 지원합니다. KakaoTalk 자동 Key 획득·실제 암호화 DB Fixture 검증, Cloud Sync, Video 전체 Frame 분석,
-Reverse Geocoding, 얼굴·객체·내용 분석, GUI·MCP 실행은 미지원입니다. OCR·STT와 외부 AI는
-Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사용할 수 없는 상태를 반환합니다.
+Reverse Geocoding, 얼굴·객체·영상 내용 분석은 미지원입니다. GUI·로컬 API·MCP 연결은 별도 계층에 구현되어 있습니다. OCR·STT의 기본 실행기·모델은 설치 앱에 포함되며, 사용자 지정 분석기의 Dependency·Model 또는 외부 AI 설정이 없으면 해당 기능을 사용할 수 없는 상태로 표시합니다.
 
 
 ### Phase 6 — GUI Context, Analysis Snapshot 및 View Runtime
@@ -671,17 +698,16 @@ Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사�
 - Phase 6 JSON Schema와 Unit·Integration Test
 - Windows·Linux Runtime 회귀 검증
 
-현재 제한:
+계층별 연결과 제한:
 
-- 실제 Desktop GUI와 Frontend View 미포함
-- Web Server 및 REST·GraphQL Transport 미포함
-- MCP Server·SDK·Tool Registration 미포함
-- LLM Provider·Prompt·Agent Loop·API Key 미포함
-- LLM 기반 Keyword Recommendation과 Scope Summary 생성 미포함
-- Report Review·Approval Engine Contract와 HTML·Optional PDF Renderer는 Phase 8/Core Runtime에서 구현되었으며 GUI Preview와 Network Renderer는 미구현
+- Desktop GUI와 View는 `frontend/`, 로컬 HTTP Transport는 `src/apex_desktop/`에 구현
+- MCP Server·Tool Registration은 `src/apex_mcp/`, 계정 인증은 `src/apex_backend/`에 구현
+- LLM 기반 Keyword Recommendation과 Scope Summary는 선택적 제공자 Adapter를 설정해 실행
+- 자율 Agent Loop는 후속 범위이며 API Key는 실행 환경에서 공급
+- 보고서 작성·내용 조회·버전 비교·검토·승인·내보내기는 GUI와 연결. 최종 HTML/PDF 출력물의 앱 내부 미리보기와 Network Renderer는 미지원
 - 임의 Local Path 직접 읽기 금지
 - Disk Image Raw Range·File System·삭제·Slack 경로는 Evidence·Node·Offset·Length·Provider 검증 후에만 접근
-- Role 기반 Raw View 권한 정책은 Backend·Frontend 통합 단계에서 구현
+- 인증된 MCP의 Raw View는 Scope·사건별 역할·확인 정책을 검사. 비로그인 데스크톱 분석은 로컬 사용자 범위이며 서버 계정 RBAC와 별개
 
 ### Phase 7 — AI Assistance Engine Contract
 
@@ -694,7 +720,7 @@ Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사�
 - Promotion은 Search 실행이나 Keyword Set Activation을 자동 수행하지 않음
 - Public Engine Interface와 `ai` CLI Command Group
 - Provider-neutral Port와 기본 `CAPABILITY_UNAVAILABLE` 응답
-- MCP SDK, LLM SDK, Prompt Template, API Key, Chain-of-thought, Runtime Network 호출 미포함
+- MCP 서버와 제공자 호출은 별도 계층·Adapter를 사용하고, API Key·Prompt·Chain-of-thought를 분석 결과 계약에 포함하지 않음
 
 ### Phase 8 — Report Review, Approval 및 Export Engine Contract
 
@@ -715,12 +741,12 @@ Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사�
 - Export Prepare 멱등성 및 Manifest 상태 전이 검증
 - `report` CLI와 Public Engine Interface Report Operation 제공
 
-현재 제한:
+연결 상태와 제한:
 
-- 실제 AI Report Draft 생성 미지원
-- 실제 LLM·Prompt·MCP Server·Tool Registration 미지원
-- GUI Report Preview와 Network Renderer 미지원
-- 전자서명·실제 사용자 인증·RBAC·Billing 미지원
+- 분석자 초안과 외부 AI 초안의 입력·검증·검토·승인 계약 및 MCP 도구 연결 구현
+- v0.1.2 실제 AI 호출 확인 범위는 요약·키워드와 GUI 구조 요약이며, AI 보고서 전체 생성 시나리오 검증은 별도
+- GUI의 보고서 내용 조회·편집·버전 비교·내보내기 구현. 최종 HTML/PDF 출력물의 앱 내부 미리보기와 Network Renderer는 미지원
+- 사용자 인증·RBAC·승인은 별도 백엔드/MCP에 구현. 전자서명과 Billing은 후속 범위
 - Rendered Output은 Original Evidence가 아닌 Derived Data Metadata로만 관리
 
 ### Core Runtime Feature Completion — 완료
@@ -728,9 +754,8 @@ Runtime Dependency, Model 또는 외부 설정이 없으면 명시적으로 사�
 Phase 1~8 기반 위에 다음 Runtime을 추가했습니다.
 
 - RAW·DD·IMG Reader와 Bounded Random Read
-- Optional `libewf-python` 기반 E01·EWF Reader
-- Optional `libvhdi-python` 기반 VHD Reader
-- 외부 `qemu-img` 기반 VHDX Read-only 변환 경로
+- Dissect 기반 E01·VHD·VHDX 읽기 전용 스트림과 내부 파일 내용 조회
+- 선택적 `libewf-python`·`libvhdi-python` Reader 및 `qemu-img` 변환 경로 유지
 - MBR·GPT·Extended Partition·Protective MBR·Superfloppy 분석
 - `pytsk3` 기반 NTFS·FAT·exFAT·ext 계열 Image File System Tree
 - 삭제 File Recovery, Unallocated Range, File Slack Read·Export
@@ -748,8 +773,8 @@ Phase 1~8 기반 위에 다음 Runtime을 추가했습니다.
 - Live Profile Credential 자동 획득
 - KakaoTalk 자동 Key 획득과 실제 KakaoTalk 암호화 DB Fixture 검증
 - 형태소 기반 한국어 검색
-- MCP·LLM Agent Runtime과 Desktop GUI
-- 설치되지 않은 OCR·STT·E01·VHD·VHDX Runtime은 `CAPABILITY_UNAVAILABLE`
+- 자율 LLM Agent Workflow, 차등 VHD/VHDX의 검증된 부모 체인, 암호화 볼륨 전반, 조각난 파일 자동 재조립
+- 기본 경로 외에 선택한 분석기·읽기 백엔드의 필수 Runtime이 없으면 `CAPABILITY_UNAVAILABLE`
 
 ### Phase 1~8 통합 감사 및 회귀 검증
 
@@ -818,9 +843,9 @@ Release Hardening Bandit 감사는 High 0건, Medium 43건의 `B608` Finding을 
 Reader 조건:
 
 - RAW·DD·IMG: 기본 Runtime
-- E01·EWF: Optional `libewf-python`
-- VHD: Optional `libvhdi-python`
-- VHDX: 외부 `qemu-img` 기반 Read-only 변환 경로
+- E01: 기본 `dissect.evidence` 컨테이너 스트림, 첫 `.E01`과 일관된 분할 세그먼트 필요
+- VHD·VHDX: 기본 `dissect.hypervisor` 컨테이너 스트림, 검증된 부모가 필요한 차등 디스크 제외
+- 별도 선택 경로: E01 `libewf-python`, VHD `libvhdi-python`, VHDX `qemu-img` Read-only 변환
 - Image File System: `pytsk3`
 
 ### File System Analysis
@@ -855,7 +880,7 @@ Reader 조건:
 - 손상·Overwrite된 삭제 File을 완전 복구로 표시하지 않음
 - Directory Evidence Manifest Hash 미지원
 - File Content 전체 Magic·YARA·Office·PDF Full-text 분석 미지원
-- VHDX는 `qemu-img`가 없으면 `CAPABILITY_UNAVAILABLE`
+- 기본 VHDX 읽기에는 전체 RAW 변환이나 `qemu-img`가 필요하지 않음. 차등 디스크의 부모 체인과 암호화 볼륨 전반은 미지원
 
 ### Windows Artifact Analysis
 
@@ -1024,7 +1049,7 @@ KakaoTalk Windows Desktop 2.0.8.990에 한해 명시적 Offline Root 아래의 `
 
 AI는 조사 범위를 줄이기 위한 Keyword Candidate를 제안할 수 있습니다.
 
-> 기본 Core service는 unavailable provider를 사용한다. 선택적 MCP runtime은 public `ai.request.execute` 계약으로 OpenAI-compatible provider를 호출하고, 결과를 동일한 Phase 7 검증·저장 경계로 ingest한다. 생성 결과는 `UNREVIEWED`와 `NOT_OBSERVED_FACT` 상태를 유지한다.
+> 제공자 미설정 시 외부 AI를 실행하지 않습니다. 설정된 MCP runtime은 `ai.request.execute`로 OpenAI 호환 제공자를 호출하고 결과를 Phase 7 검증·저장 경계로 전달합니다. 생성 결과는 `UNREVIEWED`와 `NOT_OBSERVED_FACT` 상태를 유지합니다. v0.1.2 MCP 경로에는 사건 AI 데이터 정책의 전송 평가가 아직 연결되지 않았으며, 데스크톱의 전송 전 정책 검사와 구분해야 합니다.
 
 ```text
 Case 배경 정보
@@ -1149,7 +1174,7 @@ Phase 6에서는 동일 Resource를 세 단계 Projection으로 조회할 수 �
 - Raw Read 결과에 Audit Record 추가
 - 원본 Evidence 읽기 전용 유지
 
-한국어 설명, AI 요약 및 추천 분석은 Phase 7 AI Layer 또는 Frontend에서 이 Projection을 기반으로 제공하며, Phase 6 Engine 자체는 LLM을 실행하지 않습니다. 사용자 역할별 Raw View 접근 정책은 Backend·Frontend 통합 단계에서 구현합니다.
+한국어 설명과 AI 요약은 Frontend 및 선택적 AI Adapter를 통해 제공합니다. View Projection 자체가 LLM을 호출하지는 않습니다. 인증된 MCP의 Raw 접근은 Scope·사건별 역할·확인 정책을 검사하며, 비로그인 데스크톱의 로컬 접근 권한과 구분합니다.
 
 ---
 
@@ -1178,7 +1203,7 @@ Phase 6에서는 동일 Resource를 세 단계 Projection으로 조회할 수 �
 
 - 원본 Media 수정 미지원
 - Reverse Geocoding, 얼굴·객체·내용 분석 미지원
-- Video 전체 Frame 분석, Subtitle 추출, Audio Transcription 미지원
+- Video 전체 Frame 분석과 Subtitle 추출 미지원. 음성 전사는 별도 STT 실행 경로로 지원
 - `ffmpeg`·`ffprobe`·Pillow가 없으면 해당 기능은 `CAPABILITY_UNAVAILABLE`
 
 ### Machine-extracted Candidate
@@ -1186,8 +1211,8 @@ Phase 6에서는 동일 Resource를 세 단계 Projection으로 조회할 수 �
 OCR 및 STT 결과는 Observed Fact가 아니라 `Machine-extracted Candidate`로 분류합니다.
 Provider Port와 Candidate Review Workflow는 구현되어 있으며, 기본 Provider는 Dependency 또는
 Model이 없을 때 `CAPABILITY_UNAVAILABLE` 또는 제한 상태를 반환합니다. Optional RapidOCR/ONNX
-Runtime과 faster-whisper Adapter가 구현되어 있으며 실제 추론은 해당 Runtime·Model·Fixture가
-준비된 환경에서만 실행·검증합니다.
+Runtime과 faster-whisper Adapter가 구현되어 있습니다. 설치 앱에는 기본 OCR·한국어 모델과
+Whisper base 다국어 모델을 포함하며, 실제 한국어/혼합 이미지·음성 정답 자료에 대한 정확도 검증은 계속 진행합니다. Tesseract·whisper.cpp 등 대체 분석기를 직접 선택하면 해당 실행기와 모델이 필요합니다.
 
 Review 상태:
 
@@ -1363,6 +1388,8 @@ APEX는 다음 원칙에 따라 디지털 증거를 처리합니다.
 
 ### Forensic Engine
 
+아래는 코어 도메인·분석 서비스의 책임입니다. 외부 제공자 HTTP·Prompt 처리는 선택적 AI Adapter에 분리하며, 실행기·모델 배포는 데스크톱 패키징 계층에서 담당합니다.
+
 담당:
 
 - Case 및 Evidence
@@ -1453,6 +1480,8 @@ APEX는 다음 원칙에 따라 디지털 증거를 처리합니다.
 APEX/
 ├── README.md
 ├── pyproject.toml
+├── uv.lock
+├── frontend/                  # Electron · React · TypeScript 앱
 │
 ├── docs/
 │   ├── API_INTERFACE.md
@@ -1464,10 +1493,17 @@ APEX/
 │   ├── IMPLEMENTATION_ROADMAP.md
 │   ├── JSON_SCHEMAS.md
 │   ├── MODULE_RESPONSIBILITIES.md
-│   └── REQUIREMENTS_TRACEABILITY.md
+│   ├── REQUIREMENTS_TRACEABILITY.md
+│   ├── MCP_SERVER.md
+│   ├── desktop/               # 앱·로컬 API·검증 기록
+│   └── backend/               # 인증·승인 서버 문서
 │
+├── src/apex_desktop/          # 앱이 기동하는 로컬 FastAPI
+├── src/apex_backend/          # 별도 인증·승인 백엔드
+├── src/apex_mcp/              # 별도 MCP 서버·보안·도구
 ├── src/apex_forensic/
 │   ├── adapters/
+│   │   ├── ai/                # 선택적 OpenAI 호환 HTTP Adapter
 │   │   ├── artifacts/
 │   │   │   ├── browser.py
 │   │   │   ├── media.py
@@ -1477,6 +1513,7 @@ APEX/
 │   │   │   ├── ...
 │   │   │   └── kakaotalk.py
 │   │   ├── evidence/
+│   │   │   ├── container.py
 │   │   │   ├── ewf.py
 │   │   │   ├── partitions.py
 │   │   │   ├── raw.py
@@ -1541,6 +1578,11 @@ APEX/
 │       └── test_windows_artifacts.py
 │
 └── tools/
+    ├── build_desktop_runtime.py
+    ├── prepare_desktop_assets.py
+    ├── verify_desktop_runtime.py
+    ├── run_gui_ai.ps1
+    ├── verify_mcp_ai_cycle.py
     ├── security_findings.json
     ├── validate_design.mjs
     ├── validate_design_basic.py
@@ -1555,6 +1597,13 @@ APEX/
 
 | 산출물 | 문서 |
 |---|---|
+| 데스크톱 개발·실행·패키징 | [`docs/desktop/README.md`](./docs/desktop/README.md) |
+| 로컬 도구·모델과 Windows 내장 구성 | [`docs/desktop/offline-runtime-2026-10-19.md`](./docs/desktop/offline-runtime-2026-10-19.md) |
+| 이미지·복구·ADS·OCR/STT·AI 본문 연결 | [`docs/engine/completed-connections-2026-10-19.md`](./docs/engine/completed-connections-2026-10-19.md) |
+| MCP 설정·실행 | [`docs/MCP_SERVER.md`](./docs/MCP_SERVER.md) |
+| 인증·승인 백엔드 | [`docs/backend/README.md`](./docs/backend/README.md) |
+| 통합 점검·보고서·JWT 수정 | [`docs/desktop/postmerge-crosscheck-2026-10-21.md`](./docs/desktop/postmerge-crosscheck-2026-10-21.md) |
+| 로컬 API 헤더·실제 HTTP 교차 검증 | [`docs/desktop/pr33-merged-recheck-2026-10-21.md`](./docs/desktop/pr33-merged-recheck-2026-10-21.md) |
 | 전체 Architecture 및 품질 속성 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
 | Forensic Core Engine 구현 및 사용법 | [`docs/FORENSIC_ENGINE.md`](./docs/FORENSIC_ENGINE.md) |
 | 구현 결정 기록 | [`docs/IMPLEMENTATION_DECISIONS.md`](./docs/IMPLEMENTATION_DECISIONS.md) |
@@ -1565,6 +1614,8 @@ APEX/
 | JSON Schema 규칙 | [`docs/JSON_SCHEMAS.md`](./docs/JSON_SCHEMAS.md) |
 | Implementation Roadmap | [`docs/IMPLEMENTATION_ROADMAP.md`](./docs/IMPLEMENTATION_ROADMAP.md) |
 | Requirements Traceability | [`docs/REQUIREMENTS_TRACEABILITY.md`](./docs/REQUIREMENTS_TRACEABILITY.md) |
+
+날짜가 붙은 문서는 해당 작업 시점의 기록입니다. 현재 배포 상태와 v0.1.2 AI 연결 범위는 이 README 상단 및 릴리스 노트를 우선 확인하세요.
 
 ---
 
@@ -1706,21 +1757,32 @@ APEX/
 - [x] Windows DPAPI·Chromium Local State/AES-GCM·Firefox NSS Semantic Verification
 - [x] Windows Event Message Renderer 및 HTML·PDF Renderer Host Verification
 - [x] Windows Peak Working Set 기반 Benchmark RSS 측정
+- [x] Electron·React·TypeScript GUI와 로컬 FastAPI 연결, 비로그인 로컬 분석
+- [x] E01·VHD·VHDX 내부 논리 파일 읽기와 GUI 연결, 복구·ADS·카빙 진입점
+- [x] 기본 OCR/STT 실행기·모델 및 Windows FFmpeg/ffprobe 배포
+- [x] 보고서 출처 보존·섹션 범위 검증·오래된 승인 버전의 명시적 내보내기 확인
+- [x] 원본 변경 감지·설정/작업 기록·JWT 필수 클레임·로컬 API Host/인증 헤더 회귀 보완
+- [x] OpenAI 호환 제공자와 Kimi K3 실제 MCP·GUI 구조 요약 호출 확인
+- [x] Windows x64·macOS arm64/x64 테스트·런타임 기동·패키징 CI 통과
+- [x] v0.1.2 Preview 설치 파일·체크섬·빌드 출처 공개
 
-### 추가 검증·배포 예정
+### 남은 검증·제품 개선
 
-> 아래 항목은 Core Engine의 현재 Goal-scope 기능 완료를 뒤집는 미구현 Core Feature 목록이 아니라,
-> 실제 Evidence 검증·외부 근거 확보·Runtime Packaging·제품 통합 단계입니다. 형태소 기반 한국어 Search는
-> 현재 Core 완료 범위에서 제외하며 필요 시 별도 연구 항목으로 검토합니다.
+아래 목록은 구현·배포를 마친 항목과 실제 자료 검증 또는 추가 구현이 필요한 항목을 구분합니다. 형태소 기반 한국어 Search는 현재 범위 밖의 후속 연구입니다.
 
 - [x] Windows 2.0.8.990 KakaoTalk 외부 Key 합성 Contract 복호화와 Offline Discovery
 - [ ] KakaoTalk 자동 Key 획득 및 실제 KakaoTalk Fixture 검증 — `BLOCKED_EXTERNAL_FIXTURE`, Core 완료 Gate 제외
-- [ ] OCR·STT Runtime/Model 배포와 실제 Host Fixture Matrix
+- [x] 기본 OCR·STT Runtime/Model 배포
+- [ ] 실제 한국어·혼합 OCR 및 영어·한국어 음성 정답 자료의 정확도·Host Matrix 검증
 - [ ] 실제 Evidence 성능·정확성 Benchmark 및 외부 전문가 검토
-- [ ] Native Dependency Packaging·CI Matrix
-- [ ] Windows Desktop Packaging
+- [x] 기본 분석 Runtime·Native Dependency Packaging 및 데스크톱 CI Matrix
+- [ ] pyewf·pyvhdi·qemu-img 등 선택 읽기 경로의 실환경 검증 확대
+- [x] Windows·macOS Desktop Preview Packaging
 - [x] MCP wheel/sdist·hash lock·clean install·Inspector strict·Windows CI Matrix 정의 — MCP M8
-- [ ] 최종 Release 문서·배포 검증
+- [x] v0.1.2 릴리스 노트·설치 파일·체크섬·빌드 출처 공개
+- [ ] MCP 외부 AI 실행에 사건 AI 데이터 정책의 전송 평가 연결
+- [ ] 각 OS 설치 후 실제 증거를 사용하는 전체 사용자 시나리오 검증
+- [ ] 배포 인증서 서명·Apple 공증·자동 업데이트
 - [ ] 선택적 후속 연구: 형태소 기반 한국어 Search — Core 완료 Gate 제외
 
 ### 별도 담당
@@ -1735,7 +1797,8 @@ APEX/
 - [ ] 자율 Agent Workflow와 제품 Prompt 정책 — MCP·AI 후속 담당
 - [x] 영속 Identity / Approval policy — Backend 담당 (JWT RS256 검증, JWKS, RBAC, DB confirmation grant 구현 및 MCP 연동 완료, Phase 1~11·13~15)
 - [ ] Billing backend — Backend 담당
-- [ ] 한국어 GUI 및 View — Frontend 담당
+- [x] 한국어 GUI 및 View·로컬 API·엔진 연결 — Frontend/Desktop
+- [ ] 앱 자동 토큰 갱신과 서버 logout API 연결
 
 ---
 
@@ -1859,7 +1922,7 @@ APEX/
 - [x] Citation, Partial Result, Stale Source, Coverage Warning 보존
 - [x] Human Verification Event Hash Chain
 - [x] 승인/수정된 Keyword Candidate의 Keyword Set Promotion
-- [x] Runtime LLM/MCP/Prompt/Provider 실행 코드 제외
+- [x] 도메인 계약과 MCP·AI Provider Adapter 경계 분리, 선택적 실제 실행 연결
 
 ### Phase 8 — Report 및 Chain of Custody — 완료
 
@@ -1872,7 +1935,7 @@ APEX/
 - [x] Chain of Custody Snapshot / Verification Metadata
 - [x] Export Render Package / Manifest / Audit / Rendered Artifact Metadata 계약
 - [x] Provider-neutral Renderer Port와 기본 `CAPABILITY_UNAVAILABLE`
-- [x] 실제 AI Draft 생성, LLM/Prompt/MCP, GUI Preview는 제외하고 HTML/Optional PDF Rendering Runtime은 구현
+- [x] HTML/Optional PDF Rendering Runtime, GUI 보고서 작성·검토·승인·내보내기 및 MCP 계약 연결
 
 ### Phase 9 — Advanced Recovery, Benchmark 및 배포
 
@@ -1890,9 +1953,11 @@ APEX/
 - [ ] 실제 Evidence 기반 Chain of Custody 무결성 재검증
 - [ ] 공개 또는 Synthetic Evidence 기반 외부 전문가 검토
 - [ ] 전문가 피드백 반영 및 재검증
-- [ ] Native Dependency Packaging·CI Matrix 검증
-- [ ] Windows Desktop Packaging
-- [ ] 최종 문서 및 Release 준비
+- [x] 기본 분석 Runtime·Native Dependency Packaging 및 Windows/macOS CI Matrix 검증
+- [x] Windows·macOS Desktop Preview Packaging
+- [x] v0.1.2 Preview 릴리스·체크섬·빌드 출처 공개
+- [ ] 선택 백엔드·실제 증거·설치 후 전체 시나리오 및 정식 배포 준비
+- [ ] MCP AI 전송 정책 연결, 배포 서명·공증·자동 업데이트
 
 ---
 
@@ -1920,7 +1985,7 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 - Full Index 완료 시간
 - Artifact별 분석 시간
 - Keyword Search 응답 시간
-- AI Keyword 추천 유용성 — MCP·AI 통합 이후 제품 수준에서 검증
+- AI Keyword 추천 유용성 — 실제 연결된 제공자와 정답 자료로 제품 수준에서 평가
 - Cache Cold/Warm 성능
 - Index Pause/Resume
 - Timezone 정확성
@@ -1928,9 +1993,9 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 - Report 작성 시간 절감
 - Chain of Custody 완전성
 - CPU, Memory 및 Disk I/O
-- GUI 사용성 — Frontend 통합 이후 제품 수준에서 검증
+- GUI 사용성 — 통합된 데스크톱 앱의 실제 조사 시나리오로 평가
 - Raw View 검증 가능성
-- AI Citation 정확성 — MCP·AI 통합 이후 제품 수준에서 검증
+- AI Citation 정확성 — 연결된 MCP·데스크톱 경로에서 실제 근거와 대조
 - 실제 조사 Workflow 적합성
 
 공식 승인이나 협력이 확정되지 않은 기관명은 인증 또는 협력 기관으로 표시하지 않습니다.
@@ -1939,7 +2004,7 @@ APEX는 내부 Benchmark와 함께 디지털 포렌식 및 사이버 작전 실�
 
 ## 설계 및 회귀 검증
 
-Release Hardening의 단일 재현 경로는 다음 명령입니다.
+코어 Release Hardening 재현 명령은 다음과 같습니다. 데스크톱 패키징 CI, MCP 게이트, 실제 AI 호출 및 설치 후 사용 검증은 각각의 범위를 구분합니다. v0.1.2의 고정된 CI 근거는 상단 검증 표에 있습니다.
 
 ```bash
 python3 tools/verify_engine_release.py --json
@@ -1955,7 +2020,7 @@ python .\tools\verify_engine_release.py --fixture-manifest <windows-runtime-fixt
 Semantic Verifier, Doctor, Recovery Test, Bandit Disposition, Benchmark Smoke, CLI 및 한글/Unicode
 동작, Evidence Read-only Invariant를 구분된 상태로 보고합니다. Windows Host에서는 DPAPI·Chromium
 Local State/AES-GCM, Firefox NSS, Event Message Renderer 및 HTML·PDF Renderer를 Semantic Fixture로
-검증했으며 최종 Gate는 `PASSED_WITH_LIMITATIONS`, `failed_checks=[]`를 확인했습니다. Linux에서는
+검증한 기존 Windows Host Gate 기록은 `PASSED_WITH_LIMITATIONS`, `failed_checks=[]`입니다. 이 과거 Semantic Gate 결과를 현재 설치 파일의 CI 상태와 혼동하지 않습니다. Linux에서는
 Windows 전용 Probe를 `HOST_VERIFICATION_REQUIRED`로, 설치되지 않은 Optional Dependency를
 `CAPABILITY_UNAVAILABLE`로, 외부 AI 설정 부재를 `EXTERNAL_CONFIGURATION_REQUIRED`로 구분합니다.
 
@@ -2024,7 +2089,7 @@ bash ./tools/validate_design.sh
 - Keyword Candidate의 Reason 및 Citation
 - Machine Extraction의 Confidence 및 Review Status
 - Custody Event Enum과 Report Section
-- MCP 및 LLM 실행 코드 미포함 여부
+- 코어 계약과 MCP·LLM Adapter 사이의 책임 및 의존성 경계
 
 Node 또는 Ajv가 없는 경우 기본 검증을 수행하고, 생략된 항목과 이유를 출력합니다.
 
