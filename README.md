@@ -45,7 +45,7 @@ APEX는 독립적인 Python 분석 엔진과 Electron·TypeScript 앱을 사용�
 | 로컬 API | **엔진 연결 및 회귀 검증** | 실행별 토큰을 사용하는 loopback FastAPI. 비로그인 로컬 분석, 비동기 작업·취소·기록 복구, 사건 범위와 입력 검증 |
 | Forensic Core Engine | **Phase 1~8 및 확장 기능 구현·연동** | RAW/DD/IMG/E01/VHD/VHDX 내부 파일 읽기, Windows 아티팩트, 검색·타임라인, 삭제 파일 복구·ADS·연속 시그니처 카빙, 원본 보호, 보고서 출처·승인·내보내기 |
 | 로컬 OCR / STT / 미디어 | **기본 실행기·모델 포함** | RapidOCR·한국어 모델, Faster Whisper·다국어 base 모델. Windows에는 FFmpeg/ffprobe 포함. 실제 정확도와 호스트별 지원 범위는 별도 검증 |
-| Desktop AI | **OpenAI 호환 제공자 연결** | Kimi K3 실제 호출 기록. 구조 요약과 검토한 본문 발췌 분석을 구분하고, 데스크톱 전송 전 사건 AI 정책을 검사 |
+| Desktop AI | **AI API 연동 완료** | Kimi K3 API 연결 및 실제 구조 요약 응답 검증 완료. 검토한 본문 발췌 분석을 지원하며, 외부 전송 전 사건 AI 정책 검사 |
 | MCP / LLM Runtime | **서버·52개 도구 및 실제 AI 사이클 검증** | stdio·인증된 Streamable HTTP, Context/View/AI/Report 계약, locked wheel/sdist와 Windows/Linux CI. 별도 서버 실행 필요. 아래 AI 정책 적용 차이 참고 |
 | 인증 백엔드 | **Identity / Approval 구현·연동** | JWT RS256·JWKS·세션·사건별 RBAC·DB confirmation grant. 서버 별도 실행. 앱의 자동 토큰 갱신·서버 로그아웃 연결 및 Billing은 후속 범위 |
 | 배포 / CI | **Windows x64·macOS arm64/x64 성공** | 런타임 빌드·기동 확인, 설치 파일·체크섬·빌드 출처 공개. 서명·공증·자동 업데이트는 미제공 |
