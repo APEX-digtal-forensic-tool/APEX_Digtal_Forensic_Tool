@@ -36,6 +36,7 @@ import { gateway, GatewayError, unwrap, type Row } from "./gateway";
 import { ImageInspector } from "./ImageInspector";
 import { VideoInspector } from "./VideoInspector";
 import { AiAssistant } from "./AiAssistant";
+import { SearchHistory } from "./ReportTools";
 import type { CaseRecord } from "./contracts/generated/case";
 import type { GuiContext } from "./contracts/generated/gui-session-context";
 import {
@@ -152,6 +153,22 @@ const typeLabels: Record<string, string> = {
 };
 const activeTask = (t: Row) =>
   ["QUEUED", "RUNNING", "CANCELLING"].includes(t.status);
+// HASH_VERIFIED and CORRECTION are recorded by the engine, not typed by analysts.
+const CUSTODY_EVENTS = [
+  "ACQUISITION",
+  "RECEIVED",
+  "TRANSFERRED",
+  "STORED",
+  "OPENED",
+  "MOUNTED",
+  "ANALYZED",
+  "COPIED",
+  "EXPORTED",
+  "RETURNED",
+  "RELEASED",
+  "ARCHIVED",
+  "DISPOSED",
+];
 
 export function App() {
   const [runtime, setRuntime] = useState<Row | null>(null),
@@ -212,13 +229,15 @@ export function App() {
   const refresh = () => setRevision((r) => r + 1);
   const bootstrap = useCallback(async () => {
     try {
-      const [r, c] = await Promise.all([
+      // Load cases independently so a runtime failure never hides local cases.
+      const [r, c] = await Promise.allSettled([
         gateway.call("runtime"),
         gateway.call<CaseRecord[]>("cases.list"),
       ]);
-      setRuntime(r);
-      setCases(c);
-      setStartupError(null);
+      if (r.status === "fulfilled") setRuntime(r.value);
+      if (c.status === "fulfilled") setCases(c.value);
+      const failed = [r, c].find((x) => x.status === "rejected");
+      setStartupError(failed ? (failed as PromiseRejectedResult).reason : null);
     } catch (err) {
       setStartupError(err);
     }
@@ -1382,6 +1401,48 @@ export function App() {
                   {currentEvidence?.display_name ?? "사건 전체"}
                 </span>
               )}
+              {route === "CHAIN_OF_CUSTODY" && (
+                <button
+                  disabled={!evidenceId}
+                  onClick={() =>
+                    setDialog({
+                      title: "보관 이력 이벤트 추가",
+                      description:
+                        "인수·이관·보관 등 증거 처리 사실을 기록합니다. 기존 기록은 변경되지 않습니다.",
+                      fields: [
+                        {
+                          key: "event_type",
+                          label: "이벤트 유형",
+                          options: CUSTODY_EVENTS,
+                          default: "TRANSFERRED",
+                        },
+                        {
+                          key: "action",
+                          label: "처리 내용",
+                          required: true,
+                          max: 4096,
+                        },
+                        {
+                          key: "reason",
+                          label: "사유",
+                          required: true,
+                          max: 4096,
+                        },
+                      ],
+                      submit: async (f) => {
+                        await gateway.call("custody.add", {
+                          case_id: caseId,
+                          evidence_id: evidenceId,
+                          ...f,
+                        });
+                        refresh();
+                      },
+                    })
+                  }
+                >
+                  <Plus size={14} /> 보관 이력 이벤트 추가
+                </button>
+              )}
               {[
                 "FILE_SYSTEM",
                 "EVIDENCE",
@@ -1427,6 +1488,18 @@ export function App() {
                 </div>
               )}
             </div>
+            {route === "SEARCH" && (
+              <SearchHistory
+                caseId={caseId}
+                zone={zone}
+                onSearch={(text, mode) => {
+                  setQuery(text);
+                  setSearchMode(mode);
+                  setSearchText(text);
+                  refresh();
+                }}
+              />
+            )}
             {(categoryTypes[route] || communication) && (
               <div className="tabs">
                 {(communication

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X, ShieldCheck, LogIn, LogOut, Save, FolderOpen, Plus } from "./icons";
 import { gateway, unwrap, errorText, type Row } from "./gateway";
+import { ReportCompare, ReportVersionDialog } from "./ReportTools";
 import {
   Badge,
   Fields,
@@ -615,6 +616,7 @@ export function Reports({
                     }}
                   />
                 </Section>
+                <ReportCompare versions={versions} />
                 <div className="review-actions">
                   <button onClick={() => review("submit")}>검토 제출</button>
                   <button onClick={() => review("complete")}>검토 완료</button>
@@ -676,57 +678,16 @@ export function Reports({
           }}
         />
       )}
-      {dialog === "version" && (
-        <FormDialog
-          title="새 보고서 버전 작성"
-          description="원본 버전은 보존됩니다. 새 버전에는 다시 검토와 승인이 필요합니다."
-          fields={[
-            {
-              key: "title",
-              label: "제목",
-              required: true,
-              max: 255,
-              default: data?.report?.title,
-            },
-            {
-              key: "executive_summary",
-              label: "요약",
-              type: "textarea",
-              required: true,
-            },
-            {
-              key: "content",
-              label: "주요 발견 사항",
-              type: "textarea",
-              required: true,
-            },
-            {
-              key: "limitations",
-              label: "분석의 한계 (줄마다 하나)",
-              type: "textarea",
-              required: true,
-            },
-          ]}
+      {dialog === "version" && selected && (
+        <ReportVersionDialog
+          caseId={caseId}
+          reportId={selected}
+          evidenceId={evidenceId}
+          base={version}
+          reportTitle={data?.report?.title}
+          citations={citations}
           onClose={() => setDialog(null)}
-          onSubmit={async (f) => {
-            await gateway.call("reports.version", {
-              case_id: caseId,
-              report_id: selected,
-              title: f.title,
-              executive_summary: f.executive_summary,
-              evidence_ids: evidenceId ? [evidenceId] : [],
-              citations,
-              limitations: f.limitations.split("\n").filter(Boolean),
-              sections: [
-                {
-                  section_type: "KEY_FINDINGS",
-                  title: "주요 발견 사항",
-                  content: f.content,
-                  citations,
-                  order: 1,
-                },
-              ],
-            });
+          onSaved={async () => {
             setVersionId("");
             await load();
           }}

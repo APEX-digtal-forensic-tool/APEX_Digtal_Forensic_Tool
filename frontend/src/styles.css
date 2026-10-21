@@ -1442,3 +1442,59 @@ dialog.forensic-tools { width: min(760px, 92vw); max-height: 86vh; overflow: aut
 dialog.forensic-tools::backdrop { background: rgb(0 0 0 / 65%); }
 .forensic-tools label { display: block; margin: 10px 0; }
 .forensic-tools button { margin: 5px 8px 5px 0; }
+
+/* Report version tools and search history. */
+.search-history-panel {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.search-history-panel summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.search-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.report-compare {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+}
+.report-compare label {
+  display: grid;
+  gap: 4px;
+}
+.compare-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.compare-columns .added {
+  color: var(--accent);
+  font-weight: 600;
+}
+.compare-columns .removed {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.report-version-dialog {
+  max-height: 85vh;
+  overflow: auto;
+}
+.section-draft {
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+}
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
